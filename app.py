@@ -3,6 +3,14 @@ import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
 
+# Přístupové heslo
+PASSWORD = "sakul7891"
+
+password = st.text_input("Zadejte přístupové heslo", type="password")
+
+if password != PASSWORD:
+    st.stop()
+
 # NOVÉ IMPORTY PRO DOCX
 from io import BytesIO
 from docx import Document
