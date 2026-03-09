@@ -51,10 +51,18 @@ scenario = st.sidebar.selectbox(
 
 if scenario == "Pesimistický":
     min_days, max_days = 8, 15
+    scenario_note = "Slabší poptávka, opatrný scénář."
 elif scenario == "Realistický":
     min_days, max_days = 15, 25
+    scenario_note = "Běžný provoz firmy."
 else:
     min_days, max_days = 22, 30
+    scenario_note = "Silná poptávka a vysoké vytížení."
+
+st.sidebar.caption(
+    f"{scenario_note} Rozmezí vytížení: {min_days} až {max_days} dní / měsíc."
+)
+
 
 n = st.sidebar.slider("Počet simulací (měsíců)", 200, 5000, 1000, step=200)
 
