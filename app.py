@@ -43,10 +43,18 @@ avg_daily_dumper = float(dumper["daily_cost_czk"].mean())
 st.sidebar.header("Nastavení simulace")
 
 fixed_cost = st.sidebar.number_input("Fixní náklad (Kč / měsíc)", min_value=0, value=120000, step=5000)
-min_days = st.sidebar.slider("Min. vytížení (dny/měsíc)", 0, 31, 15)
-max_days = st.sidebar.slider("Max. vytížení (dny/měsíc)", 0, 31, 25)
-n = st.sidebar.slider("Počet simulací (měsíců)", 200, 5000, 1000, step=200)
-expected_days = st.sidebar.slider("Odhad reálné poptávky (dny/měsíc)", 0, 31, 18)
+
+scenario = st.sidebar.selectbox(
+    "Scénář trhu",
+    ["Pesimistický", "Realistický", "Optimistický"]
+)
+
+if scenario == "Pesimistický":
+    min_days, max_days = 8, 15
+elif scenario == "Realistický":
+    min_days, max_days = 15, 25
+else:
+    min_days, max_days = 22, 30
 
 if min_days > max_days:
     st.error("Min. vytížení musí být menší nebo rovno max. vytížení.")
