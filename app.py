@@ -56,9 +56,9 @@ elif scenario == "Realistický":
 else:
     min_days, max_days = 22, 30
 
-if min_days > max_days:
-    st.error("Min. vytížení musí být menší nebo rovno max. vytížení.")
-    st.stop()
+n = st.sidebar.slider("Počet simulací (měsíců)", 200, 5000, 1000, step=200)
+
+expected_days = st.sidebar.slider("Odhad reálné poptávky (dny/měsíc)", 0, 31, 18)
 
 # --- Simulace Monte Carlo ---
 util_days = np.random.randint(min_days, max_days + 1, size=n)
