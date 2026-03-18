@@ -24,20 +24,21 @@ st.write("Interaktivní simulace zisku a rizika pro Mini Bagr vs. Pásový dumpe
 # --- Načtení dat ---
 @st.cache_data
 def load_data():
-    return pd.read_excel("data/mvp_pujcovna_malostroju.xlsx")
+    return pd.read_csv("data/machines_demo.csv")
 
 df = load_data()
 
 # --- Výběr typů ---
-mini_bagry = df[df["type"] == "Mini Bagr"]
-dumper = df[df["type"] == "Pásový dumper"]
+machine_options = df["machine_type"].tolist()
 
-if mini_bagry.empty or dumper.empty:
-    st.error("V datech chybí typ 'Mini Bagr' nebo 'Pásový dumper'. Zkontroluj sloupec 'type'.")
-    st.stop()
+machine_1 = st.sidebar.selectbox("Stroj 1", machine_options, index=0)
+machine_2 = st.sidebar.selectbox("Stroj 2", machine_options, index=1)
 
-avg_daily_mini = float(mini_bagry["daily_cost_czk"].mean())
-avg_daily_dumper = float(dumper["daily_cost_czk"].mean())
+row_1 = df[df["machine_type"] == machine_1].iloc[0]
+row_2 = df[df["machine_type"] == machine_2].iloc[0]
+
+avg_daily_mini = float(row_1["daily_price"])
+avg_daily_dumper = float(row_2["daily_price"])
 
 # --- Ovládání (slidery) ---
 st.sidebar.header("Nastavení simulace")
@@ -69,13 +70,50 @@ n = st.sidebar.slider("Počet simulací (měsíců)", 200, 5000, 1000, step=200)
 expected_days = st.sidebar.slider("Odhad reálné poptávky (dny/měsíc)", 0, 31, 18)
 
 # --- Simulace Monte Carlo ---
-util_days = np.random.randint(min_days, max_days + 1, size=n)
 
-rev_mini = avg_daily_mini * util_days
-rev_dumper = avg_daily_dumper * util_days
+# počet simulací
+n = st.sidebar.slider("Počet simulací (měsíců)", 100, 10000, 1000)
 
-profit_mini = rev_mini - fixed_cost
-profit_dumper = rev_dumper - fixed_cost
+# --- STROJ 1 ---
+demand_mean_1 = row_1["demand_days_mean"]
+demand_std_1 = row_1["demand_days_std"]
+
+util_days_1 = np.random.normal(demand_mean_1, demand_std_1, n)
+util_days_1 = np.clip(util_days_1, 0, 30)
+
+service_cost_1 = np.random.normal(
+    row_1["service_cost_mean"],
+    row_1["service_cost_std"],
+    n
+)
+
+failure_days_1 = np.random.poisson(row_1["failure_days_mean"], n)
+
+real_days_1 = np.maximum(util_days_1 - failure_days_1, 0)
+
+rev_mini = real_days_1 * avg_daily_mini
+profit_mini = rev_mini - fixed_cost - service_cost_1
+
+
+# --- STROJ 2 ---
+demand_mean_2 = row_2["demand_days_mean"]
+demand_std_2 = row_2["demand_days_std"]
+
+util_days_2 = np.random.normal(demand_mean_2, demand_std_2, n)
+util_days_2 = np.clip(util_days_2, 0, 30)
+
+service_cost_2 = np.random.normal(
+    row_2["service_cost_mean"],
+    row_2["service_cost_std"],
+    n
+)
+
+failure_days_2 = np.random.poisson(row_2["failure_days_mean"], n)
+
+real_days_2 = np.maximum(util_days_2 - failure_days_2, 0)
+
+rev_dumper = real_days_2 * avg_daily_dumper
+profit_dumper = rev_dumper - fixed_cost - service_cost_2
 
 # realistický scénář při očekávané poptávce
 expected_profit_mini_real = avg_daily_mini * expected_days - fixed_cost
@@ -112,13 +150,13 @@ else:
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("Mini Bagr")
+    st.subheader("machine_1")
     st.metric("Průměrná denní cena", f"{avg_daily_mini:,.0f} Kč")
     st.metric("Break-even", f"{break_even_mini:.2f} dní")
     st.metric("Riziko ztráty", f"{prob_loss_mini*100:.1f} %")
 
 with col2:
-    st.subheader("Pásový Dumper")
+    st.subheader("machine_2")
     st.metric("Průměrná denní cena", f"{avg_daily_dumper:,.0f} Kč")
     st.metric("Break-even", f"{break_even_dumper:.2f} dní")
     st.metric("Riziko ztráty", f"{prob_loss_dumper*100:.1f} %")
@@ -176,8 +214,8 @@ st.markdown(ai_text)
 st.subheader("Porovnání distribuce zisku (Monte Carlo)")
 
 fig_mc = plt.figure()
-plt.hist(profit_mini, bins=25, alpha=0.5, label="Mini Bagr")
-plt.hist(profit_dumper, bins=25, alpha=0.5, label="Dumper")
+plt.hist(profit_mini, bins=25, alpha=0.5, label="machine_1")
+plt.hist(profit_dumper, bins=25, alpha=0.5, label="machine_2")
 plt.axvline(0)
 plt.xlabel("Zisk / ztráta (Kč)")
 plt.ylabel("Počet simulovaných měsíců")
@@ -194,8 +232,8 @@ profit_curve_mini = avg_daily_mini * days_grid - fixed_cost
 profit_curve_dumper = avg_daily_dumper * days_grid - fixed_cost
 
 fig_be = plt.figure()
-plt.plot(days_grid, profit_curve_mini, label="Mini Bagr")
-plt.plot(days_grid, profit_curve_dumper, label="Dumper")
+plt.plot(days_grid, profit_curve_mini, label="machine_1")
+plt.plot(days_grid, profit_curve_dumper, label="machine_2")
 plt.axhline(0)
 
 plt.axvline(break_even_mini, linestyle="--")

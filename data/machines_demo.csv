@@ -1,0 +1,11 @@
+machine_type,daily_price,monthly_fixed_cost,service_cost_mean,service_cost_std,failure_days_mean,demand_days_mean,demand_days_std,purchase_price
+Mini Bagr,6943,120000,8000,2500,2,18,4,1200000
+Pásový dumper,8422,120000,10000,3000,1,20,4,900000
+Vibrační deska,1500,20000,1500,500,1,12,3,80000
+Nakladač,9500,140000,12000,3500,2,17,4,1500000
+Smykem řízený nakladač,7800,110000,9000,2500,2,16,4,1000000
+Pěch,900,12000,800,300,1,10,2,40000
+Přívěsný vozík,700,8000,500,200,0,8,2,30000
+Sklápěč,11000,180000,15000,4000,3,15,5,2200000
+Kolový dumper,7600,100000,9000,2500,2,16,4,850000
+Pásové rypadlo,12500,210000,18000,5000,3,14,5,2600000
