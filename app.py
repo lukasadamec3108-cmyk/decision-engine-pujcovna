@@ -19,7 +19,7 @@ from docx.shared import Inches
 st.set_page_config(page_title="Decision Engine – Půjčovna", layout="centered")
 
 st.title("Decision Engine – Půjčovna malostrojů")
-st.write("Interaktivní simulace zisku a rizika pro Mini Bagr vs. Pásový dumper.")
+st.write("Interaktivní simulace zisku a rizika pro porovnání dvou strojů.")
 
 # --- Načtení dat ---
 @st.cache_data
@@ -150,13 +150,13 @@ else:
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("machine_1")
+    st.subheader(machine_1)
     st.metric("Průměrná denní cena", f"{avg_daily_mini:,.0f} Kč")
     st.metric("Break-even", f"{break_even_mini:.2f} dní")
     st.metric("Riziko ztráty", f"{prob_loss_mini*100:.1f} %")
 
 with col2:
-    st.subheader("machine_2")
+    st.subheader(machine_2)
     st.metric("Průměrná denní cena", f"{avg_daily_dumper:,.0f} Kč")
     st.metric("Break-even", f"{break_even_dumper:.2f} dní")
     st.metric("Riziko ztráty", f"{prob_loss_dumper*100:.1f} %")
