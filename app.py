@@ -140,6 +140,13 @@ p50_dumper = float(np.percentile(profit_dumper, 50))
 p90_mini = float(np.percentile(profit_mini, 90))
 p90_dumper = float(np.percentile(profit_dumper, 90))
 
+# --- ROI (návratnost investice) ---
+investment_cost_mini = row_1["purchase_price"]
+investment_cost_dumper = row_2["purchase_price"]
+
+roi_mini = investment_cost_mini / expected_profit_mini if expected_profit_mini > 0 else None
+roi_dumper = investment_cost_dumper / expected_profit_dumper if expected_profit_dumper > 0 else None
+
 # --- Doporučení (jednoduché pravidlo) ---
 if (prob_loss_dumper < prob_loss_mini) and (break_even_dumper < break_even_mini):
     recommendation = "✅ KUP DUMPER"
@@ -161,9 +168,88 @@ with col2:
     st.metric("Break-even", f"{break_even_dumper:.2f} dní")
     st.metric("Riziko ztráty", f"{prob_loss_dumper*100:.1f} %")
 
-st.subheader("Doporučení")
+st.subheader("📊 Doporučení")
 st.write(recommendation)
 
+# --- NOVÉ: Porovnání rozdílu ---
+st.subheader("📊 Klíčové rozdíly mezi stroji")
+
+profit_diff = expected_profit_dumper - expected_profit_mini
+
+if profit_diff > 0:
+    st.success(f"{machine_2} vydělá o {profit_diff:,.0f} Kč více než {machine_1}")
+else:
+    st.warning(f"{machine_1} vydělá o {abs(profit_diff):,.0f} Kč více než {machine_2}")
+
+risk_diff = (prob_loss_mini - prob_loss_dumper) * 100
+if risk_diff > 0:
+    st.success(f"{machine_2} má o {risk_diff:.1f} p.b. nižší riziko ztráty")
+else:
+    st.warning(f"{machine_1} má o {abs(risk_diff):.1f} p.b. nižší riziko ztráty")
+
+st.subheader("🧠 Interpretace výsledků")
+st.markdown(ai_text)
+
+# --- ROI ---
+st.subheader("💰 Návratnost investice (ROI)")
+
+col_roi1, col_roi2 = st.columns(2)
+
+with col_roi1:
+    if roi_mini is not None:
+        st.metric(f"{machine_1}", f"{roi_mini:.1f} měsíců")
+    else:
+        st.write(f"{machine_1}: nelze spočítat")
+
+with col_roi2:
+    if roi_dumper is not None:
+        st.metric(f"{machine_2}", f"{roi_dumper:.1f} měsíců")
+    else:
+        st.write(f"{machine_2}: nelze spočítat")
+
+if roi_mini is not None and roi_dumper is not None:
+    if roi_dumper < roi_mini:
+        st.success(f"{machine_2} se vrátí rychleji než {machine_1}")
+    else:
+        st.warning(f"{machine_1} se vrátí rychleji než {machine_2}")
+
+       # --- Finální verdict ---
+st.subheader("✅ Finální investiční verdikt")
+
+score_mini = 0
+score_dumper = 0
+
+# 1) vyšší očekávaný zisk
+if expected_profit_mini > expected_profit_dumper:
+    score_mini += 1
+else:
+    score_dumper += 1
+
+# 2) nižší riziko ztráty
+if prob_loss_mini < prob_loss_dumper:
+    score_mini += 1
+else:
+    score_dumper += 1
+
+# 3) rychlejší návratnost
+if roi_mini is not None and roi_dumper is not None:
+    if roi_mini < roi_dumper:
+        score_mini += 1
+    else:
+        score_dumper += 1
+
+if score_mini > score_dumper:
+    st.success(
+        f"Celkově vychází lépe **{machine_1}** — má lepší kombinaci zisku, rizika a návratnosti investice."
+    )
+elif score_dumper > score_mini:
+    st.success(
+        f"Celkově vychází lépe **{machine_2}** — má lepší kombinaci zisku, rizika a návratnosti investice."
+    )
+else:
+    st.warning(
+        "Obě varianty vycházejí velmi podobně. Pro finální rozhodnutí je vhodné doplnit reálná provozní data."
+    )
 # --- Realistický scénář ---
 st.subheader("Realistický scénář při očekávané poptávce")
 
@@ -214,8 +300,8 @@ st.markdown(ai_text)
 st.subheader("Porovnání distribuce zisku (Monte Carlo)")
 
 fig_mc = plt.figure()
-plt.hist(profit_mini, bins=25, alpha=0.5, label="machine_1")
-plt.hist(profit_dumper, bins=25, alpha=0.5, label="machine_2")
+plt.hist(profit_mini, bins=25, alpha=0.5, label=machine_1)
+plt.hist(profit_dumper, bins=25, alpha=0.5, label=machine_2)
 plt.axvline(0)
 plt.xlabel("Zisk / ztráta (Kč)")
 plt.ylabel("Počet simulovaných měsíců")
@@ -232,8 +318,8 @@ profit_curve_mini = avg_daily_mini * days_grid - fixed_cost
 profit_curve_dumper = avg_daily_dumper * days_grid - fixed_cost
 
 fig_be = plt.figure()
-plt.plot(days_grid, profit_curve_mini, label="machine_1")
-plt.plot(days_grid, profit_curve_dumper, label="machine_2")
+plt.plot(days_grid, profit_curve_mini, label=machine_1)
+plt.plot(days_grid, profit_curve_dumper, label=machine_2)
 plt.axhline(0)
 
 plt.axvline(break_even_mini, linestyle="--")
