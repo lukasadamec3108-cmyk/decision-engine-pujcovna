@@ -188,7 +188,7 @@ else:
     st.warning(f"{machine_1} má o {abs(risk_diff):.1f} p.b. nižší riziko ztráty")
 
 st.subheader("🧠 Interpretace výsledků")
-st.markdown(ai_text)
+# st.markdown(ai_text)
 
 # --- ROI ---
 st.subheader("💰 Návratnost investice (ROI)")
