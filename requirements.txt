@@ -3,3 +3,5 @@ numpy
 matplotlib
 python-docx
 openpyxl
+streamlit
+scipy
