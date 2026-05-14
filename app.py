@@ -62,6 +62,38 @@ st.write(
 # ==================================================
 
 df = load_data()
+
+jobs_df = pd.read_csv("data/jobs_demo.csv")
+
+risk_multiplier = {
+    "Low": 0.95,
+    "Medium": 0.85,
+    "High": 0.70
+}
+
+priority_score = {
+    "High": 3,
+    "Medium": 2,
+    "Low": 1
+}
+
+jobs_df["expected_profit"] = jobs_df["expected_revenue"] - jobs_df["cost_base"]
+
+jobs_df["risk_adjusted_profit"] = jobs_df.apply(
+    lambda row: row["expected_profit"] * risk_multiplier[row["risk_level"]],
+    axis=1
+)
+
+jobs_df["priority_score"] = jobs_df["priority"].map(priority_score)
+
+jobs_df["decision_score"] = (
+    jobs_df["risk_adjusted_profit"]
+    + jobs_df["priority_score"] * 20000
+    - jobs_df["delay_penalty_per_day"] * 2
+)
+
+recommended_jobs = jobs_df.sort_values("decision_score", ascending=False)
+
 machine_options = df["machine_type"].tolist()
 
 machine_1 = st.sidebar.selectbox("Stroj 1", machine_options, index=0)
@@ -664,8 +696,8 @@ def build_docx_report() -> bytes:
 # TABS
 # ==================================================
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ["📊 Shrnutí", "📈 Monte Carlo", "⚠ Riziko", "📉 Citlivost", "🗺 Optimalizace"]
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    ["📊 Shrnutí", "📈 Monte Carlo", "⚠ Riziko", "📉 Citlivost", "🗺 Optimalizace", "📋 Zakázky"]
 )
 
 
@@ -1146,4 +1178,34 @@ with tab5:
 
     st.caption(
         "Graf ukazuje maximální očekávaný měsíční zisk portfolia při různých investičních rozpočtech."
+    )
+
+with tab6:
+
+    st.header("📋 Optimalizace zásobníku zakázek")
+
+    st.caption(
+        "Seřazení zakázek podle očekávaného zisku, rizika a priority."
+    )
+
+    st.dataframe(
+        recommended_jobs[
+            [
+                "job_id",
+                "job_name",
+                "priority",
+                "risk_level",
+                "duration_days",
+                "expected_profit",
+                "risk_adjusted_profit",
+                "decision_score"
+            ]
+        ],
+        use_container_width=True
+    )
+
+    best_job = recommended_jobs.iloc[0]
+
+    st.success(
+        f"Doporučená první zakázka: {best_job['job_name']}"
     )

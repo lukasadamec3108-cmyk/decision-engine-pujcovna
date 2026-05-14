@@ -1,0 +1,13 @@
+job_id,job_name,job_type,priority,duration_days,expected_revenue,cost_base,risk_level,required_machines,deadline_days,delay_penalty_per_day
+J001,Základy rodinného domu,Výkopové práce,High,5,180000,85000,Medium,"Mini bagr;Pásový dumper",10,8000
+J002,Kanalizační přípojka,Inženýrské sítě,High,7,260000,130000,High,"Mini bagr;Nákladní auto",12,10000
+J003,Terénní úpravy zahrady,Terénní práce,Medium,4,95000,45000,Low,"Smykový nakladač;Vibrační deska",8,4000
+J004,Oprava příjezdové cesty,Komunikace,Medium,6,220000,110000,Medium,"Silniční válec;Řezačka asfaltu",14,7000
+J005,Výkop pro retenční nádrž,Výkopové práce,High,6,210000,95000,Medium,"Kolový bagr;Pásový dumper",11,9000
+J006,Příprava parkovací plochy,Komunikace,Medium,8,320000,160000,Medium,"Smykový nakladač;Silniční válec",16,9000
+J007,Demolice malé stavby,Demolice,Low,5,160000,90000,High,"Kolový bagr;Nákladní auto",15,6000
+J008,Hutnění základové desky,Hutnění,Medium,3,70000,28000,Low,"Vibrační deska",6,3000
+J009,Odvoz zeminy z pozemku,Doprava,Low,4,110000,50000,Medium,"Pásový dumper;Nákladní auto",9,5000
+J010,Řezání asfaltu pro přípojku,Komunikace,Medium,2,55000,22000,Low,"Řezačka asfaltu",5,3000
+J011,Výkop bazénu,Výkopové práce,Medium,4,125000,60000,Medium,"Mini bagr;Pásový dumper",9,5000
+J012,Rekonstrukce dvora,Terénní práce,Low,6,150000,80000,Medium,"Smykový nakladač;Vibrační deska",14,4000
