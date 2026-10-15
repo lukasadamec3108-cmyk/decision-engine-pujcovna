@@ -5,3 +5,4 @@ python-docx
 openpyxl
 streamlit
 scipy
+plotly

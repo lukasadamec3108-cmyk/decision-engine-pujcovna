@@ -6,14 +6,22 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import streamlit as st
+import plotly.express as px
 from docx import Document
 from docx.shared import Inches
+from docx.shared import Pt, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from scipy.optimize import linprog
-
 
 # ==================================================
 # POMOCNÉ FUNKCE
 # ==================================================
+
+
+def format_czk(value) -> str:
+    """Naformátuje částku s mezerou jako oddělovačem tisíců a jednotkou Kč."""
+    return f"{value:,.0f}".replace(",", " ") + " Kč"
+
 
 def risk_light(prob_loss: float) -> str:
     """Vrátí textový semafor podle pravděpodobnosti ztráty."""
@@ -22,6 +30,28 @@ def risk_light(prob_loss: float) -> str:
     if prob_loss < 0.15:
         return "🟡 Střední riziko"
     return "🔴 Vysoké riziko"
+
+
+def build_mgmt_text(machine_1, machine_2, expected_profit_mini, expected_profit_dumper) -> str:
+    """Sestaví shrnutí pro management podle toho, který stroj má vyšší očekávaný zisk."""
+    if expected_profit_dumper > expected_profit_mini:
+        return (
+            f"Pro management aktuálně vychází lépe {machine_2}. "
+            f"Nabízí vyšší očekávaný zisk, nižší riziko ztráty "
+            f"a lepší bod zvratu než {machine_1}. "
+            f"Přesto je investice citlivá na cenu pronájmu a vytížení."
+        )
+    elif expected_profit_mini > expected_profit_dumper:
+        return (
+            f"Pro management aktuálně vychází lépe {machine_1}. "
+            f"Nabízí lepší kombinaci očekávaného zisku, rizika "
+            f"a návratnosti než {machine_2}."
+        )
+    else:
+        return (
+            "Obě varianty vycházejí velmi podobně. "
+            "Pro finální rozhodnutí doporučujeme doplnit provozní data."
+        )
 
 
 @st.cache_data
@@ -36,7 +66,7 @@ def load_data() -> pd.DataFrame:
 
 st.set_page_config(page_title="Decision Engine – Půjčovna", layout="centered")
 
-PASSWORD = "sakul7891"
+PASSWORD = st.secrets["password"]
 password = st.text_input("Zadejte přístupové heslo", type="password")
 if password != PASSWORD:
     st.stop()
@@ -65,34 +95,109 @@ df = load_data()
 
 jobs_df = pd.read_csv("data/jobs_demo.csv")
 
-risk_multiplier = {
-    "Low": 0.95,
-    "Medium": 0.85,
-    "High": 0.70
-}
+risk_multiplier = {"Low": 0.95, "Medium": 0.85, "High": 0.70}
 
-priority_score = {
-    "High": 3,
-    "Medium": 2,
-    "Low": 1
-}
+priority_score = {"High": 3, "Medium": 2, "Low": 1}
+risk_score = {"Low": 0, "Medium": 1, "High": 2}
 
 jobs_df["expected_profit"] = jobs_df["expected_revenue"] - jobs_df["cost_base"]
 
 jobs_df["risk_adjusted_profit"] = jobs_df.apply(
-    lambda row: row["expected_profit"] * risk_multiplier[row["risk_level"]],
-    axis=1
+    lambda row: row["expected_profit"] * risk_multiplier[row["risk_level"]], axis=1
 )
 
 jobs_df["priority_score"] = jobs_df["priority"].map(priority_score)
 
+available_machines = set(df["machine_type"].tolist())
+
+st.sidebar.subheader("Kapacitní scénáře")
+
+extra_dumper = st.sidebar.checkbox("Koupit druhý pásový dumper")
+
+machine_capacity = {
+    "Mini bagr": 1,
+    "Pásový dumper": 1,
+    "Smykový nakladač": 1,
+    "Vibrační deska": 2,
+    "Kolový bagr": 1,
+    "Silniční válec": 1,
+    "Řezačka asfaltu": 1,
+    "Nákladní auto": 1,
+}
+
+if extra_dumper:
+    machine_capacity["Pásový dumper"] = 2
+
+
+def check_machine_availability(required_machines):
+    required = [m.strip() for m in required_machines.split(";")]
+    missing = [m for m in required if m not in available_machines]
+
+    if missing:
+        return "Chybí: " + ", ".join(missing)
+    else:
+        return "OK"
+
+
+def build_job_schedule(jobs):
+    machine_busy_until = {machine: 0 for machine in machine_capacity.keys()}
+    scheduled_rows = []
+
+    for _, row in jobs.iterrows():
+        required = [m.strip() for m in row["required_machines"].split(";")]
+        duration = int(row["duration_days"])
+
+        # Pokud stroj není v kapacitním seznamu, považujeme ho za nedostupný
+        missing_machines = [
+            machine for machine in required if machine not in machine_busy_until
+        ]
+
+        row_data = row.copy()
+
+        if missing_machines:
+            row_data["schedule_status"] = "🔴 Čeká"
+            row_data["schedule_note"] = "Chybí: " + ", ".join(missing_machines)
+            row_data["start_day"] = None
+            row_data["end_day"] = None
+        else:
+            # Zakázka začne až ve chvíli, kdy jsou volné všechny potřebné stroje
+            start_day = max(machine_busy_until[machine] for machine in required)
+            end_day = start_day + duration
+
+            row_data["schedule_status"] = "🟢 Naplánováno"
+            row_data["schedule_note"] = (
+                f"Start den {start_day + 1}, konec den {end_day}"
+            )
+            row_data["start_day"] = start_day + 1
+            row_data["end_day"] = end_day
+
+            # Všechny použité stroje jsou obsazené do konce zakázky
+            for machine in required:
+                machine_busy_until[machine] = end_day
+
+        scheduled_rows.append(row_data)
+
+    return pd.DataFrame(scheduled_rows)
+
+
+jobs_df["machine_status"] = jobs_df["required_machines"].apply(
+    check_machine_availability
+)
+
+jobs_df["machine_ready_score"] = jobs_df["machine_status"].apply(
+    lambda x: 1 if x == "OK" else 0
+)
+
 jobs_df["decision_score"] = (
     jobs_df["risk_adjusted_profit"]
     + jobs_df["priority_score"] * 20000
+    + jobs_df["machine_ready_score"] * 30000
     - jobs_df["delay_penalty_per_day"] * 2
 )
 
 recommended_jobs = jobs_df.sort_values("decision_score", ascending=False)
+
+scheduled_jobs = build_job_schedule(recommended_jobs)
 
 machine_options = df["machine_type"].tolist()
 
@@ -249,8 +354,14 @@ prob_dumper_better = float(np.mean(profit_dumper > profit_mini))
 investment_cost_mini = row_1["purchase_price"]
 investment_cost_dumper = row_2["purchase_price"]
 
-roi_mini = investment_cost_mini / expected_profit_mini if expected_profit_mini > 0 else None
-roi_dumper = investment_cost_dumper / expected_profit_dumper if expected_profit_dumper > 0 else None
+roi_mini = (
+    investment_cost_mini / expected_profit_mini if expected_profit_mini > 0 else None
+)
+roi_dumper = (
+    investment_cost_dumper / expected_profit_dumper
+    if expected_profit_dumper > 0
+    else None
+)
 
 # --- Executive summary metriky ---
 profit_diff = expected_profit_dumper - expected_profit_mini
@@ -259,26 +370,11 @@ risk_diff_pp = risk_diff
 be_diff = break_even_mini - break_even_dumper
 risk_adv_pct = risk_diff
 
-better_machine = machine_2 if expected_profit_dumper > expected_profit_mini else machine_1
+better_machine = (
+    machine_2 if expected_profit_dumper > expected_profit_mini else machine_1
+)
 
-if expected_profit_dumper > expected_profit_mini:
-    mgmt_text = (
-        f"Pro management aktuálně vychází lépe {machine_2}. "
-        f"Nabízí vyšší očekávaný zisk, nižší riziko ztráty "
-        f"a lepší bod zvratu než {machine_1}. "
-        f"Přesto je investice citlivá na cenu pronájmu a vytížení."
-    )
-elif expected_profit_mini > expected_profit_dumper:
-    mgmt_text = (
-        f"Pro management aktuálně vychází lépe {machine_1}. "
-        f"Nabízí lepší kombinaci očekávaného zisku, rizika "
-        f"a návratnosti než {machine_2}."
-    )
-else:
-    mgmt_text = (
-        "Obě varianty vycházejí velmi podobně. "
-        "Pro finální rozhodnutí doporučujeme doplnit provozní data."
-    )
+mgmt_text = build_mgmt_text(machine_1, machine_2, expected_profit_mini, expected_profit_dumper)
 
 if (prob_loss_dumper < prob_loss_mini) and (break_even_dumper < break_even_mini):
     recommendation = f"✅ Investičně vychází lépe: {machine_2}"
@@ -288,7 +384,9 @@ else:
 if profit_diff > 0:
     profit_text = f"{machine_2} vydělá o {profit_diff:,.0f} Kč více než {machine_1}"
 else:
-    profit_text = f"{machine_1} vydělá o {abs(profit_diff):,.0f} Kč více než {machine_2}"
+    profit_text = (
+        f"{machine_1} vydělá o {abs(profit_diff):,.0f} Kč více než {machine_2}"
+    )
 
 if risk_diff > 0:
     risk_text = f"{machine_2} má o {risk_diff:.1f} p.b. nižší riziko ztráty"
@@ -329,10 +427,14 @@ for d1 in range(31):
 
 mc_better = machine_2 if expected_profit_dumper > expected_profit_mini else machine_1
 lp_better = (
-    machine_1 if x1_opt > x2_opt else machine_2 if x2_opt > x1_opt else "oba stroje podobně"
+    machine_1
+    if x1_opt > x2_opt
+    else machine_2 if x2_opt > x1_opt else "oba stroje podobně"
 )
 dp_better = (
-    machine_1 if best_d1 > best_d2 else machine_2 if best_d2 > best_d1 else "oba stroje podobně"
+    machine_1
+    if best_d1 > best_d2
+    else machine_2 if best_d2 > best_d1 else "oba stroje podobně"
 )
 
 
@@ -457,7 +559,9 @@ profit_curve_dumper = avg_daily_dumper * days_grid - fixed_cost
 
 # --- Citlivost vstupů ---
 base_profit_1 = avg_daily_mini * expected_days - fixed_cost - row_1["service_cost_mean"]
-base_profit_2 = avg_daily_dumper * expected_days - fixed_cost - row_2["service_cost_mean"]
+base_profit_2 = (
+    avg_daily_dumper * expected_days - fixed_cost - row_2["service_cost_mean"]
+)
 
 sensitivity_data = []
 drivers = [
@@ -469,25 +573,89 @@ drivers = [
 
 for label, driver in drivers:
     if driver == "price":
-        low_1 = (avg_daily_mini * 0.9) * expected_days - fixed_cost - row_1["service_cost_mean"]
-        high_1 = (avg_daily_mini * 1.1) * expected_days - fixed_cost - row_1["service_cost_mean"]
-        low_2 = (avg_daily_dumper * 0.9) * expected_days - fixed_cost - row_2["service_cost_mean"]
-        high_2 = (avg_daily_dumper * 1.1) * expected_days - fixed_cost - row_2["service_cost_mean"]
+        low_1 = (
+            (avg_daily_mini * 0.9) * expected_days
+            - fixed_cost
+            - row_1["service_cost_mean"]
+        )
+        high_1 = (
+            (avg_daily_mini * 1.1) * expected_days
+            - fixed_cost
+            - row_1["service_cost_mean"]
+        )
+        low_2 = (
+            (avg_daily_dumper * 0.9) * expected_days
+            - fixed_cost
+            - row_2["service_cost_mean"]
+        )
+        high_2 = (
+            (avg_daily_dumper * 1.1) * expected_days
+            - fixed_cost
+            - row_2["service_cost_mean"]
+        )
     elif driver == "days":
-        low_1 = avg_daily_mini * (expected_days * 0.9) - fixed_cost - row_1["service_cost_mean"]
-        high_1 = avg_daily_mini * (expected_days * 1.1) - fixed_cost - row_1["service_cost_mean"]
-        low_2 = avg_daily_dumper * (expected_days * 0.9) - fixed_cost - row_2["service_cost_mean"]
-        high_2 = avg_daily_dumper * (expected_days * 1.1) - fixed_cost - row_2["service_cost_mean"]
+        low_1 = (
+            avg_daily_mini * (expected_days * 0.9)
+            - fixed_cost
+            - row_1["service_cost_mean"]
+        )
+        high_1 = (
+            avg_daily_mini * (expected_days * 1.1)
+            - fixed_cost
+            - row_1["service_cost_mean"]
+        )
+        low_2 = (
+            avg_daily_dumper * (expected_days * 0.9)
+            - fixed_cost
+            - row_2["service_cost_mean"]
+        )
+        high_2 = (
+            avg_daily_dumper * (expected_days * 1.1)
+            - fixed_cost
+            - row_2["service_cost_mean"]
+        )
     elif driver == "fixed":
-        low_1 = avg_daily_mini * expected_days - (fixed_cost * 0.9) - row_1["service_cost_mean"]
-        high_1 = avg_daily_mini * expected_days - (fixed_cost * 1.1) - row_1["service_cost_mean"]
-        low_2 = avg_daily_dumper * expected_days - (fixed_cost * 0.9) - row_2["service_cost_mean"]
-        high_2 = avg_daily_dumper * expected_days - (fixed_cost * 1.1) - row_2["service_cost_mean"]
+        low_1 = (
+            avg_daily_mini * expected_days
+            - (fixed_cost * 0.9)
+            - row_1["service_cost_mean"]
+        )
+        high_1 = (
+            avg_daily_mini * expected_days
+            - (fixed_cost * 1.1)
+            - row_1["service_cost_mean"]
+        )
+        low_2 = (
+            avg_daily_dumper * expected_days
+            - (fixed_cost * 0.9)
+            - row_2["service_cost_mean"]
+        )
+        high_2 = (
+            avg_daily_dumper * expected_days
+            - (fixed_cost * 1.1)
+            - row_2["service_cost_mean"]
+        )
     else:
-        low_1 = avg_daily_mini * expected_days - fixed_cost - (row_1["service_cost_mean"] * 0.9)
-        high_1 = avg_daily_mini * expected_days - fixed_cost - (row_1["service_cost_mean"] * 1.1)
-        low_2 = avg_daily_dumper * expected_days - fixed_cost - (row_2["service_cost_mean"] * 0.9)
-        high_2 = avg_daily_dumper * expected_days - fixed_cost - (row_2["service_cost_mean"] * 1.1)
+        low_1 = (
+            avg_daily_mini * expected_days
+            - fixed_cost
+            - (row_1["service_cost_mean"] * 0.9)
+        )
+        high_1 = (
+            avg_daily_mini * expected_days
+            - fixed_cost
+            - (row_1["service_cost_mean"] * 1.1)
+        )
+        low_2 = (
+            avg_daily_dumper * expected_days
+            - fixed_cost
+            - (row_2["service_cost_mean"] * 0.9)
+        )
+        high_2 = (
+            avg_daily_dumper * expected_days
+            - fixed_cost
+            - (row_2["service_cost_mean"] * 1.1)
+        )
 
     sensitivity_data.append((f"{label} – {machine_1}", abs(high_1 - low_1)))
     sensitivity_data.append((f"{label} – {machine_2}", abs(high_2 - low_2)))
@@ -504,7 +672,9 @@ rr_y2 = expected_profit_dumper
 
 # --- Heatmapa ---
 days_range = np.arange(5, 31, 1)
-price_range = np.arange(avg_daily_mini * 0.6, avg_daily_mini * 1.4, avg_daily_mini * 0.05)
+price_range = np.arange(
+    avg_daily_mini * 0.6, avg_daily_mini * 1.4, avg_daily_mini * 0.05
+)
 profit_matrix = np.zeros((len(price_range), len(days_range)))
 
 for i, price in enumerate(price_range):
@@ -543,8 +713,12 @@ n_machines = len(machines)
 max_units = 2
 
 for counts in product(range(max_units + 1), repeat=n_machines):
-    total_cost = sum(counts[i] * machines[i]["purchase_price"] for i in range(n_machines))
-    total_profit = sum(counts[i] * machines[i]["expected_unit_profit"] for i in range(n_machines))
+    total_cost = sum(
+        counts[i] * machines[i]["purchase_price"] for i in range(n_machines)
+    )
+    total_profit = sum(
+        counts[i] * machines[i]["expected_unit_profit"] for i in range(n_machines)
+    )
 
     if total_cost <= budget and total_profit > best_profit and sum(counts) > 0:
         best_profit = total_profit
@@ -558,8 +732,12 @@ for test_budget in budget_values:
     best_profit_curve = -1e18
 
     for counts in product(range(3), repeat=n_machines):
-        total_cost = sum(counts[i] * machines[i]["purchase_price"] for i in range(n_machines))
-        total_profit = sum(counts[i] * machines[i]["expected_unit_profit"] for i in range(n_machines))
+        total_cost = sum(
+            counts[i] * machines[i]["purchase_price"] for i in range(n_machines)
+        )
+        total_profit = sum(
+            counts[i] * machines[i]["expected_unit_profit"] for i in range(n_machines)
+        )
 
         if total_cost <= test_budget and total_profit > best_profit_curve:
             best_profit_curve = total_profit
@@ -577,6 +755,7 @@ os.makedirs("outputs", exist_ok=True)
 # EXPORT REPORTU – FUNKCE
 # ==================================================
 
+
 def fig_to_png_bytes(fig) -> bytes:
     img = BytesIO()
     fig.savefig(img, format="png", dpi=200, bbox_inches="tight")
@@ -586,17 +765,50 @@ def fig_to_png_bytes(fig) -> bytes:
 
 def build_docx_report() -> bytes:
     doc = Document()
+    
+    # Základní písmo dokumentu
+    normal_style = doc.styles["Normal"]
+    normal_style.font.name = "Aptos"
+    normal_style.font.size = Pt(10.5)
 
-    doc.add_heading("Decision Engine – investiční report", level=1)
+    # Nadpis 1
+    heading_1 = doc.styles["Heading 1"]
+    heading_1.font.name = "Aptos Display"
+    heading_1.font.size = Pt(16)
+    heading_1.font.bold = True
+    heading_1.font.color.rgb = RGBColor(31, 78, 121)
+
+    # Nadpis 2
+    heading_2 = doc.styles["Heading 2"]
+    heading_2.font.name = "Aptos Display"
+    heading_2.font.size = Pt(13)
+    heading_2.font.bold = True
+    heading_2.font.color.rgb = RGBColor(31, 78, 121)
+
+    # Nadpis 3, pokud ho používáš
+    heading_3 = doc.styles["Heading 3"]
+    heading_3.font.name = "Aptos"
+    heading_3.font.size = Pt(11)
+    heading_3.font.bold = True
+    heading_3.font.color.rgb = RGBColor(31, 78, 121)
+
+    title = doc.add_heading("Decision Engine – investiční report", level=1)
+
+    title_run = title.runs[0]
+    title_run.font.size = Pt(20)
+    title_run.font.bold = True
+    title_run.font.name = "Aptos Display"
+    title_run.font.color.rgb = RGBColor(31, 78, 121)
+
     doc.add_paragraph(f"Porovnání: {machine_1} vs. {machine_2}")
 
-    doc.add_heading("Shrnutí výsledků", level=2)
+    doc.add_heading("Shrnutí výsledků", level=1)
     doc.add_paragraph(f"Fixní náklad (Kč/měsíc): {fixed_cost:,.0f}")
     doc.add_paragraph(f"Rozsah vytížení: {min_days}-{max_days} dní/měsíc")
     doc.add_paragraph(f"Počet simulací: {n:,}")
     doc.add_paragraph(f"Odhad reálné poptávky: {expected_days} dní/měsíc")
 
-    doc.add_heading("Klíčové metriky", level=2)
+    doc.add_heading("Klíčové investiční ukazatele", level=1)
     table = doc.add_table(rows=1, cols=3)
     hdr = table.rows[0].cells
     hdr[0].text = "Metrika"
@@ -604,10 +816,18 @@ def build_docx_report() -> bytes:
     hdr[2].text = machine_2
 
     rows = [
-        ("Průměrná denní cena", f"{avg_daily_mini:,.0f} Kč", f"{avg_daily_dumper:,.0f} Kč"),
+        (
+            "Průměrná denní cena",
+            f"{avg_daily_mini:,.0f} Kč",
+            f"{avg_daily_dumper:,.0f} Kč",
+        ),
         ("Bod zvratu", f"{break_even_mini:.2f} dní", f"{break_even_dumper:.2f} dní"),
         ("Riziko ztráty", f"{risk_loss_mini:.1f} %", f"{risk_loss_dumper:.1f} %"),
-        ("Oček. zisk (Monte Carlo)", f"{expected_profit_mini:,.0f} Kč", f"{expected_profit_dumper:,.0f} Kč"),
+        (
+            "Oček. zisk (Monte Carlo)",
+            f"{expected_profit_mini:,.0f} Kč",
+            f"{expected_profit_dumper:,.0f} Kč",
+        ),
     ]
     for metric, v1, v2 in rows:
         cells = table.add_row().cells
@@ -615,12 +835,39 @@ def build_docx_report() -> bytes:
         cells[1].text = v1
         cells[2].text = v2
 
+    better_machine = (
+    machine_1
+    if expected_profit_mini > expected_profit_dumper
+    else machine_2
+    )
+
+    doc.add_heading("Relativně výhodnější varianta", level=1)
+
+    verdict = doc.add_paragraph()
+    verdict.add_run("Relativně lépe vychází: ").bold = True
+    verdict.add_run(f"{better_machine}.\n")
+
+    if expected_profit_mini < 0 and expected_profit_dumper < 0:
+        verdict.add_run(
+            "Při aktuálním nastavení jsou však obě investiční varianty "
+            "ztrátové. Investici proto nedoporučujeme realizovat bez zvýšení "
+            "ceny pronájmu, vyššího vytížení nebo snížení nákladů."
+        )
+    else:
+        verdict.add_run(
+            f"{better_machine} nabízí příznivější kombinaci očekávaného "
+            "výsledku, rizika ztráty a bodu zvratu."
+        )
+
     doc.add_heading("Distribuce zisku (Monte Carlo)", level=1)
+
     doc.add_paragraph(
-        "Graf ukazuje rozdělení možných scénářů měsíčního zisku na základě Monte Carlo simulace."
+        "Následující rizikové metriky shrnují rozdělení možných scénářů "
+        "měsíčního výsledku na základě Monte Carlo simulace."
     )
     if os.path.exists("outputs/porovnani_zisku.png"):
-        doc.add_picture("outputs/porovnani_zisku.png", width=Inches(6))
+        pass
+    # doc.add_picture("outputs/porovnani_zisku.png", width=Inches(6))
 
     doc.add_heading("Rizikové metriky", level=1)
     doc.add_paragraph(
@@ -633,7 +880,42 @@ def build_docx_report() -> bytes:
         f"P90 (optimistický scénář): {machine_1} = {p90_mini:,.0f} Kč, {machine_2} = {p90_dumper:,.0f} Kč"
     )
 
-    doc.add_heading("Interpretace výsledků", level=2)
+    price_heading = doc.add_heading("Doporučená minimální cena pronájmu",level=1)
+
+    price_heading.paragraph_format.page_break_before = True
+
+    price_table = doc.add_table(rows=1, cols=3)
+    price_table.style = "Table Grid"
+
+    header_cells = price_table.rows[0].cells
+    header_cells[0].text = "Stroj"
+    header_cells[1].text = "Minimální cena"
+    header_cells[2].text = "Hodnocení aktuální ceny"
+
+    row = price_table.add_row().cells
+    row[0].text = str(machine_1)
+    row[1].text = f"{required_price_1:,.0f} Kč/den"
+    row[2].text = (
+        "Cena je dostačující"
+        if avg_daily_mini >= required_price_1
+        else "Cena je pod minimem pro zisk"
+    )
+
+    row = price_table.add_row().cells
+    row[0].text = str(machine_2)
+    row[1].text = f"{required_price_2:,.0f} Kč/den"
+    row[2].text = (
+        "Cena je dostačující"
+        if avg_daily_dumper >= required_price_2
+        else "Cena je pod minimem pro zisk"
+    )
+
+    doc.add_paragraph(
+        "Minimální cena ukazuje, při jaké denní sazbě se při zadané "
+        "poptávce pokryjí fixní a servisní náklady."
+    )
+
+    doc.add_heading("Interpretace výsledků", level=1)
     doc.add_paragraph(
         "Model simuluje možné scénáře poptávky po strojích a zohledňuje náklady na servis, "
         "fixní náklady a pravděpodobnost poruch. Výsledkem je odhad očekávaného měsíčního "
@@ -648,32 +930,41 @@ def build_docx_report() -> bytes:
         "které maximalizuje očekávaný měsíční zisk při daném investičním rozpočtu."
     )
 
-    doc.add_heading("Závěr pro management", level=2)
+    doc.add_heading("Doporučený další postup", level=1)
+
+    steps = [
+        f"Ověřit skutečnou měsíční poptávku po stroji {better_machine}.",
+        "Porovnat aktuální cenu pronájmu s vypočtenou minimální denní sazbou.",
+        "Doplnit reálné servisní náklady, odstávky, pojištění a sezónnost.",
+        "Znovu vyhodnotit investici v realistickém scénáři.",
+    ]
+
+    for step in steps:
+        doc.add_paragraph(step, style="List Number")
+
+    doc.add_heading("Závěr pro management", level=1)
+
+    better_machine = (
+        machine_1
+        if expected_profit_mini > expected_profit_dumper
+        else machine_2
+    )
+
     if expected_profit_mini < 0 and expected_profit_dumper < 0:
         final_report_text = (
-            f"Obě investiční varianty jsou při aktuálním nastavení ztrátové. Relativně lépe "
-            f"vychází {machine_2}, který dosahuje nižší očekávané ztráty. Před investicí "
-            f"doporučujeme upravit cenu pronájmu, zvýšit vytížení nebo snížit fixní náklady."
-        )
-    elif scorecard_mini > scorecard_dumper:
-        final_report_text = (
-            f"Na základě simulace vychází jako výhodnější investice {machine_1}. Tento stroj "
-            f"nabízí lepší kombinaci očekávaného zisku a rizika."
-        )
-    elif scorecard_dumper > scorecard_mini:
-        final_report_text = (
-            f"Na základě simulace vychází jako výhodnější investice {machine_2}. Tento stroj "
-            f"nabízí lepší kombinaci očekávaného zisku a rizika."
+            f"Z porovnávaných variant vychází relativně lépe {better_machine}. "
+            "Při aktuálním nastavení jsou však obě varianty ztrátové. "
+            "Investici proto nedoporučujeme realizovat bez úpravy ceny pronájmu, "
+            "zvýšení vytížení nebo snížení fixních a servisních nákladů."
         )
     else:
         final_report_text = (
-            "Obě investiční varianty vycházejí velmi podobně. Doporučujeme doplnit přesnější provozní data."
+            f"Z porovnávaných variant vychází lépe {better_machine}. "
+            "Nabízí příznivější kombinaci očekávaného výsledku, rizika ztráty "
+            "a bodu zvratu."
         )
 
-    doc.add_paragraph(
-        f"Doporučujeme zvážit investici do {better_machine}, který vykazuje lepší kombinaci "
-        f"očekávaného zisku, nižšího rizika ztráty a nižšího bodu zvratu."
-    )
+    doc.add_paragraph(final_report_text)
 
     doc.add_heading("Podmínky ziskovosti", level=1)
     doc.add_paragraph(
@@ -684,8 +975,7 @@ def build_docx_report() -> bytes:
         "- vyšší vytížení strojů (více dní pronájmu za měsíc)\n"
         "- snížení fixních nákladů nebo servisních nákladů"
     )
-    doc.add_paragraph(final_report_text)
-
+    
     out = BytesIO()
     doc.save(out)
     out.seek(0)
@@ -697,7 +987,14 @@ def build_docx_report() -> bytes:
 # ==================================================
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-    ["📊 Shrnutí", "📈 Monte Carlo", "⚠ Riziko", "📉 Citlivost", "🗺 Optimalizace", "📋 Zakázky"]
+    [
+        "📊 Shrnutí",
+        "📈 Monte Carlo",
+        "⚠ Riziko",
+        "📉 Citlivost",
+        "🗺 Optimalizace",
+        "📋 Zakázky",
+    ]
 )
 
 
@@ -708,13 +1005,81 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
 with tab1:
     st.subheader("Shrnutí pro management")
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Očekávaný zisk (Mini bagr)", f"{expected_profit_mini:,.0f} Kč")
-    col2.metric("Očekávaný zisk (Pásový dumper)", f"{expected_profit_dumper:,.0f} Kč")
-    col3.metric("Pravděpodobnost ztráty (Dumper)", f"{risk_loss_dumper:.1f} %")
-    col4.metric("Bod zvratu (Dumper)", f"{break_even_dumper:.2f} dní")
+    row1_col1, row1_col2 = st.columns(2)
 
-    st.subheader("🧠 Komentář k výsledkům")
+    with row1_col1:
+        st.metric(
+            f"Očekávaný zisk ({machine_1})",
+            f"{expected_profit_mini:,.0f} Kč",
+        )
+
+    with row1_col2:
+        st.metric(
+            f"Očekávaný zisk ({machine_2})",
+            f"{expected_profit_dumper:,.0f} Kč",
+        )
+
+    row2_col1, row2_col2 = st.columns(2)
+
+    with row2_col1:
+        st.metric(
+            f"Pravděpodobnost ztráty ({machine_2})",
+            f"{risk_loss_dumper:.1f} %",
+        )
+
+    with row2_col2:
+        st.metric(
+            f"Bod zvratu ({machine_2})",
+            f"{break_even_dumper:.2f} dní",
+        )
+
+    if break_even_mini is not None and break_even_dumper is not None:
+        break_even_diff = break_even_dumper - break_even_mini
+        break_even_diff_text = f"{abs(break_even_diff):.2f} dne"
+    else:
+        break_even_diff_text = "Nelze spočítat"
+
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stMetricLabel"] {
+            overflow: visible !important;
+            min-height: 1.8rem !important;
+        }
+
+        div[data-testid="stMetricLabel"] p {
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+            line-height: 1.1 !important;
+            font-size: 0.82rem !important;
+            margin-bottom: 0 !important;
+        }
+
+        div[data-testid="stMetricValue"] {
+            overflow: visible !important;
+        }
+
+        div[data-testid="stMetricValue"] > div {
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+            line-height: 1.05 !important;
+            font-size: 1.55rem !important;
+        }
+
+        div[data-testid="stMetric"] {
+            overflow: visible !important;
+            min-height: auto !important;
+            padding-bottom: 0.4rem !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("## 🏆 Preferovaná investiční varianta")
+    
     if expected_profit_mini < 0 and expected_profit_dumper < 0:
         st.warning(
             "Při aktuálním nastavení jsou obě investiční varianty ztrátové. "
@@ -722,113 +1087,96 @@ with tab1:
         )
     st.info("Největší vliv na zisk mají denní cena pronájmu a počet dní využití.")
 
-    st.markdown("## 🏆 Doporučená investice")
-    col_dec1, col_dec2, col_dec3, col_dec4 = st.columns(4)
+    col_dec1, col_dec2, col_dec3, col_dec4 = st.columns(
+        [1.65, 1.15, 1.05, 1.25],
+        gap="medium",
+    )
+
     with col_dec1:
         st.metric("Vybraný stroj", better_machine)
+
     with col_dec2:
-        st.metric("Rozdíl v zisku", f"{abs(profit_diff):,.0f} Kč")
+        st.metric(
+            "Rozdíl v zisku",
+            f"{abs(profit_diff):,.0f} Kč",
+        )
+
     with col_dec3:
-        st.metric("Rozdíl v riziku", f"{abs(risk_diff_pp):.1f} p.b.")
+        st.metric(
+            "Rozdíl v riziku",
+            f"{abs(risk_diff_pp):.1f} p.b.",
+        )
+
     with col_dec4:
-        st.metric("Rozdíl v bodu zvratu", f"{abs(be_diff):.2f} dne")
+        st.metric(
+            "Rozdíl v bodu zvratu",
+            break_even_diff_text,
+        )
 
     st.success(f"Investičně vychází lépe: {better_machine}")
 
-    if expected_profit_dumper > expected_profit_mini:
-        mgmt_text = (
-            f"Pro management aktuálně vychází lépe {machine_2}. "
-            f"Nabízí vyšší očekávaný zisk, nižší riziko ztráty "
-            f"a lepší bod zvratu než {machine_1}. "
-            f"Přesto je investice citlivá na cenu pronájmu a vytížení."
-    )
-
-    elif expected_profit_mini > expected_profit_dumper:
-        mgmt_text = (
-            f"Pro management aktuálně vychází lépe {machine_1}. "
-            f"Nabízí lepší kombinaci očekávaného zisku, rizika "
-            f"a návratnosti než {machine_2}."
-    )
-
-    else:
-        mgmt_text = (
-            "Obě varianty vycházejí velmi podobně. "
-            "Pro finální rozhodnutí doporučujeme doplnit provozní data."
-    )
+    mgmt_text = build_mgmt_text(machine_1, machine_2, expected_profit_mini, expected_profit_dumper)
     st.info(mgmt_text)
 
-    st.subheader("📊 Doporučení")
-    st.write(recommendation)
+    show_roi = False
 
-    st.subheader("📊 Klíčové rozdíly mezi stroji")
-    if profit_diff > 0:
-        st.success(profit_text)
-    else:
-        st.warning(profit_text)
+    if show_roi and roi_mini is not None and roi_dumper is not None:
 
-    if risk_diff > 0:
-        st.success(risk_text)
-    else:
-        st.warning(risk_text)
+        st.subheader("💰 Návratnost investice")
 
-    st.subheader("🧠 Interpretace výsledků")
-    st.info(
-        "Rozhodnutí vychází z kombinace očekávaného zisku, rizika ztráty a návratnosti investice."
-    )
+        col_roi1, col_roi2 = st.columns(2)
 
-    st.subheader("💰 Návratnost investice (ROI)")
-    col_roi1, col_roi2 = st.columns(2)
-    with col_roi1:
-        if roi_mini is not None:
-            st.metric(f"{machine_1}", f"{roi_mini:.1f} měsíců")
-        else:
-            st.write(f"{machine_1}: nelze spočítat")
-    with col_roi2:
-        if roi_dumper is not None:
-            st.metric(f"{machine_2}", f"{roi_dumper:.1f} měsíců")
-        else:
-            st.write(f"{machine_2}: nelze spočítat")
+        with col_roi1:
+            st.metric(
+                machine_1,
+                f"{roi_mini:.1f} měsíců",
+            )
 
-    if roi_mini is not None and roi_dumper is not None:
+        with col_roi2:
+            st.metric(
+                machine_2,
+                f"{roi_dumper:.1f} měsíců",
+            )
+
         if roi_dumper < roi_mini:
-            st.success(f"{machine_2} se vrátí rychleji než {machine_1}")
+            st.success(f"{machine_2} se vrátí rychleji než {machine_1}.")
         else:
-            st.warning(f"{machine_1} se vrátí rychleji než {machine_2}")
+            st.success(f"{machine_1} se vrátí rychleji než {machine_2}.")
 
-    st.subheader("✅ Finální investiční verdikt")
-    if verdict_score_mini > verdict_score_dumper:
-        st.success(
-            f"Celkově vychází lépe **{machine_1}** — má lepší kombinaci zisku, rizika a návratnosti investice."
-        )
-    elif verdict_score_dumper > verdict_score_mini:
-        st.success(
-            f"Celkově vychází lépe **{machine_2}** — má lepší kombinaci zisku, rizika a návratnosti investice."
-        )
-    else:
-        st.warning(
-            "Obě varianty vycházejí velmi podobně. Pro finální rozhodnutí je vhodné doplnit reálná provozní data."
-        )
+    with st.expander("🏁 Detailní investiční scorecard"):
+        col_s1, col_s2 = st.columns(2)
 
-    st.subheader("🏁 Investiční scorecard")
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        st.metric(f"Score – {machine_1}", f"{scorecard_mini} / 4")
-    with col_s2:
-        st.metric(f"Score – {machine_2}", f"{scorecard_dumper} / 4")
+        with col_s1:
+            st.metric(
+                f"Score – {machine_1}",
+                f"{scorecard_mini} / 4",
+            )
 
-    if scorecard_mini > scorecard_dumper:
-        st.success(f"Scorecard favorizuje **{machine_1}**.")
-    elif scorecard_dumper > scorecard_mini:
-        st.success(f"Scorecard favorizuje **{machine_2}**.")
-    else:
-        st.info("Scorecard vychází nerozhodně.")
+        with col_s2:
+            st.metric(
+                f"Score – {machine_2}",
+                f"{scorecard_dumper} / 4",
+            )
+
+        if scorecard_mini > scorecard_dumper:
+            st.info(f"Scorecard favorizuje {machine_1}.")
+
+        elif scorecard_dumper > scorecard_mini:
+            st.info(f"Scorecard favorizuje {machine_2}.")
+
+        else:
+            st.info("Scorecard vychází nerozhodně.")
 
     st.subheader("Realistický scénář při očekávané poptávce")
     col3, col4 = st.columns(2)
     with col3:
-        st.metric(f"{machine_1} 📊 očekávaný zisk", f"{expected_profit_mini_real:,.0f} Kč")
+        st.metric(
+            f"{machine_1} 📊 očekávaný zisk", f"{expected_profit_mini_real:,.0f} Kč"
+        )
     with col4:
-        st.metric(f"{machine_2} 📊 očekávaný zisk", f"{expected_profit_dumper_real:,.0f} Kč")
+        st.metric(
+            f"{machine_2} 📊 očekávaný zisk", f"{expected_profit_dumper_real:,.0f} Kč"
+        )
 
     if expected_profit_mini_real < 0 and expected_profit_dumper_real < 0:
         st.warning(
@@ -841,39 +1189,27 @@ with tab1:
             "Doporučuje se porovnat scénáře poptávky a fixních nákladů."
         )
 
-    st.subheader("AI doporučení (vysvětlení v lidské řeči)")
-    st.markdown(ai_text)
+    with st.expander("🧠 Detailní vysvětlení rozhodnutí"):
+        st.markdown(ai_text)
 
-    st.subheader("Doporučená minimální cena pronájmu")
-    col_price1, col_price2 = st.columns(2)
-    with col_price1:
-        st.metric(f"{machine_1}", f"{required_price_1:,.0f} Kč/den")
-    with col_price2:
-        st.metric(f"{machine_2}", f"{required_price_2:,.0f} Kč/den")
+    
+    st.subheader("📋 Doporučený další postup")
 
-    st.caption(
-        "Minimální cena pronájmu ukazuje, při jaké denní ceně se při zadané poptávce pokryjí fixní a servisní náklady."
+    st.markdown(
+    f"""
+    1. Ověřit skutečnou měsíční poptávku po stroji **{better_machine}**.
+    2. Porovnat aktuální cenu pronájmu s vypočtenou minimální denní sazbou.
+    3. Doplnit reálné servisní náklady, odstávky, pojištění a sezónnost.
+    4. Znovu vyhodnotit investici v realistickém scénáři.
+    """
     )
 
-    if avg_daily_mini >= required_price_1:
-        st.success(f"{machine_1}: aktuální cena pronájmu je dostatečná.")
-    else:
-        st.warning(f"{machine_1}: aktuální cena pronájmu je pod minimem pro zisk.")
-
-    if avg_daily_dumper >= required_price_2:
-        st.success(f"{machine_2}: aktuální cena pronájmu je dostatečná.")
-    else:
-        st.warning(f"{machine_2}: aktuální cena pronájmu je pod minimem pro zisk.")
-
-    st.subheader("🧾 Interpretace výsledků")
-    st.write(
-        f"- {machine_1} má riziko ztráty **{risk_loss_mini:.1f} %** při zvolených parametrech.\n"
-        f"- {machine_2} má riziko ztráty **{risk_loss_dumper:.1f} %**.\n"
-        "Bod zvratu říká, kolik dní v měsíci musí být stroj pronajatý, aby pokryl fixní náklady."
-    )
+    st.markdown("---")
 
     st.subheader("📄 Export investičního reportu")
+
     docx_file = build_docx_report()
+
     st.download_button(
         label="📄 Stáhnout report (DOCX)",
         data=docx_file,
@@ -889,6 +1225,12 @@ with tab1:
 with tab2:
     st.subheader("Klíčové metriky (Monte Carlo)")
     col1, col2 = st.columns(2)
+
+    st.caption(
+    "Simulace ukazuje rozdělení možných měsíčních výsledků při nejisté poptávce "
+    "a nákladech. P10 představuje nepříznivý scénář, medián typický výsledek "
+    "a P90 příznivý scénář."
+    )
 
     with col1:
         st.markdown(f"### {machine_1}")
@@ -911,39 +1253,40 @@ with tab2:
     plt.hist(profit_mini, bins=25, alpha=0.5, label=machine_1)
     plt.hist(profit_dumper, bins=25, alpha=0.5, label=machine_2)
     plt.axvline(0)
-    plt.axvline(p10_mini, linestyle="--", label="p10 mini")
-    plt.axvline(p50_mini, linestyle="-", label="median mini")
-    plt.axvline(p90_mini, linestyle="--", label="p90 mini")
-    plt.axvline(p10_dumper, linestyle="--", label="p10 dumper")
-    plt.axvline(p50_dumper, linestyle="-", label="median dumper")
-    plt.axvline(p90_dumper, linestyle="--", label="p90 dumper")
-    plt.axvline(var95_mini, linestyle=":", label="VaR mini")
-    plt.axvline(var95_dumper, linestyle=":", label="VaR dumper")
+    
+    plt.axvline(p50_mini, linestyle=":")
+    plt.axvline(p50_dumper, linestyle=":")
+   
     plt.xlabel("Zisk / ztráta (Kč)")
     plt.ylabel("Počet simulovaných měsíců")
     plt.title("Distribuce zisku")
     plt.legend()
     fig_mc.savefig("outputs/porovnani_zisku.png", dpi=200, bbox_inches="tight")
     st.pyplot(fig_mc)
+
+    st.caption(
+    "Tečkované čáry označují medián simulovaného měsíčního výsledku jednotlivých strojů. "
+    "Plná svislá čára označuje hranici nulového zisku."
+    )
     plt.close(fig_mc)
 
     st.subheader("Kumulativní pravděpodobnost výsledků (CDF)")
     fig_cdf, ax_cdf = plt.subplots(figsize=(10, 6))
     sorted_mini = np.sort(profit_mini)
     sorted_dumper = np.sort(profit_dumper)
-    cdf_mini = np.arange(len(sorted_mini)) / len(sorted_mini)
-    cdf_dumper = np.arange(len(sorted_dumper)) / len(sorted_dumper)
+    cdf_mini = np.arange(1, len(sorted_mini) + 1) / len(sorted_mini)
+    cdf_dumper = np.arange(1, len(sorted_dumper) + 1) / len(sorted_dumper)
 
     ax_cdf.plot(sorted_mini, cdf_mini, label=machine_1)
     ax_cdf.plot(sorted_dumper, cdf_dumper, label=machine_2)
     ax_cdf.axvline(0, color="black", linestyle="--", linewidth=1)
-    ax_cdf.text(0, 0.05, "0 Kč (hranice zisku)", rotation=90)
     ax_cdf.text(
-        5000,
-        0.2,
-        f"Pravděpodobnost ztráty\n{machine_1}: {risk_loss_mini:.1f}%\n{machine_2}: {risk_loss_dumper:.1f}%",
-        bbox=dict(facecolor="white", alpha=0.7),
-    )
+    1500,
+    0.05,
+    "0 Kč – hranice zisku",
+    rotation=90,
+    va="bottom")
+    
     ax_cdf.set_title("Kumulativní pravděpodobnost výsledků")
     ax_cdf.set_xlabel("Zisk / ztráta (Kč)")
     ax_cdf.set_ylabel("Pravděpodobnost")
@@ -953,16 +1296,33 @@ with tab2:
     plt.close(fig_cdf)
 
     st.caption(
-        "CDF graf ukazuje pravděpodobnost dosažení určitého výsledku nebo horšího. Například bod, kde křivka protíná nulu, ukazuje pravděpodobnost ztráty."
+    "CDF graf ukazuje pravděpodobnost, že měsíční výsledek bude roven určité hodnotě "
+    "nebo bude horší. Hodnota křivky u 0 Kč odpovídá pravděpodobnosti ztráty."
     )
 
     st.subheader("Interval nejistoty (Monte Carlo)")
-    st.write(f"{machine_1}: mezi **{ci_mini[0]:,.0f} Kč** a **{ci_mini[1]:,.0f} Kč** (80 % scénářů)")
-    st.write(f"{machine_2}: mezi **{ci_dumper[0]:,.0f} Kč** a **{ci_dumper[1]:,.0f} Kč** (80 % scénářů)")
+    col_ci1, col_ci2 = st.columns(2)
 
-    st.subheader("Pravděpodobnost lepší investice")
-    st.write(
-        f"Pravděpodobnost že **{machine_2}** vydělá více než **{machine_1}** je **{prob_dumper_better * 100:.1f} %**."
+    with col_ci1:
+        st.metric(
+            label=machine_1,
+            value=f"{ci_mini[0]:,.0f} až {ci_mini[1]:,.0f} Kč",
+        )
+
+    with col_ci2:
+        st.metric(
+            label=machine_2,
+            value=f"{ci_dumper[0]:,.0f} až {ci_dumper[1]:,.0f} Kč",
+        )
+
+    st.caption(
+    "Interval obsahuje prostředních 80 % simulovaných měsíčních výsledků. "
+    "Čím výše je celý interval posunutý, tím příznivější je očekávaný výsledek."
+    )
+
+    st.success(
+    f"Pravděpodobnost, že **{machine_2}** dosáhne vyššího výsledku než "
+    f"**{machine_1}**, je **{prob_dumper_better * 100:.1f} %**."
     )
 
 
@@ -971,7 +1331,7 @@ with tab2:
 # ==================================================
 
 with tab3:
-    st.subheader("🚦 Rizikový semafor")
+    st.subheader("🚦 Semafor rizika ztráty")
     col_r1, col_r2 = st.columns(2)
     with col_r1:
         st.write(f"*{machine_1}*")
@@ -979,29 +1339,79 @@ with tab3:
     with col_r2:
         st.write(f"*{machine_2}*")
         st.write(risk_light(prob_loss_dumper))
+    st.caption("Semafor vychází z pravděpodobnosti, že měsíční zisk bude záporný.")
 
     st.subheader("Provozní riziko")
-    st.write(f"{machine_1}: pravděpodobnost poruchy {row_1['failure_prob'] * 100:.1f} %")
-    st.write(f"{machine_2}: pravděpodobnost poruchy {row_2['failure_prob'] * 100:.1f} %")
+    col_fail1, col_fail2 = st.columns(2)
+
+    with col_fail1:
+        st.metric(
+            label=machine_1,
+            value=f"{row_1['failure_prob'] * 100:.1f} %",
+        )
+
+    with col_fail2:
+        st.metric(
+            label=machine_2,
+            value=f"{row_2['failure_prob'] * 100:.1f} %",
+    )
     st.caption("Porucha znamená odstávku stroje a snížení počtu pronajatých dnů.")
 
     st.subheader("Hodnota v riziku (VaR)")
-    st.write(f"{machine_1}: VaR 5 % = **{var95_mini:,.0f} Kč**")
-    st.write(f"{machine_2}: VaR 5 % = **{var95_dumper:,.0f} Kč**")
-    st.caption("VaR 5 % ukazuje hranici výsledku v nejhorších 5 % simulovaných scénářů.")
+
+    col_var1, col_var2 = st.columns(2)
+
+    with col_var1:
+        st.metric(
+            label=machine_1,
+            value=f"{var95_mini:,.0f} Kč",
+        )
+
+    with col_var2:
+        st.metric(
+            label=machine_2,
+            value=f"{var95_dumper:,.0f} Kč",
+        )
+
+    st.caption(
+        "VaR 5 % ukazuje hranici výsledku v nejhorších 5 % simulovaných scénářů."
+    )
 
     st.subheader("Mapa rizika vs. výnosu")
     fig_rr, ax_rr = plt.subplots()
     ax_rr.scatter(rr_x1, rr_y1, s=120)
     ax_rr.scatter(rr_x2, rr_y2, s=120)
-    ax_rr.text(rr_x1 + 0.3, rr_y1, machine_1)
-    ax_rr.text(rr_x2 + 0.3, rr_y2, machine_2)
+    ax_rr.annotate(
+    machine_1,
+    (rr_x1, rr_y1),
+    xytext=(-55, 8),
+    textcoords="offset points"
+    )
+
+    ax_rr.annotate(
+    machine_2,
+    (rr_x2, rr_y2),
+    xytext=(8, 8),
+    textcoords="offset points"
+    )
     ax_rr.set_xlabel("Pravděpodobnost ztráty (%)")
     ax_rr.set_ylabel("Očekávaný zisk (Kč)")
     ax_rr.set_title("Riziko vs. výnos")
     ax_rr.grid(True, alpha=0.3)
     ax_rr.axhline(0, linestyle="--")
     st.pyplot(fig_rr)
+
+    better_risk_machine = (machine_1
+        if (rr_x1 < rr_x2 and rr_y1 > rr_y2)
+        else machine_2)
+    
+    st.caption("Příznivější varianta se nachází více vlevo a výše – má nižší pravděpodobnost ztráty "
+    "a současně vyšší očekávaný výsledek.")
+
+    st.info(f"Z pohledu rizika vychází relativně lépe **{better_risk_machine}**, "
+    f"protože má nižší pravděpodobnost ztráty a příznivější očekávaný výsledek. "
+    f"Při aktuálním nastavení však zůstává riziko obou variant velmi vysoké.")
+
     plt.close(fig_rr)
 
 
@@ -1044,13 +1454,18 @@ with tab4:
         "Tornado graf ukazuje, které vstupy mají největší vliv na očekávaný zisk. Čím delší pruh, tím citlivější je výsledek na změnu daného parametru."
     )
 
-    st.subheader("Heatmapa ziskovosti (poptávka × cena pronájmu)")
+    st.subheader(f"Heatmapa ziskovosti – {machine_2}")
     fig_heat, ax_heat = plt.subplots()
     cbar_data = ax_heat.imshow(
         profit_matrix,
         aspect="auto",
         origin="lower",
-        extent=[days_range.min(), days_range.max(), price_range.min(), price_range.max()],
+        extent=[
+            days_range.min(),
+            days_range.max(),
+            price_range.min(),
+            price_range.max(),
+        ],
     )
     ax_heat.contour(
         days_range,
@@ -1071,7 +1486,7 @@ with tab4:
         )
     ax_heat.set_xlabel("Poptávka (dny/měsíc)")
     ax_heat.set_ylabel("Cena pronájmu (Kč/den)")
-    ax_heat.set_title("Zisk podle ceny a poptávky")
+    ax_heat.set_title(f"Zisk podle ceny a poptávky – {machine_2}")
     fig_heat.colorbar(cbar_data, ax=ax_heat, label="Zisk (Kč)")
     st.pyplot(fig_heat)
     plt.close(fig_heat)
@@ -1094,6 +1509,46 @@ with tab4:
         "Přerušovaná čára označuje hranici break-even, tedy kombinace ceny a poptávky, kde je očekávaný zisk roven nule."
     )
 
+    st.subheader("Doporučená minimální cena pronájmu")
+
+    st.markdown(
+    "Orientační denní sazba potřebná k dosažení bodu zvratu "
+    "při aktuálně nastavené poptávce a nákladech."
+    )
+
+    col_price1, col_price2 = st.columns(2)
+
+    with col_price1:
+        price_1_ok = avg_daily_mini >= required_price_1
+
+        st.metric(
+            label=machine_1,
+            value=f"{required_price_1:,.0f} Kč/den",
+            delta=(
+                "Aktuální cena je dostačující"
+                if price_1_ok
+                else "Aktuální cena je pod minimem"
+            ),
+            delta_color="normal" if price_1_ok else "inverse",
+        )
+
+    with col_price2:
+        price_2_ok = avg_daily_dumper >= required_price_2
+
+        st.metric(
+            label=machine_2,
+            value=f"{required_price_2:,.0f} Kč/den",
+            delta=(
+                "Aktuální cena je dostačující"
+                if price_2_ok
+                else "Aktuální cena je pod minimem"
+            ),
+            delta_color="normal" if price_2_ok else "inverse",
+        )
+
+    st.caption("Minimální denní sazba představuje orientační hranici bodu zvratu "
+    "při aktuálně nastavené poptávce a nákladech. Vyšší sazba znamená "
+    "větší rezervu pro tvorbu zisku.")
 
 # ==================================================
 # TAB 5 – OPTIMALIZACE
@@ -1138,13 +1593,39 @@ with tab5:
         st.info("DP model rozděluje využití mezi oba stroje podobně.")
 
     st.subheader("🧠 Porovnání rozhodovacích modelů")
-    st.write("**Monte Carlo** pracuje s nejistotou a ukazuje rozdělení možných výsledků.")
-    st.write("**LP optimalizace** hledá nejlepší řešení při pevných deterministických předpokladech.")
-    st.info(
-        f"Monte Carlo preferuje **{mc_better}**.\n\n"
-        f"LP preferuje **{lp_better}**.\n\n"
-        f"DP preferuje **{dp_better}**."
-    )
+    st.write(
+        "**Monte Carlo** pracuje s nejistotou a ukazuje rozdělení možných výsledků.")
+    st.write(
+        "**LP optimalizace** hledá nejlepší řešení při pevných deterministických předpokladech.")
+    st.write(
+    "**DP optimalizace** hledá nejlepší řešení v diskrétních, celočíselných variantách.")
+
+    col_model1, col_model2, col_model3 = st.columns(3)
+
+    with col_model1:
+        st.metric(
+            label="Monte Carlo",
+            value=mc_better
+        )
+
+    with col_model2:
+        st.metric(
+            label="LP optimalizace",
+            value=lp_better
+        )
+
+    with col_model3:
+        st.metric(
+            label="DP optimalizace",
+            value=dp_better
+        )
+
+    if mc_better == lp_better == dp_better:
+        st.success(f"Všechny tři rozhodovací modely se shodují: "
+        f"preferovanou variantou je **{mc_better}**.")
+    else:
+        st.warning("Rozhodovací modely se neshodují. "
+            "Výsledek je vhodné posoudit také podle rizika a citlivosti vstupů.")
 
     st.subheader("📦 Optimalizace nákupu strojů")
     st.caption(
@@ -1153,59 +1634,440 @@ with tab5:
 
     if best_combo is not None:
         st.success(f"Nejlepší portfolio při rozpočtu {budget:,.0f} Kč")
-        for i, count in enumerate(best_combo):
-            if count > 0:
-                st.write(f"{machines[i]['machine_type']}: **{count} ks**")
 
-        total_cost = sum(best_combo[i] * machines[i]["purchase_price"] for i in range(n_machines))
-        st.write(f"Celková investice: **{total_cost:,.0f} Kč**")
-        st.write(f"Očekávaný měsíční zisk portfolia: **{best_profit:,.0f} Kč**")
-    else:
-        st.warning("Při daném rozpočtu se nepodařilo najít vhodnou kombinaci.")
+        active_machines = [
+        (machines[i]["machine_type"], best_combo[i])
+        for i in range(n_machines)
+        if best_combo[i] > 0
+    ]
+
+        if active_machines:
+            cols = st.columns(len(active_machines))
+
+            for col, (machine_name, count) in zip(cols, active_machines):
+                with col:
+                    st.metric(
+                        label=machine_name,
+                        value=f"{count} ks"
+                    )
+
+            total_cost = sum(
+                best_combo[i] * machines[i]["purchase_price"]
+                for i in range(n_machines)
+            )
+
+            st.markdown("#### Souhrn portfolia")
+
+        col_port1, col_port2 = st.columns(2)
+
+        with col_port1:
+            st.metric(
+                label="Celková investice",
+                value=f"{total_cost:,.0f} Kč"
+            )
+
+        with col_port2:
+            st.metric(
+                label="Očekávaný měsíční zisk",
+                value=f"{best_profit:,.0f} Kč"
+            )
+
+        if total_cost > 0:
+            portfolio_roi = best_profit / total_cost * 100
+
+            st.caption(
+            f"Očekávaný měsíční výnos portfolia odpovídá přibližně "
+            f"{portfolio_roi:.2f} % hodnoty investice."
+        )
+
+        else:
+            st.warning("Při daném rozpočtu se nepodařilo najít vhodnou kombinaci.")
 
     st.caption(
         "Optimalizace vybírá nejlepší kombinaci strojů z celého datasetu při zadaném investičním rozpočtu."
-    )
+)
 
     st.subheader("📈 Rozpočet vs maximální zisk portfolia")
-    fig_budget, ax_budget = plt.subplots()
-    ax_budget.plot(budget_values, max_profits)
+
+    fig_budget, ax_budget = plt.subplots(figsize=(10, 6))
+
+    ax_budget.plot(
+        budget_values,
+        max_profits,
+        marker="o",
+        linewidth=2
+    )
+
+    # aktuálně zvolený rozpočet
+    current_idx = np.argmin(np.abs(np.array(budget_values) - budget))
+    current_budget_profit = max_profits[current_idx]
+
+    ax_budget.scatter(
+        budget_values[current_idx],
+        current_budget_profit,
+        s=120,
+        zorder=5
+    )
+
+    ax_budget.annotate(
+        f"Aktuální rozpočet\n{budget_values[current_idx]/1_000_000:.1f} mil. Kč\n"
+        f"Zisk {current_budget_profit:,.0f} Kč/měs.",
+        (budget_values[current_idx], current_budget_profit),
+        xytext=(-130, -5),
+        textcoords="offset points",
+        arrowprops=dict(arrowstyle="->"),
+    )
+
     ax_budget.set_xlabel("Investiční rozpočet (Kč)")
-    ax_budget.set_ylabel("Maximální měsíční zisk portfolia")
-    ax_budget.set_title("Rozpočet vs zisk portfolia")
+    ax_budget.set_ylabel("Maximální očekávaný měsíční zisk (Kč)")
+    ax_budget.set_title("Vliv investičního rozpočtu na maximální zisk portfolia")
+
+    ax_budget.grid(alpha=0.3)
+
+    # hezčí formát osy X – bez zápisu 1e6
+    ax_budget.ticklabel_format(style="plain", axis="x")
+
+    fig_budget.tight_layout()
+
+    from matplotlib.ticker import FuncFormatter
+
+    ax_budget.xaxis.set_major_formatter(
+    FuncFormatter(lambda x, _: f"{x/1_000_000:.1f} mil.")
+)
     st.pyplot(fig_budget)
     plt.close(fig_budget)
 
     st.caption(
-        "Graf ukazuje maximální očekávaný měsíční zisk portfolia při různých investičních rozpočtech."
-    )
+    "Graf ukazuje, jak se s rostoucím investičním rozpočtem mění maximální "
+    "očekávaný měsíční zisk optimálního portfolia. Zvýrazněný bod odpovídá "
+    "aktuálně zvolenému investičnímu rozpočtu.")
+
+# ==================================================
+# TAB 6 – ZAKÁZKY
+# ==================================================
 
 with tab6:
 
     st.header("📋 Optimalizace zásobníku zakázek")
 
-    st.caption(
-        "Seřazení zakázek podle očekávaného zisku, rizika a priority."
+    st.caption("Seřazení zakázek podle očekávaného zisku, rizika a priority.")
+
+    planned_count = (
+        scheduled_jobs["schedule_status"].str.contains("Naplánováno")
+    ).sum()
+
+    waiting_count = (scheduled_jobs["schedule_status"].str.contains("Čeká")).sum()
+
+    total_plan_days = int(scheduled_jobs["end_day"].max())
+
+    baseline_days = 30
+    saved_days = baseline_days - total_plan_days
+
+    daily_profit = 15000
+    extra_profit = saved_days * daily_profit
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("🟢 Naplánované", planned_count)
+
+    with col2:
+        st.metric("🔴 Čekající", waiting_count)
+
+    with col3:
+        st.metric("📅 Délka plánu", f"{total_plan_days} dní")
+
+    with col4:
+        st.metric("💰 Přínos", f"{extra_profit:,.0f} Kč")
+
+    st.info(
+        f"⚡ Optimalizací bylo ušetřeno {saved_days} dní "
+        f"oproti referenčnímu plánu {baseline_days} dní."
     )
 
+    st.subheader("🗓 Harmonogram zakázek")
+
+    st.markdown("---")
+
+    gantt_df = scheduled_jobs.copy()
+
+    recommended_jobs = scheduled_jobs[
+    scheduled_jobs["schedule_status"].str.contains("Naplánováno")
+    ].copy()
+
+    recommended_jobs["priority_score"] = (
+        recommended_jobs["priority"]
+        .map(priority_score)
+        .fillna(0)
+    )
+
+    recommended_jobs["risk_score"] = (
+        recommended_jobs["risk_level"]
+        .map(risk_score)
+        .fillna(0)
+    )
+
+    recommended_jobs["decision_score"] = (
+        recommended_jobs["priority_score"] * 100000
+        + recommended_jobs["expected_revenue"]
+        - recommended_jobs["risk_score"] * 50000
+    )
+
+    recommended_job_name = (
+        recommended_jobs
+        .sort_values(
+            by=["decision_score", "risk_score", "expected_revenue"],
+            ascending=[False, True, False]
+        )
+        .iloc[0]["job_name"]
+    )
+
+    gantt_df = gantt_df[gantt_df["schedule_status"].str.contains("Naplánováno")]
+
+    gantt_df["start_date"] = pd.to_datetime(
+        gantt_df["start_day"], unit="D", origin="2025-01-01"
+    )
+
+    gantt_df["end_date"] = pd.to_datetime(
+        gantt_df["end_day"], unit="D", origin="2025-01-01"
+    )
+
+    gantt_df["expected_profit_cz"] = (
+    gantt_df["expected_profit"]
+    .apply(format_czk)
+)
+
+    fig = px.timeline(
+        gantt_df,
+        x_start="start_date",
+        x_end="end_date",
+        y="job_name",
+        color="priority",
+        hover_data={
+                "expected_profit": False,
+                "expected_profit_cz": True,
+                "risk_level": True,
+                "required_machines": True,
+                "start_date": False,
+                "end_date": False,
+            },
+
+        labels={
+            "job_name": "Zakázka",
+            "priority": "Priorita",
+            "expected_profit_cz": "Očekávaný zisk",
+            "risk_level": "Riziko",
+            "required_machines": "Potřebné stroje",
+        },
+    )
+
+    fig.update_layout(
+        yaxis_title="Zakázka",
+        legend_title_text="Priorita"
+)
+
+    fig.update_yaxes(autorange="reversed")
+
+    recommended_row = gantt_df[
+    gantt_df["job_name"] == recommended_job_name
+].iloc[0]
+
+    fig.add_annotation(
+        x=recommended_row["start_date"],
+        y=recommended_job_name,
+        text="⭐ Doporučená zakázka",
+        showarrow=True,
+        arrowhead=2,
+        ax=-90,
+        ay=-25
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.subheader("📄 Detail zakázek")
+
+    jobs_display = scheduled_jobs[
+    ["job_name", "priority", "duration_days", "expected_revenue"]
+    ].rename(columns={
+    "job_name": "Zakázka",
+    "priority": "Priorita",
+    "duration_days": "Délka (dny)",
+    "expected_revenue": "Očekávaný výnos"
+})
+
+    jobs_display["Očekávaný výnos"] = (
+    jobs_display["Očekávaný výnos"]
+    .apply(format_czk)
+)
+    
     st.dataframe(
-        recommended_jobs[
+    jobs_display,
+    use_container_width=True,
+)
+    machine_usage = []
+
+    for machine in machine_capacity.keys():
+        used_days = 0
+
+        for _, job in scheduled_jobs.iterrows():
+            required = [m.strip() for m in job["required_machines"].split(";")]
+
+            if machine in required:
+                used_days += int(job["duration_days"])
+
+        utilization = used_days / total_plan_days * 100 if total_plan_days > 0 else 0
+
+        machine_usage.append(
+            {
+                "Stroj": machine,
+                "Využité dny": used_days,
+                "Vytížení (%)": round(utilization, 1),
+            }
+        )
+
+    machine_usage_df = pd.DataFrame(machine_usage)
+
+    st.subheader("⚙️ Vytížení strojů")
+
+    st.bar_chart(machine_usage_df.set_index("Stroj")["Vytížení (%)"])
+
+    st.caption(
+    "Vyšší vytížení znamená intenzivnější využití stroje v plánovaných zakázkách. "
+    "Stroj s nejvyšším vytížením může představovat kapacitní omezení a měl by být sledován při plánování dalších zakázek.")
+
+    st.dataframe(machine_usage_df,use_container_width=True,hide_index=True)
+
+    most_used_machine = machine_usage_df.sort_values(
+        "Vytížení (%)", ascending=False
+    ).iloc[0]
+
+    bottleneck_machine = most_used_machine["Stroj"]
+    bottleneck_utilization = most_used_machine["Vytížení (%)"]
+
+    st.info(
+        f"Nejvíce vytížený stroj je **{most_used_machine['Stroj']}** "
+        f"s vytížením **{most_used_machine['Vytížení (%)']} %**."
+    )
+
+    if bottleneck_utilization >= 70:
+        st.warning(
+            f"🚨 Úzké hrdlo systému: "
+            f"**{bottleneck_machine}** "
+            f"({bottleneck_utilization:.0f} % vytížení)"
+        )
+    else:
+        st.success(
+            f"✅ Kapacity jsou vyvážené. "
+            f"Nejvíce vytížený stroj je "
+            f"**{bottleneck_machine}** "
+            f"({bottleneck_utilization:.0f} % vytížení)"
+        )
+
+    available_jobs = scheduled_jobs[
+        scheduled_jobs["schedule_status"].str.contains("Naplánováno")
+    ]
+
+    if not available_jobs.empty:
+
+        available_jobs = available_jobs.copy()
+
+        available_jobs["priority_score"] = (
+            available_jobs["priority"]
+            .map(priority_score)
+            .fillna(0)
+        )
+
+        available_jobs["risk_score"] = (
+            available_jobs["risk_level"]
+            .map(risk_score)
+            .fillna(0)
+        )
+
+        available_jobs["decision_score"] = (
+            available_jobs["priority_score"] * 100000
+            + available_jobs["expected_revenue"]
+            - available_jobs["risk_score"] * 50000
+        )
+
+        best_job = available_jobs.sort_values(by=["decision_score", "risk_score", "expected_revenue"],
+        ascending=[False, True, False]).iloc[0]
+
+        st.success(f"""
+🏆 Doporučená prioritní zakázka
+
+**{best_job['job_name']}**
+
+💰 Očekávaný výnos: {format_czk(best_job['expected_revenue'])}
+Priorita: **{best_job['priority']}**
+
+Riziko: **{best_job['risk_level']}**
+
+Rozhodovací skóre: **{best_job['decision_score']:,.0f} bodů**
+
+{best_job['schedule_note']}
+""")
+
+        score_table = available_jobs[
             [
-                "job_id",
                 "job_name",
                 "priority",
                 "risk_level",
-                "duration_days",
-                "expected_profit",
-                "risk_adjusted_profit",
+                "risk_score",
+                "expected_revenue",
                 "decision_score"
             ]
-        ],
-        use_container_width=True
-    )
+        ].copy()
 
-    best_job = recommended_jobs.iloc[0]
+        score_table = score_table.sort_values(
+        by=["decision_score", "risk_score", "expected_revenue"],
+        ascending=[False, True, False])
 
-    st.success(
-        f"Doporučená první zakázka: {best_job['job_name']}"
-    )
+        score_table = score_table.rename(columns={
+            "job_name": "Zakázka",
+            "priority": "Priorita",
+            "risk_level": "Riziko",
+            "expected_revenue": "Očekávaný výnos",
+            "decision_score": "Rozhodovací skóre"
+        })
+
+        score_table = score_table.drop(columns=["risk_score"])
+
+        st.subheader("📊 Pořadí zakázek podle rozhodovacího skóre")
+
+        def highlight_priority(val):
+            if val == "High":
+                return "background-color: #C6EFCE; color: #006100; font-weight: 600"
+            elif val == "Medium":
+                return "background-color: #FFEB9C; color: #9C6500; font-weight: 600"
+            elif val == "Low":
+                return "background-color: #E7E6E6; color: #595959"
+            return ""
+
+
+        def highlight_risk(val):
+            if val == "High":
+                return "background-color: #FFC7CE; color: #9C0006; font-weight: 600"
+            elif val == "Medium":
+                return "background-color: #FCE4D6; color: #C65911; font-weight: 600"
+            elif val == "Low":
+                return "background-color: #C6EFCE; color: #006100; font-weight: 600"
+            return ""
+
+        styled_score_table = (
+            score_table.style
+            .format({
+                "Očekávaný výnos": format_czk,
+                "Rozhodovací skóre": lambda x: f"{x:,.0f}".replace(",", " ")
+            })
+            .map(highlight_priority, subset=["Priorita"])
+            .map(highlight_risk, subset=["Riziko"])
+        )
+
+        st.dataframe(
+            styled_score_table,
+            use_container_width=True,
+            hide_index=True
+        )
+        
+    else:
+        st.error("⚠️ Žádnou zakázku nelze naplánovat kvůli kapacitě strojů.")
