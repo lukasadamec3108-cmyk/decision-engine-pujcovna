@@ -1,3 +1,4 @@
+import hmac
 import os
 from io import BytesIO
 from itertools import product
@@ -66,9 +67,24 @@ def load_data() -> pd.DataFrame:
 
 st.set_page_config(page_title="Decision Engine – Půjčovna", layout="centered")
 
-PASSWORD = st.secrets["password"]
+# Heslo se načítá pouze ze Streamlit secrets (klíč "password" na nejvyšší úrovni).
+# str() a strip() zajistí, že nevadí číselná hodnota bez uvozovek ani mezery navíc.
+try:
+    PASSWORD = str(st.secrets.get("password", "")).strip()
+except Exception:
+    PASSWORD = ""
+
+if not PASSWORD:
+    st.error(
+        "Přístupové heslo není nastaveno. Doplňte klíč `password` "
+        "do Streamlit secrets (Settings → Secrets)."
+    )
+    st.stop()
+
 password = st.text_input("Zadejte přístupové heslo", type="password")
-if password != PASSWORD:
+if not hmac.compare_digest(password.strip().encode("utf-8"), PASSWORD.encode("utf-8")):
+    if password:
+        st.error("Nesprávné heslo.")
     st.stop()
 
 
