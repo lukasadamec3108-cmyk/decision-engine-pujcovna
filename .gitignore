@@ -1,4 +1,23 @@
+# Python
 __pycache__/
 *.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Výstupy aplikace
 outputs/
-.streamlit/
+
+# Secrets – nikdy necommitovat
+.streamlit/secrets.toml
+.env
+*.env
+
+# Office / systém
+~$*
+.DS_Store
+Thumbs.db
+
+# Lokální zálohy
+archiv/
+_backup/
