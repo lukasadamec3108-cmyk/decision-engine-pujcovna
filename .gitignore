@@ -21,3 +21,8 @@ Thumbs.db
 # Lokální zálohy
 archiv/
 _backup/
+
+# Firemní logo – nedávat do veřejného repozitáře (viz README)
+assets/logo.png
+assets/logo.jpg
+assets/logo.svg
