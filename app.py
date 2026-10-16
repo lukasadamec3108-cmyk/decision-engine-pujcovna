@@ -1,4 +1,5 @@
 import hmac
+import importlib
 import os
 from io import BytesIO
 from itertools import product
@@ -15,6 +16,11 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from scipy.optimize import linprog
 
 import ui_theme as ui
+
+# Streamlit při novém nasazení spustí app.py znovu, ale už načtený modul ui_theme
+# ponechá v paměti ve staré verzi. Explicitní reload zajistí, že se vždy použije
+# aktuální soubor (jinak hrozí AttributeError u nově přidaných funkcí).
+ui = importlib.reload(ui)
 from ui_theme import fmt_czk, fmt_days, fmt_num, fmt_pct
 
 # ==================================================
