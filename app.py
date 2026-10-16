@@ -131,8 +131,7 @@ ui.header(APP_TITLE, APP_SUBTITLE, DEMO_BADGE)
 # Sekce postranního panelu se vytvoří dopředu, aby šly plnit na místech,
 # kde je kód potřebuje – pořadí výpočtů tak zůstává beze změny.
 st.sidebar.markdown(
-    '<div class="de-demo"><b>Ukázkový scénář.</b> Všechny hodnoty jsou fiktivní '
-    "a slouží jen k předvedení aplikace.</div>",
+    '<div class="de-demo"><b>Ukázková data</b> · všechny hodnoty jsou fiktivní</div>',
     unsafe_allow_html=True,
 )
 sb_machines = st.sidebar.container()
@@ -1038,119 +1037,233 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
 # ==================================================
 
 with tab1:
-    rec_profit = expected_profit_dumper if better_machine == machine_2 else expected_profit_mini
-    rec_loss = risk_loss_dumper if better_machine == machine_2 else risk_loss_mini
-    rec_be = break_even_dumper if better_machine == machine_2 else break_even_mini
+    # Hodnoty doporučeného a druhého stroje (jen výběr z již vypočtených proměnných).
+    rec_is_m2 = better_machine == machine_2
+    other_machine = machine_1 if rec_is_m2 else machine_2
+    rec_profit = expected_profit_dumper if rec_is_m2 else expected_profit_mini
+    other_profit = expected_profit_mini if rec_is_m2 else expected_profit_dumper
+    rec_prob = prob_loss_dumper if rec_is_m2 else prob_loss_mini
+    other_prob = prob_loss_mini if rec_is_m2 else prob_loss_dumper
+    rec_be = break_even_dumper if rec_is_m2 else break_even_mini
+    other_be = break_even_mini if rec_is_m2 else break_even_dumper
+    rec_price = avg_daily_dumper if rec_is_m2 else avg_daily_mini
+    rec_required = required_price_2 if rec_is_m2 else required_price_1
+    rec_better_share = prob_dumper_better if rec_is_m2 else 1 - prob_dumper_better
 
+    def risk_status(prob: float) -> str:
+        """Štítek rizika podle stejných hranic jako semafor (risk_light)."""
+        light = risk_light(prob)
+        tone = {"🟢": "good", "🟡": "warn", "🔴": "bad"}[light[0]]
+        return ui.status_chip(light[2:], tone)
+
+    # --- A. Dominantní doporučení ---
     if both_loss:
-        ui.verdict(
-            f"Obě varianty jsou při těchto předpokladech ztrátové",
-            f"Relativně lépe vychází <b>{better_machine}</b>, ale ani ten by v průměru "
-            "nevydělal. Zvažte vyšší cenu pronájmu, vyšší vytížení nebo nižší náklady.",
+        ui.hero(
+            "Žádná varianta není zisková",
+            f"Relativně lépe vychází {better_machine}",
+            f"Při zadaných předpokladech by v průměru prodělával i {better_machine}. "
+            "Investici nedoporučujeme bez vyšší ceny pronájmu, vyššího vytížení nebo nižších nákladů.",
             tone="bad",
         )
-    else:
-        ui.verdict(
-            f"Doporučená varianta: {better_machine}",
-            f"Očekávaný zisk <b>{fmt_czk(rec_profit)} měsíčně</b> · ztrátový měsíc "
-            f"<b>{loss_share_text(rec_loss / 100)}</b> · stroj se zaplatí při "
-            f"<b>{fmt_days(rec_be)}</b> pronájmu za měsíc.",
+    elif rec_profit == other_profit:
+        ui.hero(
+            "Varianty jsou vyrovnané",
+            f"{machine_1} a {machine_2}",
+            "Oba stroje mají stejný očekávaný měsíční zisk. Rozhodnutí posuďte podle rizika a ceny.",
         )
+    else:
+        if rec_prob > other_prob:
+            reason = (
+                f"{better_machine} nabízí vyšší očekávaný měsíční zisk, ale s vyšším "
+                f"rizikem ztrátového měsíce než {other_machine}."
+            )
+        else:
+            benefits = ["vyšší očekávaný měsíční zisk"]
+            if rec_prob < other_prob:
+                benefits.append("nižší riziko ztrátového měsíce")
+            if rec_be < other_be:
+                benefits.append("zaplatí se při menším počtu dní pronájmu")
+            joined = benefits[0] if len(benefits) == 1 else ", ".join(benefits[:-1]) + " a " + benefits[-1]
+            reason = f"{better_machine} nabízí {joined}."
+        ui.hero("Doporučená investice", better_machine, reason)
 
-    col_m1, col_m2 = st.columns(2, gap="medium")
-    for col, name, row_m, profit, loss, be, price, req in (
-        (col_m1, machine_1, row_1, expected_profit_mini, risk_loss_mini, break_even_mini,
-         avg_daily_mini, required_price_1),
-        (col_m2, machine_2, row_2, expected_profit_dumper, risk_loss_dumper, break_even_dumper,
-         avg_daily_dumper, required_price_2),
-    ):
-        with col:
-            st.markdown(
-                ui.machine_card(
-                    name,
-                    MACHINE_COLOR[name],
-                    [
-                        ("Očekávaný zisk za měsíc", fmt_czk(profit)),
-                        ("Šance ztrátového měsíce", f"{fmt_pct(loss)} · {risk_light(loss / 100)}"),
-                        ("Bod zvratu (dny pronájmu / měsíc)", fmt_days(be)),
-                        ("Ceník – denní pronájem", fmt_czk(price)),
-                        (f"Minimální cena při {expected_days} dnech", fmt_czk(req)),
-                        ("Pořizovací cena", fmt_czk(row_m["purchase_price"])),
-                    ],
-                    recommended=(name == better_machine),
-                    tag="Relativně lepší" if both_loss else "Doporučeno",
-                ),
-                unsafe_allow_html=True,
+    # --- B. Tři hlavní ukazatele doporučeného stroje ---
+    profit_gap = rec_profit - other_profit
+    ui.kpi_cards(
+        [
+            dict(
+                label="Očekávaný měsíční zisk",
+                value=fmt_czk(rec_profit),
+                negative=rec_profit < 0,
+                sub=f"o {fmt_czk(abs(profit_gap))} {'více' if profit_gap >= 0 else 'méně'} "
+                f"než {other_machine}",
+            ),
+            dict(
+                label="Pravděpodobnost ztrátového měsíce",
+                value=fmt_pct(rec_prob * 100),
+                sub=f"{risk_status(rec_prob)} {loss_share_text(rec_prob)}",
+            ),
+            dict(
+                label="Bod zvratu",
+                value=fmt_days(rec_be),
+                sub=f"pronájmu za měsíc · scénář trhu počítá s {min_days}–{max_days} dny",
+            ),
+        ]
+    )
+
+    # --- C. Kompaktní srovnání obou strojů ---
+    st.markdown('<div class="de-section">Srovnání variant</div>', unsafe_allow_html=True)
+
+    def best_index(a, b, higher_is_better: bool):
+        if a == b:
+            return None
+        return (0 if a > b else 1) if higher_is_better else (0 if a < b else 1)
+
+    ui.compare_table(
+        [machine_1, machine_2],
+        [
+            ("Očekávaný měsíční zisk",
+             [fmt_czk(expected_profit_mini), fmt_czk(expected_profit_dumper)],
+             best_index(expected_profit_mini, expected_profit_dumper, True)),
+            ("Pravděpodobnost ztrátového měsíce",
+             [fmt_pct(risk_loss_mini), fmt_pct(risk_loss_dumper)],
+             best_index(prob_loss_mini, prob_loss_dumper, False)),
+            ("Bod zvratu (dny pronájmu / měsíc)",
+             [fmt_days(break_even_mini), fmt_days(break_even_dumper)],
+             best_index(break_even_mini, break_even_dumper, False)),
+            ("Pořizovací cena",
+             [fmt_czk(row_1["purchase_price"]), fmt_czk(row_2["purchase_price"])],
+             None),
+        ],
+        rec_index=1 if rec_is_m2 else 0,
+        tag="Relativně lepší" if both_loss else "Doporučeno",
+    )
+    st.markdown(
+        '<div class="de-cmp-note">✓ = příznivější hodnota v řádku. Výsledky simulace '
+        f"{fmt_num(n)} možných měsíců s fiktivními daty.</div>",
+        unsafe_allow_html=True,
+    )
+
+    # --- D. Stručné vysvětlení (max. dvě věty) ---
+    why_1 = (
+        f"{better_machine} vydělá více než {other_machine} přibližně v "
+        f"{fmt_pct(rec_better_share * 100, 0)} simulovaných měsíců."
+    )
+    why_2 = (
+        "Stejnou variantu doporučují i dva další výpočetní modely (lineární a diskrétní optimalizace)."
+        if models_agree
+        else "Další výpočetní modely se s tímto výsledkem neshodují – posuďte proto i záložky "
+        "Riziko a Co ovlivňuje zisk."
+    )
+    st.markdown(
+        f'<div class="de-section">Proč tato varianta</div>'
+        f'<div class="de-why"><p>{why_1}</p><p>{why_2}</p></div>',
+        unsafe_allow_html=True,
+    )
+
+    # --- F. Doporučený další postup (max. tři kroky) ---
+    if both_loss:
+        steps = [
+            "Při současných předpokladech investici neprovádět.",
+            f"Prověřit, zda lze dosáhnout vyšší ceny nebo vyššího vytížení – minimální cena pro "
+            f"{better_machine} je {fmt_czk(rec_required)}/den při {expected_days} dnech pronájmu.",
+            "Doplnit skutečné náklady (servis, pojištění, financování) a výpočet zopakovat.",
+        ]
+    else:
+        steps = [
+            f"Ověřit, zda {better_machine} reálně dosáhne alespoň {fmt_days(rec_be)} pronájmu měsíčně.",
+            f"Porovnat ceník {fmt_czk(rec_price)}/den s minimální cenou {fmt_czk(rec_required)}/den "
+            f"(při {expected_days} dnech pronájmu).",
+            "Doplnit skutečné náklady (servis, pojištění, financování) a výpočet zopakovat.",
+        ]
+    st.markdown(
+        '<div class="de-section">Doporučený další postup</div><ol class="de-steps">'
+        + "".join(f"<li>{s}</li>" for s in steps)
+        + "</ol>",
+        unsafe_allow_html=True,
+    )
+
+    # --- E. Pokročilé informace (ve výchozím stavu sbalené) ---
+    with st.expander(f"Rychlý odhad bez simulace (při {expected_days} dnech pronájmu)"):
+        col_q1, col_q2 = st.columns(2)
+        col_q1.metric(f"{machine_1} – měsíční výsledek", fmt_czk(expected_profit_mini_real))
+        col_q2.metric(f"{machine_2} – měsíční výsledek", fmt_czk(expected_profit_dumper_real))
+        st.caption(
+            "Jednoduchý výpočet: denní cena × počet dní − fixní náklad − průměrný servis. "
+            "Počet dní nastavíte v postranním panelu v části „Pokročilé nastavení“."
+        )
+        if expected_profit_mini_real < 0 and expected_profit_dumper_real < 0:
+            st.warning(
+                "Při tomto počtu dní jsou oba stroje ztrátové. "
+                "Zvažte vyšší poptávku, nižší fixní náklady nebo vyšší cenu pronájmu."
+            )
+        elif expected_profit_mini_real < 0 or expected_profit_dumper_real < 0:
+            st.info(
+                "Jeden ze strojů je při tomto počtu dní ztrátový. "
+                "Doporučuje se porovnat scénáře poptávky a fixních nákladů."
             )
 
-    st.markdown("### Klíčová srovnání")
-    higher_profit = machine_2 if profit_diff > 0 else machine_1
-    lower_risk = machine_2 if prob_loss_dumper < prob_loss_mini else machine_1
-    lower_be = machine_2 if break_even_dumper < break_even_mini else machine_1
-    bullets = [
-        f"💰 **{higher_profit}** má o **{fmt_czk(abs(profit_diff))}** vyšší očekávaný měsíční zisk.",
-        f"🛡️ **{lower_risk}** má nižší šanci ztrátového měsíce "
-        f"({fmt_pct(min(risk_loss_mini, risk_loss_dumper))} oproti "
-        f"{fmt_pct(max(risk_loss_mini, risk_loss_dumper))})."
-        if prob_loss_mini != prob_loss_dumper
-        else "🛡️ Oba stroje mají stejnou šanci ztrátového měsíce.",
-        f"📅 **{lower_be}** se zaplatí při menším počtu dní pronájmu "
-        f"({fmt_days(min(break_even_mini, break_even_dumper))} oproti "
-        f"{fmt_days(max(break_even_mini, break_even_dumper))}).",
-        f"📊 V **{fmt_pct(prob_dumper_better * 100, 0)}** simulovaných měsíců vydělá "
-        f"{machine_2} více než {machine_1}.",
-        f"✅ Tři různé výpočetní metody se shodují na variantě **{mc_better}**."
-        if models_agree
-        else "⚖️ Výpočetní metody se neshodují – výsledek posuďte i podle rizika a citlivosti.",
-    ]
-    st.markdown("\n".join(f"- {b}" for b in bullets))
-
-    st.markdown(f"### Rychlý odhad bez simulace – při {expected_days} dnech pronájmu")
-    col_q1, col_q2 = st.columns(2)
-    col_q1.metric(f"{machine_1} – měsíční výsledek", fmt_czk(expected_profit_mini_real))
-    col_q2.metric(f"{machine_2} – měsíční výsledek", fmt_czk(expected_profit_dumper_real))
-    st.caption(
-        "Jednoduchý výpočet: denní cena × počet dní − fixní náklad − průměrný servis. "
-        "Počet dní nastavíte v postranním panelu v části „Pokročilé nastavení“."
-    )
-    if expected_profit_mini_real < 0 and expected_profit_dumper_real < 0:
-        st.warning(
-            "Při tomto počtu dní jsou oba stroje ztrátové. "
-            "Zvažte vyšší poptávku, nižší fixní náklady nebo vyšší cenu pronájmu."
+    with st.expander("Jak aplikace došla k doporučení"):
+        st.markdown(
+            "Doporučený stroj je ten s **vyšším průměrným měsíčním ziskem** v simulaci. "
+            "Bodové hodnocení a text níže slouží jako doplňující pohled; text sestavují pevně "
+            "daná pravidla z vypočtených čísel."
         )
-    elif expected_profit_mini_real < 0 or expected_profit_dumper_real < 0:
-        st.info(
-            "Jeden ze strojů je při tomto počtu dní ztrátový. "
-            "Doporučuje se porovnat scénáře poptávky a fixních nákladů."
-        )
-
-    with st.expander("🔎 Jak aplikace došla k doporučení"):
         col_s1, col_s2 = st.columns(2)
         col_s1.metric(f"Bodové hodnocení – {machine_1}", f"{scorecard_mini} / 4")
         col_s2.metric(f"Bodové hodnocení – {machine_2}", f"{scorecard_dumper} / 4")
         st.caption(
             "Body za: vyšší očekávaný zisk, nižší šanci ztráty, lepší nejhorší měsíc z 20 "
-            "a rychlejší návratnost investice (počítá se, jen když jsou oba stroje v zisku). "
-            "Text níže sestavují pevně daná pravidla z vypočtených čísel."
+            "a rychlejší návratnost investice (počítá se, jen když jsou oba stroje v zisku)."
         )
         st.markdown(ai_text)
 
-    st.markdown("### Doporučený další postup")
-    st.markdown(
-        f"""
-1. Ověřit skutečnou měsíční poptávku po stroji **{better_machine}**.
-2. Porovnat aktuální cenu pronájmu s vypočtenou minimální denní sazbou.
-3. Doplnit reálné servisní náklady, odstávky, pojištění a sezónnost.
-4. Znovu vyhodnotit investici v realistickém scénáři.
-"""
-    )
+    with st.expander("Podrobné ukazatele obou strojů"):
+        ui.compare_table(
+            [machine_1, machine_2],
+            [
+                ("Ceník – denní pronájem", [fmt_czk(avg_daily_mini), fmt_czk(avg_daily_dumper)], None),
+                (f"Minimální denní cena při {expected_days} dnech",
+                 [fmt_czk(required_price_1), fmt_czk(required_price_2)], None),
+                ("Hodnocení aktuální ceny",
+                 [
+                     "Dostačující" if avg_daily_mini >= required_price_1 else "Pod minimem",
+                     "Dostačující" if avg_daily_dumper >= required_price_2 else "Pod minimem",
+                 ],
+                 None),
+                ("Semafor rizika", [risk_status(prob_loss_mini), risk_status(prob_loss_dumper)], None),
+                ("Bod zvratu (přesně)",
+                 [fmt_days(break_even_mini, 2), fmt_days(break_even_dumper, 2)], None),
+            ],
+            rec_index=1 if rec_is_m2 else 0,
+            tag="Relativně lepší" if both_loss else "Doporučeno",
+        )
+        st.caption(
+            "Minimální denní cena pokryje fixní a servisní náklady při zadaném odhadu poptávky. "
+            "Bod zvratu je zjednodušený výpočet: fixní náklad ÷ denní cena."
+        )
 
-    st.download_button(
-        label="📄 Stáhnout investiční report (DOCX)",
-        data=build_docx_report(),
-        file_name="decision_report.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        type="primary",
+    # --- G. Export reportu – hlavní akce ---
+    st.write("")
+    with st.container(border=True):
+        col_r1, col_r2 = st.columns([2, 1], vertical_alignment="center")
+        col_r1.markdown(
+            '<div class="de-section" style="margin:0">Investiční report</div>'
+            '<div style="color:#5B6675;font-size:.9rem">Shrnutí výsledků a předpokladů ve formátu '
+            "Word – podklad pro jednání.</div>",
+            unsafe_allow_html=True,
+        )
+        col_r2.download_button(
+            label="📄 Stáhnout investiční report (DOCX)",
+            data=build_docx_report(),
+            file_name="decision_report.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            type="primary",
+            width="stretch",
+        )
+    st.caption(
+        "Výsledky vycházejí z fiktivních demonstračních dat a slouží jako podklad pro rozhodnutí, "
+        "nikoli jako investiční doporučení."
     )
 
 

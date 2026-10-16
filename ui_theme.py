@@ -167,8 +167,75 @@ def inject_css() -> None:
             border-radius: 8px; padding: .6rem .8rem; font-size: .85rem; color: {MUTED};
         }}
         .de-demo {{
-            background: #FFF7ED; border: 1px solid #F6D3A8; border-radius: 8px; padding: .55rem .7rem;
-            font-size: .8rem; color: #7A4A06; margin-bottom: .6rem;
+            background: #FFF7ED; border: 1px solid #F6D3A8; border-radius: 8px; padding: .35rem .6rem;
+            font-size: .75rem; color: #7A4A06; margin-bottom: .2rem;
+        }}
+
+        /* Postranní panel: jasně oddělené sekce */
+        [data-testid="stSidebar"] h3 {{
+            font-size: .78rem !important; text-transform: uppercase; letter-spacing: .05em;
+            color: {MUTED} !important; border-top: 1px solid {BORDER};
+            padding-top: .9rem !important; margin-top: .5rem !important;
+        }}
+
+        /* Záložka Doporučení – manažerský přehled */
+        .de-hero {{
+            background: #fff; border: 1px solid {BORDER}; border-left: 6px solid {ORANGE};
+            border-radius: 14px; padding: 1.2rem 1.5rem; margin: .3rem 0 1rem 0;
+            box-shadow: 0 2px 14px rgba(20,48,79,.06);
+        }}
+        .de-hero.bad {{ border-left-color: {BAD}; }}
+        .de-hero .lbl {{
+            font-size: .78rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: {ORANGE};
+        }}
+        .de-hero.bad .lbl {{ color: {BAD}; }}
+        .de-hero .ttl {{ font-size: 2rem; font-weight: 800; color: {NAVY}; line-height: 1.15; margin: .2rem 0 .45rem 0; }}
+        .de-hero .txt {{ font-size: 1.05rem; color: {TEXT}; max-width: 60rem; }}
+
+        .de-kpis {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 0 0 1.6rem 0; }}
+        .de-kpi {{ background: #fff; border: 1px solid {BORDER}; border-radius: 12px; padding: 1rem 1.2rem; }}
+        .de-kpi .lbl {{ font-size: .78rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: {MUTED}; }}
+        .de-kpi .val {{ font-size: 2rem; font-weight: 800; color: {NAVY}; line-height: 1.15; margin: .4rem 0 .35rem 0; }}
+        .de-kpi .val.neg {{ color: {BAD}; }}
+        .de-kpi .sub {{ font-size: .88rem; color: {MUTED}; }}
+        .de-status {{
+            display: inline-block; font-size: .78rem; font-weight: 700; padding: .12rem .55rem;
+            border-radius: 999px; margin-right: .35rem;
+        }}
+        .de-status.good {{ color: {GOOD}; background: #E7F5EC; }}
+        .de-status.warn {{ color: #8A5A00; background: #FDF3DC; }}
+        .de-status.bad {{ color: {BAD}; background: #FEE4E2; }}
+
+        .de-section {{ font-size: 1.05rem; font-weight: 700; color: {NAVY}; margin: .2rem 0 .6rem 0; }}
+        .de-cmp {{ width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid {BORDER};
+                   border-radius: 12px; overflow: hidden; margin-bottom: 1.4rem; background: #fff; }}
+        .de-cmp th, .de-cmp td {{ padding: .7rem 1rem; border-bottom: 1px solid {BORDER}; text-align: right; }}
+        .de-cmp tr:last-child td {{ border-bottom: none; }}
+        .de-cmp th {{ font-size: .85rem; color: {NAVY}; background: {SURFACE}; font-weight: 700; }}
+        .de-cmp th:first-child, .de-cmp td:first-child {{ text-align: left; color: {MUTED}; font-weight: 500; }}
+        .de-cmp td {{ font-size: .98rem; color: {TEXT}; font-variant-numeric: tabular-nums; }}
+        .de-cmp .rec {{ background: #FFF7ED; }}
+        .de-cmp th.rec {{ background: #FDEBD3; }}
+        .de-cmp .best {{ font-weight: 700; color: {NAVY}; }}
+        .de-cmp .best::after {{ content: " ✓"; color: {GOOD}; }}
+        .de-cmp .tag {{
+            display: inline-block; margin-left: .4rem; font-size: .68rem; font-weight: 700; color: #fff;
+            background: {ORANGE}; padding: .1rem .45rem; border-radius: 999px; vertical-align: middle;
+        }}
+        .de-cmp-note {{ font-size: .8rem; color: {MUTED}; margin: -1rem 0 1.4rem 0; }}
+
+        .de-why {{ border-left: 3px solid {ORANGE}; padding: .1rem 0 .1rem 1rem; margin: 0 0 1.6rem 0; }}
+        .de-why p {{ margin: .25rem 0; font-size: 1rem; color: {TEXT}; }}
+
+        .de-steps {{ margin: 0 0 1.4rem 0; padding-left: 1.3rem; }}
+        .de-steps li {{ margin: .3rem 0; color: {TEXT}; }}
+
+        @media (max-width: 768px) {{
+            .de-kpis {{ grid-template-columns: 1fr; gap: .7rem; }}
+            .de-hero {{ padding: 1rem 1.1rem; }}
+            .de-hero .ttl {{ font-size: 1.5rem; }}
+            .de-kpi .val {{ font-size: 1.6rem; }}
+            .de-cmp th, .de-cmp td {{ padding: .55rem .5rem; font-size: .86rem; }}
         }}
 
         @media (max-width: 640px) {{
@@ -228,6 +295,57 @@ def machine_card(name: str, color: str, rows: list, recommended: bool = False, t
 
 def note(text: str) -> None:
     st.markdown(f'<div class="de-note">{text}</div>', unsafe_allow_html=True)
+
+
+def hero(label: str, title: str, text: str, tone: str = "") -> None:
+    """Dominantní karta s doporučením (záložka Doporučení)."""
+    st.markdown(
+        f'<div class="de-hero {tone}"><div class="lbl">{html.escape(label)}</div>'
+        f'<div class="ttl">{html.escape(title)}</div><div class="txt">{text}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def status_chip(text: str, tone: str) -> str:
+    """Barevný štítek stavu – barva vždy doplněná slovním popisem (good / warn / bad)."""
+    return f'<span class="de-status {tone}">{html.escape(text)}</span>'
+
+
+def kpi_cards(cards: list) -> None:
+    """Řada velkých KPI karet. cards = [dict(label, value, sub, negative)], na mobilu pod sebou."""
+    items = "".join(
+        f'<div class="de-kpi"><div class="lbl">{html.escape(c["label"])}</div>'
+        f'<div class="val {"neg" if c.get("negative") else ""}">{c["value"]}</div>'
+        f'<div class="sub">{c.get("sub", "")}</div></div>'
+        for c in cards
+    )
+    st.markdown(f'<div class="de-kpis">{items}</div>', unsafe_allow_html=True)
+
+
+def compare_table(names: list, rows: list, rec_index: int, tag: str) -> None:
+    """Srovnávací tabulka dvou strojů.
+
+    rows = [(popisek, [hodnota_1, hodnota_2], index_lepší_hodnoty nebo None)].
+    Sloupec doporučeného stroje je jemně zvýrazněn, lepší hodnota v řádku označena ✓.
+    """
+    head = "".join(
+        f'<th class="{"rec" if i == rec_index else ""}">{html.escape(n)}'
+        + (f'<span class="tag">{html.escape(tag)}</span>' if i == rec_index else "")
+        + "</th>"
+        for i, n in enumerate(names)
+    )
+    body = ""
+    for label, values, best in rows:
+        cells = "".join(
+            f'<td class="{"rec" if i == rec_index else ""} {"best" if best == i else ""}">{v}</td>'
+            for i, v in enumerate(values)
+        )
+        body += f"<tr><td>{html.escape(label)}</td>{cells}</tr>"
+    st.markdown(
+        f'<table class="de-cmp"><thead><tr><th>Ukazatel</th>{head}</tr></thead>'
+        f"<tbody>{body}</tbody></table>",
+        unsafe_allow_html=True,
+    )
 
 
 # ==================================================
