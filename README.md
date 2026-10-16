@@ -56,7 +56,7 @@ Výsledky jsou rozděleny do šesti záložek:
 
 | Záložka | Obsah |
 |---|---|
-| 🏆 **Doporučení** | Verdikt jednou větou, karty obou strojů (očekávaný zisk, šance ztrátového měsíce, bod zvratu, minimální cena), klíčová srovnání, rychlý odhad bez simulace, bodové hodnocení a **export investičního reportu do formátu DOCX**. |
+| 🏆 **Doporučení** | Doporučený stroj s krátkým zdůvodněním, tři hlavní ukazatele (měsíční zisk, riziko ztráty, bod zvratu), srovnání obou strojů, další kroky a **export investičního reportu do formátu DOCX**. Podrobnosti jsou v rozbalovacích sekcích. |
 | 📈 **Možné výsledky** | Simulace měsíčního zisku (Monte Carlo): slabý / typický / dobrý měsíc (P10 / medián / P90), histogram; v detailu pro analytiky kumulativní pravděpodobnost (CDF) a interval nejistoty. |
 | ⚠️ **Riziko** | Semafor rizika, šance ztrátového měsíce, nejhorší měsíc z 20 (VaR 5 %), pravděpodobnost poruchy a graf riziko vs. výnos. |
 | 🎯 **Co ovlivňuje zisk** | Tornádo graf citlivosti na změnu vstupů o ±10 %, minimální denní cena pronájmu, zisk podle počtu dní (bod zvratu) a mapa ziskovosti (cena × počet dní). |
@@ -140,7 +140,7 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 ```
 ├── app.py                           # Streamlit aplikace (výpočty, záložky, export reportu)
 ├── ui_theme.py                      # vzhled: barvy, české formátování čísel, karty, šablona grafů
-├── assets/logo_placeholder.svg      # zástupné logo (firemní logo se do repozitáře nevkládá)
+├── assets/decision_engine_mark.svg  # vlastní neutrální symbol aplikace
 ├── data/
 │   ├── machines_demo.csv            # fiktivní parametry 8 typů strojů
 │   ├── jobs_demo.csv                # fiktivní zásobník 12 zakázek
@@ -177,13 +177,10 @@ Heslo se načítá výhradně ze Streamlit secrets (klíč `password`) a není s
 - **Lokálně:** soubor `.streamlit/secrets.toml`. Je uvedený v `.gitignore`, takže se do repozitáře nedostane.
 - **Streamlit Community Cloud:** nastavení aplikace → *Settings* → *Secrets* → řádek `password = "..."`.
 
-### Logo společnosti
+### Vizuální identita
 
-V hlavičce aplikace je připravené místo pro logo. Dokud logo není dodáno, zobrazuje se neutrální
-zástupný obrázek. Firemní logo se do veřejného repozitáře **nevkládá**:
-
-- **Streamlit Community Cloud:** do *Secrets* přidejte řádek `logo_url = "https://…"` (odkaz na obrázek).
-- **Lokálně:** uložte soubor jako `assets/logo.png` (případně `.jpg` / `.svg`) – je uvedený v `.gitignore`.
+Aplikace používá vlastní neutrální symbol **Decision Engine** (jednoduchý sloupcový graf se symbolem
+rozhodnutí) uložený v `assets/decision_engine_mark.svg`. Nepoužívá logo žádné společnosti.
 
 ### Online verze
 

@@ -13,8 +13,8 @@ import streamlit as st
 # BARVY
 # ==================================================
 
-NAVY = "#14304F"        # hlavička, nadpisy
-ORANGE = "#D97706"      # zvýraznění, doporučená varianta, Stroj 2
+NAVY = "#14304F"        # prvky grafů (hranice, termíny)
+ORANGE = "#D97706"      # Stroj 2 v grafech
 BLUE = "#1F5FA8"        # Stroj 1
 TEXT = "#1B2A3A"
 MUTED = "#5B6675"
@@ -64,30 +64,26 @@ RISK_CZ = {"High": "Vysoké", "Medium": "Střední", "Low": "Nízké"}
 
 
 # ==================================================
-# LOGO
+# VIZUÁLNÍ IDENTITA APLIKACE
 # ==================================================
+# Barvy rozhraní (lišta, nadpisy, akcent, popisky). Barvy grafů výše zůstávají beze změny.
+
+INK = "#1F2933"          # hlavní text a nadpisy
+BAR = "#1F2329"          # antracitová horní lišta
+ACCENT = "#B45309"       # tlumená oranžová – akcent (kontrast 5,0:1 na bílé i s bílým textem)
+ACCENT_SOFT = "#FDF4EA"  # jemné podbarvení doporučené varianty
+UI_MUTED = "#4B5563"     # popisky a vysvětlivky (kontrast 7,6:1)
+UI_LINE = "#E3E6EA"      # rámečky a oddělovače
+UI_BG = "#F6F7F9"        # světlé plochy (sidebar, záhlaví tabulek)
+OK_TEXT, OK_BG = "#166534", "#E8F5EC"
+WARN_TEXT, WARN_BG = "#92400E", "#FEF3C7"
+BAD_TEXT, BAD_BG = "#B42318", "#FDECEA"
 
 
-def logo_src() -> str:
-    """Vrátí zdroj loga pro <img>.
-
-    Pořadí: 1) Streamlit secrets `logo_url` (URL nebo data URI – firemní logo mimo Git),
-    2) lokální soubor assets/logo.png|jpg|svg (je v .gitignore), 3) neutrální zástupné logo.
-    """
-    try:
-        url = str(st.secrets.get("logo_url", "")).strip()
-    except Exception:
-        url = ""
-    if url:
-        return url
-
-    for name, mime in (("logo.png", "image/png"), ("logo.jpg", "image/jpeg"), ("logo.svg", "image/svg+xml")):
-        path = ASSETS / name
-        if path.exists():
-            return f"data:{mime};base64," + base64.b64encode(path.read_bytes()).decode()
-
-    placeholder = ASSETS / "logo_placeholder.svg"
-    return "data:image/svg+xml;base64," + base64.b64encode(placeholder.read_bytes()).decode()
+def mark_src() -> str:
+    """Vlastní neutrální symbol aplikace Decision Engine (graf + symbol rozhodnutí) jako data URI."""
+    svg = (ASSETS / "decision_engine_mark.svg").read_bytes()
+    return "data:image/svg+xml;base64," + base64.b64encode(svg).decode()
 
 
 # ==================================================
@@ -99,151 +95,157 @@ def inject_css() -> None:
     st.markdown(
         f"""
         <style>
-        .block-container {{ padding-top: 1.4rem; padding-bottom: 3rem; max-width: 1280px; }}
-        h1, h2, h3, h4 {{ color: {NAVY}; }}
-        h2 {{ font-size: 1.45rem !important; }}
-        h3 {{ font-size: 1.15rem !important; }}
+        /* 3,5rem: obsah začíná pod systémovou lištou Streamlitu (60 px), která je při sbaleném panelu bílá */
+        .block-container {{ padding-top: 3.5rem; padding-bottom: 3rem; max-width: 1200px; }}
+        h1, h2, h3, h4 {{ color: {INK}; }}
+        h2 {{ font-size: 1.4rem !important; }}
+        h3 {{ font-size: 1.12rem !important; }}
+        [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p {{ color: {UI_MUTED} !important; }}
+        [data-testid="stWidgetLabel"] p {{ color: {INK}; font-weight: 500; }}
 
-        [data-testid="stSidebar"] {{ background: {SURFACE}; border-right: 1px solid {BORDER}; }}
-        [data-testid="stSidebar"] h3 {{ font-size: .95rem !important; margin: .4rem 0 0 0; }}
+        /* Postranní panel */
+        [data-testid="stSidebar"] {{ background: {UI_BG}; border-right: 1px solid {UI_LINE}; }}
+        [data-testid="stSidebar"] h3 {{
+            font-size: .74rem !important; text-transform: uppercase; letter-spacing: .06em;
+            color: {UI_MUTED} !important; border-top: 1px solid {UI_LINE};
+            padding-top: .9rem !important; margin-top: .55rem !important;
+        }}
+        .de-side-brand {{ display: flex; align-items: center; gap: .55rem; margin: -.4rem 0 .7rem 0; }}
+        .de-side-brand img {{ width: 30px; height: 30px; }}
+        .de-side-brand b {{ color: {INK}; font-size: .98rem; }}
+        .de-side-brand span {{ display: block; color: {UI_MUTED}; font-size: .74rem; }}
+        .de-demo {{
+            background: #fff; border: 1px solid {UI_LINE}; border-left: 3px solid {ACCENT};
+            border-radius: 8px; padding: .35rem .6rem; font-size: .74rem; color: {UI_MUTED}; margin-bottom: .2rem;
+        }}
+        .de-demo b {{ color: {INK}; }}
 
-        .stTabs [data-baseweb="tab-list"] {{ gap: .2rem; border-bottom: 1px solid {BORDER}; overflow-x: auto; }}
-        .stTabs [data-baseweb="tab"] {{ padding: .55rem .9rem; font-weight: 600; color: {MUTED}; }}
-        .stTabs [aria-selected="true"] {{ color: {NAVY}; }}
-        .stTabs [data-baseweb="tab-highlight"] {{ background-color: {ORANGE}; height: 3px; }}
+        /* Záložky */
+        .stTabs [data-baseweb="tab-list"] {{ gap: .15rem; border-bottom: 1px solid {UI_LINE}; overflow-x: auto; }}
+        .stTabs [data-baseweb="tab"] {{ padding: .55rem .85rem; font-weight: 600; color: {UI_MUTED}; }}
+        .stTabs [aria-selected="true"] {{ color: {INK}; }}
+        .stTabs [data-baseweb="tab-highlight"] {{ background-color: {ACCENT}; height: 3px; }}
 
         [data-testid="stMetric"] {{
-            background: #fff; border: 1px solid {BORDER}; border-radius: 10px; padding: .75rem 1rem;
+            background: #fff; border: 1px solid {UI_LINE}; border-radius: 10px; padding: .75rem 1rem;
         }}
-        [data-testid="stMetricLabel"] p {{ white-space: normal; color: {MUTED}; font-size: .85rem; }}
-        [data-testid="stMetricValue"] {{ color: {NAVY}; font-size: 1.5rem; }}
-        [data-testid="stExpander"] details {{ border-radius: 10px; border-color: {BORDER}; }}
+        [data-testid="stMetricLabel"] p {{ white-space: normal; color: {UI_MUTED}; font-size: .85rem; }}
+        [data-testid="stMetricValue"] {{ color: {INK}; font-size: 1.45rem; }}
+        [data-testid="stExpander"] details {{ border-radius: 10px; border-color: {UI_LINE}; background: #fff; }}
+        [data-testid="stExpander"] summary p {{ color: {INK}; font-weight: 600; }}
 
+        /* Horní lišta */
         .de-header {{
-            display: flex; align-items: center; gap: 1rem; background: {NAVY}; color: #fff;
-            border-radius: 12px; padding: .85rem 1.2rem; margin-bottom: 1.1rem;
+            display: flex; align-items: center; gap: .85rem; background: {BAR}; color: #fff;
+            border-radius: 12px; padding: .65rem 1.1rem; margin-bottom: 1rem;
         }}
-        .de-header img {{ height: 46px; max-width: 170px; background: #fff; border-radius: 6px; padding: 4px; }}
-        .de-header.stacked {{ flex-direction: column; align-items: flex-start; gap: .6rem; }}
-        .de-header.stacked .de-badge {{ margin-left: 0; }}
-        .de-title {{ font-size: 1.4rem; font-weight: 700; line-height: 1.2; }}
-        .de-sub {{ font-size: .9rem; opacity: .85; }}
+        .de-header img {{ width: 40px; height: 40px; flex: 0 0 auto; }}
+        .de-header .de-names {{ min-width: 0; flex: 1 1 auto; }}
+        .de-title {{ font-size: 1.25rem; font-weight: 700; line-height: 1.2; color: #fff; }}
+        .de-sub {{ font-size: .86rem; color: #D1D5DB; line-height: 1.3; }}
         .de-badge {{
-            margin-left: auto; background: {ORANGE}; color: #fff; font-weight: 700; font-size: .75rem;
-            letter-spacing: .03em; padding: .3rem .7rem; border-radius: 999px; white-space: nowrap;
+            flex: 0 0 auto; border: 1px solid #6B7280; color: #F3F4F6; font-weight: 600; font-size: .72rem;
+            letter-spacing: .04em; padding: .22rem .6rem; border-radius: 999px; white-space: nowrap;
         }}
 
+        /* Přihlášení */
+        .de-login {{ text-align: center; margin: 3rem 0 1.2rem 0; }}
+        .de-login img {{ width: 64px; height: 64px; }}
+        .de-login .t {{ font-size: 1.7rem; font-weight: 800; color: {INK}; margin-top: .6rem; }}
+        .de-login .s {{ color: {UI_MUTED}; font-size: 1rem; }}
+        .de-login .p {{ color: {INK}; font-size: .95rem; margin-top: 1.4rem; }}
+
+        /* Karty používané v záložkách */
         .de-card {{
-            background: #fff; border: 1px solid {BORDER}; border-radius: 12px; padding: 1rem 1.15rem;
+            background: #fff; border: 1px solid {UI_LINE}; border-radius: 12px; padding: 1rem 1.15rem;
             height: 100%; margin-bottom: .6rem;
         }}
-        .de-card.rec {{ border: 2px solid {ORANGE}; box-shadow: 0 2px 12px rgba(217,119,6,.12); }}
+        .de-card.rec {{ border: 2px solid {ACCENT}; }}
         .de-card-title {{
-            margin: 0 0 .5rem 0; font-size: 1.1rem; font-weight: 700; color: {NAVY};
+            margin: 0 0 .5rem 0; font-size: 1.08rem; font-weight: 700; color: {INK};
             display: flex; align-items: center; gap: .55rem;
         }}
         .de-dot {{ width: .75rem; height: .75rem; border-radius: 50%; display: inline-block; }}
         .de-tag {{
-            font-size: .7rem; font-weight: 700; color: #fff; background: {ORANGE};
+            font-size: .7rem; font-weight: 700; color: #fff; background: {ACCENT};
             padding: .15rem .5rem; border-radius: 999px; margin-left: auto;
         }}
         .de-row {{
             display: flex; justify-content: space-between; gap: 1rem; padding: .4rem 0;
-            border-bottom: 1px dashed {BORDER}; font-size: .95rem;
+            border-bottom: 1px solid {UI_LINE}; font-size: .95rem;
         }}
         .de-row:last-child {{ border-bottom: none; }}
-        .de-row span:first-child {{ color: {MUTED}; }}
-        .de-row span:last-child {{ font-weight: 600; color: {TEXT}; text-align: right; }}
-
-        .de-verdict {{
-            border-radius: 12px; padding: 1rem 1.2rem; margin: .2rem 0 1rem 0;
-            background: #FFF7ED; border-left: 6px solid {ORANGE}; color: {TEXT};
-        }}
-        .de-verdict.bad {{ background: #FEF3F2; border-left-color: {BAD}; }}
-        .de-verdict .big {{ font-size: 1.35rem; font-weight: 700; color: {NAVY}; margin-bottom: .25rem; }}
-
+        .de-row span:first-child {{ color: {UI_MUTED}; }}
+        .de-row span:last-child {{ font-weight: 600; color: {INK}; text-align: right; }}
         .de-note {{
-            background: #fff; border: 1px solid {BORDER}; border-left: 4px solid {NAVY};
-            border-radius: 8px; padding: .6rem .8rem; font-size: .85rem; color: {MUTED};
-        }}
-        .de-demo {{
-            background: #FFF7ED; border: 1px solid #F6D3A8; border-radius: 8px; padding: .35rem .6rem;
-            font-size: .75rem; color: #7A4A06; margin-bottom: .2rem;
+            background: #fff; border: 1px solid {UI_LINE}; border-left: 4px solid {INK};
+            border-radius: 8px; padding: .6rem .8rem; font-size: .88rem; color: {UI_MUTED};
         }}
 
-        /* Postranní panel: jasně oddělené sekce */
-        [data-testid="stSidebar"] h3 {{
-            font-size: .78rem !important; text-transform: uppercase; letter-spacing: .05em;
-            color: {MUTED} !important; border-top: 1px solid {BORDER};
-            padding-top: .9rem !important; margin-top: .5rem !important;
-        }}
-
-        /* Záložka Doporučení – manažerský přehled */
+        /* Záložka Doporučení */
         .de-hero {{
-            background: #fff; border: 1px solid {BORDER}; border-left: 6px solid {ORANGE};
-            border-radius: 14px; padding: 1.2rem 1.5rem; margin: .3rem 0 1rem 0;
-            box-shadow: 0 2px 14px rgba(20,48,79,.06);
+            background: #fff; border: 1px solid {UI_LINE}; border-left: 6px solid {ACCENT};
+            border-radius: 12px; padding: 1rem 1.4rem; margin: .2rem 0 1rem 0;
         }}
-        .de-hero.bad {{ border-left-color: {BAD}; }}
-        .de-hero .lbl {{
-            font-size: .78rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: {ORANGE};
-        }}
-        .de-hero.bad .lbl {{ color: {BAD}; }}
-        .de-hero .ttl {{ font-size: 2rem; font-weight: 800; color: {NAVY}; line-height: 1.15; margin: .2rem 0 .45rem 0; }}
-        .de-hero .txt {{ font-size: 1.05rem; color: {TEXT}; max-width: 60rem; }}
+        .de-hero.bad {{ border-left-color: {BAD_TEXT}; }}
+        .de-hero .lbl {{ font-size: .76rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: {ACCENT}; }}
+        .de-hero.bad .lbl {{ color: {BAD_TEXT}; }}
+        .de-hero .ttl {{ font-size: 1.9rem; font-weight: 800; color: {INK}; line-height: 1.15; margin: .15rem 0 .3rem 0; }}
+        .de-hero .txt {{ font-size: 1.05rem; color: {INK}; }}
 
-        .de-kpis {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 0 0 1.6rem 0; }}
-        .de-kpi {{ background: #fff; border: 1px solid {BORDER}; border-radius: 12px; padding: 1rem 1.2rem; }}
-        .de-kpi .lbl {{ font-size: .78rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: {MUTED}; }}
-        .de-kpi .val {{ font-size: 2rem; font-weight: 800; color: {NAVY}; line-height: 1.15; margin: .4rem 0 .35rem 0; }}
-        .de-kpi .val.neg {{ color: {BAD}; }}
-        .de-kpi .sub {{ font-size: .88rem; color: {MUTED}; }}
+        .de-kpis {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .9rem; margin: 0 0 1.4rem 0; }}
+        .de-kpi {{ background: #fff; border: 1px solid {UI_LINE}; border-radius: 12px; padding: .9rem 1.15rem; }}
+        .de-kpi .lbl {{ font-size: .76rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: {UI_MUTED}; }}
+        .de-kpi .val {{ font-size: 1.95rem; font-weight: 800; color: {INK}; line-height: 1.15; margin: .35rem 0 .3rem 0;
+                        display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }}
+        .de-kpi .val.neg {{ color: {BAD_TEXT}; }}
+        .de-kpi .sub {{ font-size: .88rem; color: {UI_MUTED}; }}
         .de-status {{
-            display: inline-block; font-size: .78rem; font-weight: 700; padding: .12rem .55rem;
-            border-radius: 999px; margin-right: .35rem;
+            display: inline-block; font-size: .74rem; font-weight: 700; padding: .14rem .55rem;
+            border-radius: 999px; letter-spacing: .01em;
         }}
-        .de-status.good {{ color: {GOOD}; background: #E7F5EC; }}
-        .de-status.warn {{ color: #8A5A00; background: #FDF3DC; }}
-        .de-status.bad {{ color: {BAD}; background: #FEE4E2; }}
+        .de-status.good {{ color: {OK_TEXT}; background: {OK_BG}; }}
+        .de-status.warn {{ color: {WARN_TEXT}; background: {WARN_BG}; }}
+        .de-status.bad {{ color: {BAD_TEXT}; background: {BAD_BG}; }}
 
-        .de-section {{ font-size: 1.05rem; font-weight: 700; color: {NAVY}; margin: .2rem 0 .6rem 0; }}
-        .de-cmp {{ width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid {BORDER};
-                   border-radius: 12px; overflow: hidden; margin-bottom: 1.4rem; background: #fff; }}
-        .de-cmp th, .de-cmp td {{ padding: .7rem 1rem; border-bottom: 1px solid {BORDER}; text-align: right; }}
+        .de-section {{ font-size: 1.02rem; font-weight: 700; color: {INK}; margin: .2rem 0 .55rem 0; }}
+        .de-cmp {{ width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid {UI_LINE};
+                   border-radius: 12px; overflow: hidden; margin-bottom: .4rem; background: #fff; }}
+        .de-cmp th, .de-cmp td {{ padding: .65rem 1rem; border-bottom: 1px solid {UI_LINE}; text-align: right; }}
         .de-cmp tr:last-child td {{ border-bottom: none; }}
-        .de-cmp th {{ font-size: .85rem; color: {NAVY}; background: {SURFACE}; font-weight: 700; }}
-        .de-cmp th:first-child, .de-cmp td:first-child {{ text-align: left; color: {MUTED}; font-weight: 500; }}
-        .de-cmp td {{ font-size: .98rem; color: {TEXT}; font-variant-numeric: tabular-nums; }}
-        .de-cmp .rec {{ background: #FFF7ED; }}
-        .de-cmp th.rec {{ background: #FDEBD3; }}
-        .de-cmp .best {{ font-weight: 700; color: {NAVY}; }}
-        .de-cmp .best::after {{ content: " ✓"; color: {GOOD}; }}
+        .de-cmp th {{ font-size: .88rem; color: {INK}; background: {UI_BG}; font-weight: 700; }}
+        .de-cmp th:first-child, .de-cmp td:first-child {{ text-align: left; color: {UI_MUTED}; font-weight: 500; }}
+        .de-cmp td {{ font-size: .98rem; color: {INK}; font-variant-numeric: tabular-nums; }}
+        .de-cmp .rec {{ background: {ACCENT_SOFT}; }}
+        .de-cmp th.rec {{ background: #FAE6D2; }}
+        .de-cmp .best {{ font-weight: 700; color: {OK_TEXT}; }}
+        .de-cmp .best::after {{ content: " ✓"; }}
         .de-cmp .tag {{
             display: inline-block; margin-left: .4rem; font-size: .68rem; font-weight: 700; color: #fff;
-            background: {ORANGE}; padding: .1rem .45rem; border-radius: 999px; vertical-align: middle;
+            background: {ACCENT}; padding: .1rem .45rem; border-radius: 999px; vertical-align: middle;
         }}
-        .de-cmp-note {{ font-size: .8rem; color: {MUTED}; margin: -1rem 0 1.4rem 0; }}
-
-        .de-why {{ border-left: 3px solid {ORANGE}; padding: .1rem 0 .1rem 1rem; margin: 0 0 1.6rem 0; }}
-        .de-why p {{ margin: .25rem 0; font-size: 1rem; color: {TEXT}; }}
-
-        .de-steps {{ margin: 0 0 1.4rem 0; padding-left: 1.3rem; }}
-        .de-steps li {{ margin: .3rem 0; color: {TEXT}; }}
+        .de-cmp-note {{ font-size: .8rem; color: {UI_MUTED}; margin: 0 0 1.4rem 0; }}
+        .de-steps {{ margin: 0 0 1.2rem 0; padding-left: 1.3rem; }}
+        .de-steps li {{ margin: .25rem 0; color: {INK}; }}
 
         @media (max-width: 768px) {{
-            .de-kpis {{ grid-template-columns: 1fr; gap: .7rem; }}
-            .de-hero {{ padding: 1rem 1.1rem; }}
+            .de-kpis {{ grid-template-columns: 1fr; gap: .6rem; }}
+            .de-hero {{ padding: .9rem 1rem; }}
             .de-hero .ttl {{ font-size: 1.5rem; }}
             .de-kpi .val {{ font-size: 1.6rem; }}
-            .de-cmp th, .de-cmp td {{ padding: .55rem .5rem; font-size: .86rem; }}
+            .de-cmp th, .de-cmp td {{ padding: .5rem .45rem; font-size: .85rem; }}
         }}
-
         @media (max-width: 640px) {{
             .block-container {{ padding-left: 1rem; padding-right: 1rem; }}
-            .de-header {{ flex-wrap: wrap; }}
-            .de-badge {{ margin-left: 0; }}
-            .de-title {{ font-size: 1.15rem; }}
+            .de-header {{ padding: .55rem .8rem; gap: .6rem; }}
+            .de-header img {{ width: 32px; height: 32px; }}
+            .de-title {{ font-size: 1.08rem; }}
+            .de-sub {{ font-size: .78rem; }}
+            .de-badge {{ font-size: .64rem; padding: .18rem .45rem; }}
             [data-testid="stMetricValue"] {{ font-size: 1.25rem; }}
+        }}
+        @media (max-width: 420px) {{
+            .de-sub {{ display: none; }}
         }}
         </style>
         """,
@@ -256,12 +258,13 @@ def inject_css() -> None:
 # ==================================================
 
 
-def header(title: str, subtitle: str, badge: str, stacked: bool = False) -> None:
+def header(title: str, subtitle: str, badge: str) -> None:
+    """Výškově úsporná horní lišta: symbol, název, podtitul, štítek. Text se zalamuje, neořezává."""
     st.markdown(
         f"""
-        <div class="de-header {'stacked' if stacked else ''}">
-            <img src="{logo_src()}" alt="Logo společnosti">
-            <div>
+        <div class="de-header">
+            <img src="{mark_src()}" alt="">
+            <div class="de-names">
                 <div class="de-title">{html.escape(title)}</div>
                 <div class="de-sub">{html.escape(subtitle)}</div>
             </div>
@@ -272,9 +275,18 @@ def header(title: str, subtitle: str, badge: str, stacked: bool = False) -> None
     )
 
 
-def verdict(title: str, text: str, tone: str = "") -> None:
+def login_intro(title: str, subtitle: str, prompt: str) -> None:
     st.markdown(
-        f'<div class="de-verdict {tone}"><div class="big">{title}</div>{text}</div>',
+        f'<div class="de-login"><img src="{mark_src()}" alt=""><div class="t">{html.escape(title)}</div>'
+        f'<div class="s">{html.escape(subtitle)}</div><div class="p">{html.escape(prompt)}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def sidebar_brand(title: str, subtitle: str) -> None:
+    st.sidebar.markdown(
+        f'<div class="de-side-brand"><img src="{mark_src()}" alt=""><div><b>{html.escape(title)}</b>'
+        f"<span>{html.escape(subtitle)}</span></div></div>",
         unsafe_allow_html=True,
     )
 
@@ -312,10 +324,10 @@ def status_chip(text: str, tone: str) -> str:
 
 
 def kpi_cards(cards: list) -> None:
-    """Řada velkých KPI karet. cards = [dict(label, value, sub, negative)], na mobilu pod sebou."""
+    """Řada velkých KPI karet. cards = [dict(label, value, sub, negative, chip)], na mobilu pod sebou."""
     items = "".join(
         f'<div class="de-kpi"><div class="lbl">{html.escape(c["label"])}</div>'
-        f'<div class="val {"neg" if c.get("negative") else ""}">{c["value"]}</div>'
+        f'<div class="val {"neg" if c.get("negative") else ""}">{c["value"]}{c.get("chip", "")}</div>'
         f'<div class="sub">{c.get("sub", "")}</div></div>'
         for c in cards
     )

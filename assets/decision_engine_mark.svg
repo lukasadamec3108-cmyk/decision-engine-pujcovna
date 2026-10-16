@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Decision Engine">
+  <rect width="64" height="64" rx="14" fill="#B45309"/>
+  <rect x="12" y="38" width="8" height="14" rx="2" fill="#FFFFFF"/>
+  <rect x="24" y="30" width="8" height="22" rx="2" fill="#FFFFFF"/>
+  <rect x="36" y="22" width="8" height="30" rx="2" fill="#FFFFFF"/>
+  <path d="M48 9 L55 16 L48 23 L41 16 Z" fill="#FFFFFF"/>
+  <path d="M40 22 L45.5 18.5" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"/>
+</svg>
