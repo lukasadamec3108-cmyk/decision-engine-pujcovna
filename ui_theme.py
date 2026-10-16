@@ -238,8 +238,35 @@ def inject_css() -> None:
         .de-steps {{ margin: 0 0 1.2rem 0; padding-left: 1.3rem; }}
         .de-steps li {{ margin: .25rem 0; color: {INK}; }}
 
+        /* Záložka Možné výsledky */
+        .de-res-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: .4rem 0 1.4rem 0; }}
+        .de-res-card {{ background: #fff; border: 1px solid {UI_LINE}; border-radius: 12px; padding: .9rem 1.15rem .6rem 1.15rem; }}
+        .de-res-card.rec {{ border: 2px solid {ACCENT}; }}
+        .de-res-row {{
+            display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .2rem 1rem; align-items: baseline;
+            padding: .55rem 0; border-top: 1px solid {UI_LINE};
+        }}
+        .de-res-row .l {{ color: {INK}; font-size: .93rem; }}
+        .de-res-row .h {{ display: block; color: {UI_MUTED}; font-size: .78rem; margin-top: .05rem; }}
+        .de-res-row .v {{ color: {INK}; font-size: 1.02rem; font-weight: 700; text-align: right;
+                          font-variant-numeric: tabular-nums; white-space: nowrap; }}
+        .de-res-row .v.neg {{ color: {BAD_TEXT}; }}
+        .de-res-row .s {{ display: block; color: {UI_MUTED}; font-size: .78rem; font-weight: 500; }}
+        .de-intro {{ color: {INK}; font-size: 1rem; margin: -.2rem 0 .2rem 0; }}
+        .de-hint {{ color: {UI_MUTED}; font-size: .88rem; margin: -.3rem 0 1rem 0; }}
+        .de-insight {{
+            background: {ACCENT_SOFT}; border-left: 4px solid {ACCENT}; border-radius: 8px;
+            padding: .7rem 1rem; color: {INK}; font-size: .98rem; margin: 0 0 1.2rem 0;
+        }}
+        .de-ci-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; margin: .4rem 0 .4rem 0; }}
+        .de-ci {{ background: {UI_BG}; border: 1px solid {UI_LINE}; border-radius: 8px; padding: .55rem .8rem; }}
+        .de-ci .n {{ color: {INK}; font-size: .88rem; font-weight: 600; display: flex; align-items: center; gap: .45rem; }}
+        .de-ci .l {{ color: {UI_MUTED}; font-size: .8rem; }}
+        .de-ci .v {{ color: {INK}; font-size: .95rem; font-weight: 600; font-variant-numeric: tabular-nums; }}
+
         @media (max-width: 768px) {{
             .de-kpis {{ grid-template-columns: 1fr; gap: .6rem; }}
+            .de-res-grid, .de-ci-grid {{ grid-template-columns: 1fr; gap: .7rem; }}
             .de-hero {{ padding: .9rem 1rem; }}
             .de-hero .ttl {{ font-size: 1.5rem; }}
             .de-kpi .val {{ font-size: 1.6rem; }}
@@ -379,6 +406,64 @@ def compare_table(names: list, rows: list, rec_index: int, tag: str) -> None:
         f"<tbody>{body}</tbody></table>",
         unsafe_allow_html=True,
     )
+
+
+def results_cards(cards: list, rec_name: str, tag: str) -> None:
+    """Dvě karty výsledků vedle sebe (na mobilu pod sebou).
+
+    cards = [dict(name, color, rows=[(popisek, nápověda, hodnota, doplněk, záporná)])].
+    """
+    out = ""
+    for c in cards:
+        rec = c["name"] == rec_name
+        tag_html = f'<span class="de-tag">{html.escape(tag)}</span>' if rec else ""
+        rows = "".join(
+            f'<div class="de-res-row"><div class="l">{html.escape(label)}'
+            + (f'<span class="h">{html.escape(hint)}</span>' if hint else "")
+            + f'</div><div class="v {"neg" if neg else ""}">{value}'
+            + (f'<span class="s">{html.escape(sub)}</span>' if sub else "")
+            + "</div></div>"
+            for label, hint, value, sub, neg in c["rows"]
+        )
+        out += (
+            f'<div class="de-res-card {"rec" if rec else ""}"><div class="de-card-title">'
+            f'<span class="de-dot" style="background:{c["color"]}"></span>{html.escape(c["name"])}{tag_html}</div>'
+            f"{rows}</div>"
+        )
+    st.markdown(f'<div class="de-res-grid">{out}</div>', unsafe_allow_html=True)
+
+
+def hint(text: str) -> None:
+    """Nenápadné, ale čitelné vysvětlení pod grafem."""
+    st.markdown(f'<div class="de-hint">{text}</div>', unsafe_allow_html=True)
+
+
+def insight(text: str) -> None:
+    """Krátký zvýrazněný závěr (bez velké KPI karty)."""
+    st.markdown(f'<div class="de-insight">{text}</div>', unsafe_allow_html=True)
+
+
+def interval_boxes(items: list, label: str) -> None:
+    """Méně výrazné boxy s intervalem: items = [(název, barva, text hodnoty)]."""
+    boxes = "".join(
+        f'<div class="de-ci"><div class="n"><span class="de-dot" style="background:{color}"></span>'
+        f'{html.escape(name)}</div><div class="l">{html.escape(label)}</div><div class="v">{value}</div></div>'
+        for name, color, value in items
+    )
+    st.markdown(f'<div class="de-ci-grid">{boxes}</div>', unsafe_allow_html=True)
+
+
+def readable_axes(fig):
+    """Tmavší popisky os a legendy pro lepší čitelnost (doplňuje style_fig, nemění data)."""
+    axis = dict(
+        tickfont=dict(color="#374151", size=12),
+        title_font=dict(color=INK, size=13),
+        linecolor="#C9CED6",
+    )
+    fig.update_xaxes(**axis)
+    fig.update_yaxes(**axis)
+    fig.update_layout(legend=dict(font=dict(color=INK, size=13)))
+    return fig
 
 
 # ==================================================
