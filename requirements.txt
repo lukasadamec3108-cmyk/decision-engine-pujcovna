@@ -1,8 +1,7 @@
 pandas
 numpy
-matplotlib
 python-docx
 openpyxl
-streamlit
+streamlit>=1.50
 scipy
 plotly

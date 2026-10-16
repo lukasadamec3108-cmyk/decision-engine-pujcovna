@@ -46,21 +46,24 @@ Vstupy se nastavují v postranním panelu:
 - výběr dvou porovnávaných strojů,
 - fixní měsíční náklad,
 - scénář trhu (pesimistický / realistický / optimistický),
-- odhad reálné poptávky (dny v měsíci),
-- počet simulací,
 - investiční rozpočet,
-- kapacitní scénář (nákup druhého pásového dumperu pro plánování zakázek).
+- v části „Pokročilé nastavení“: odhad poptávky pro rychlý výpočet (dny v měsíci) a počet simulací,
+- kapacitní scénář (nákup druhého pásového dumperu) – zatím vypnutý, zapojení je plánováno.
+
+Výchozí hodnoty tvoří **ukázkový scénář** s fiktivními čísly (realistický trh, fixní náklad 100 000 Kč).
 
 Výsledky jsou rozděleny do šesti záložek:
 
 | Záložka | Obsah |
 |---|---|
-| 📊 **Shrnutí** | Očekávaný měsíční zisk, pravděpodobnost ztráty a bod zvratu. Preferovaná varianta, rozdíly mezi stroji, bodová scorecard, realistický scénář při zadané poptávce, doporučený další postup a **export investičního reportu do formátu DOCX**. |
-| 📈 **Monte Carlo** | Rozdělení simulovaného měsíčního zisku (histogram), kumulativní pravděpodobnost (CDF), percentily P10 / medián / P90 a interval nejistoty. |
-| ⚠ **Riziko** | Semafor rizika ztráty, pravděpodobnost poruchy, Value at Risk (5 %) a mapa riziko vs. výnos. |
-| 📉 **Citlivost** | Zisk v závislosti na vytížení (bod zvratu), tornádo graf citlivosti na změnu vstupů o ±10 %, heatmapa ziskovosti (cena × počet dní) a minimální denní cena pronájmu. |
-| 🗺 **Optimalizace** | Lineární programování a diskrétní optimalizace rozdělení dní mezi dva stroje, porovnání výsledků modelů, optimální nákup strojů v rámci rozpočtu a křivka rozpočet vs. maximální zisk. |
-| 📋 **Zakázky** | Rozhodovací skóre zakázek, harmonogram s ohledem na kapacitu strojů (Ganttův diagram), detail zakázek, vytížení strojů a identifikace úzkého hrdla. |
+| 🏆 **Doporučení** | Verdikt jednou větou, karty obou strojů (očekávaný zisk, šance ztrátového měsíce, bod zvratu, minimální cena), klíčová srovnání, rychlý odhad bez simulace, bodové hodnocení a **export investičního reportu do formátu DOCX**. |
+| 📈 **Možné výsledky** | Simulace měsíčního zisku (Monte Carlo): slabý / typický / dobrý měsíc (P10 / medián / P90), histogram; v detailu pro analytiky kumulativní pravděpodobnost (CDF) a interval nejistoty. |
+| ⚠️ **Riziko** | Semafor rizika, šance ztrátového měsíce, nejhorší měsíc z 20 (VaR 5 %), pravděpodobnost poruchy a graf riziko vs. výnos. |
+| 🎯 **Co ovlivňuje zisk** | Tornádo graf citlivosti na změnu vstupů o ±10 %, minimální denní cena pronájmu, zisk podle počtu dní (bod zvratu) a mapa ziskovosti (cena × počet dní). |
+| 🛒 **Nákup strojů** | Optimální nákup strojů v rámci rozpočtu, křivka rozpočet vs. maximální zisk; v detailu kontrola lineární (LP) a diskrétní (DP) optimalizací. |
+| 🗓️ **Plán zakázek** | Harmonogram (Ganttův diagram) se smluvními termíny, zakázky po termínu a penále za zpoždění, detail zakázek, vytížení strojů, úzké hrdlo a prioritní zakázka. |
+
+Čísla jsou zobrazena v českém formátu, grafy jsou interaktivní (Plotly) a vzhled je přizpůsoben i menším obrazovkám.
 
 Přístup do aplikace je chráněn heslem.
 
@@ -126,7 +129,7 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 | Webová aplikace | Streamlit, nasazení na Streamlit Community Cloud |
 | Práce s daty | pandas, NumPy |
 | Simulace a optimalizace | NumPy (náhodná rozdělení), SciPy (`linprog`) |
-| Vizualizace | Matplotlib, Plotly |
+| Vizualizace | Plotly |
 | Reporting | python-docx |
 | Správa kódu a zabezpečení | Git, GitHub (větve, pull requesty), Streamlit secrets |
 
@@ -135,11 +138,14 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 ### Struktura projektu
 
 ```
-├── app.py                           # Streamlit aplikace (UI, výpočty, export reportu)
+├── app.py                           # Streamlit aplikace (výpočty, záložky, export reportu)
+├── ui_theme.py                      # vzhled: barvy, české formátování čísel, karty, šablona grafů
+├── assets/logo_placeholder.svg      # zástupné logo (firemní logo se do repozitáře nevkládá)
 ├── data/
 │   ├── machines_demo.csv            # fiktivní parametry 8 typů strojů
 │   ├── jobs_demo.csv                # fiktivní zásobník 12 zakázek
 │   └── *.xlsx                       # rozšířený fiktivní datový model (aplikace ho zatím nenačítá)
+├── .streamlit/config.toml           # barevné téma aplikace
 ├── .streamlit/secrets.toml.example  # šablona pro nastavení přístupového hesla
 ├── requirements.txt
 └── README.md
@@ -170,6 +176,14 @@ Heslo se načítá výhradně ze Streamlit secrets (klíč `password`) a není s
 
 - **Lokálně:** soubor `.streamlit/secrets.toml`. Je uvedený v `.gitignore`, takže se do repozitáře nedostane.
 - **Streamlit Community Cloud:** nastavení aplikace → *Settings* → *Secrets* → řádek `password = "..."`.
+
+### Logo společnosti
+
+V hlavičce aplikace je připravené místo pro logo. Dokud logo není dodáno, zobrazuje se neutrální
+zástupný obrázek. Firemní logo se do veřejného repozitáře **nevkládá**:
+
+- **Streamlit Community Cloud:** do *Secrets* přidejte řádek `logo_url = "https://…"` (odkaz na obrázek).
+- **Lokálně:** uložte soubor jako `assets/logo.png` (případně `.jpg` / `.svg`) – je uvedený v `.gitignore`.
 
 ### Online verze
 
