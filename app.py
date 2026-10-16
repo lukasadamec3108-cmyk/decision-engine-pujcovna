@@ -163,16 +163,11 @@ jobs_df["priority_score"] = jobs_df["priority"].map(priority_score)
 
 available_machines = set(df["machine_type"].tolist())
 
-sb_jobs.markdown("### 5 · Plán zakázek")
-
-# Plánovací algoritmus zatím počet kusů stroje nezohledňuje, proto je volba
-# vypnutá, aby nepůsobila dojmem, že něco mění. Oprava je součástí další etapy.
-extra_dumper = sb_jobs.checkbox(
-    "Koupit druhý pásový dumper (připravuje se)",
-    value=False,
-    disabled=True,
-    help="Plánování zakázek zatím nepracuje s počtem kusů stroje. "
-    "Volba bude zapojena v další etapě vývoje.",
+# Volba druhého pásového dumperu zatím není zapojena (plánování nepracuje s počtem
+# kusů stroje), proto se v panelu nenabízí a hodnota zůstává False jako dosud.
+extra_dumper = False
+sb_jobs.markdown(
+    '<div class="de-soon">Plánování zakázek – připravujeme</div>', unsafe_allow_html=True
 )
 
 machine_capacity = {
@@ -286,14 +281,15 @@ avg_daily_dumper = float(row_2["daily_price"])
 
 sb_costs.markdown("### 2 · Náklady")
 fixed_cost = sb_costs.number_input(
-    "Fixní náklad na stroj (Kč / měsíc)",
+    "Měsíční fixní náklady na jeden stroj",
     min_value=0,
     value=100000,
     step=5000,
-    help="Měsíční náklady, které stroj stojí bez ohledu na to, zda je pronajatý "
-    "(splátka, pojištění, garážování, režie). Stejná hodnota se použije pro oba stroje. "
-    "Výchozí hodnota je ukázková.",
+    help="Částka v Kč, kterou stroj stojí každý měsíc bez ohledu na počet dní pronájmu "
+    "(např. splátka, pojištění). Odečítá se od výsledku každého z obou porovnávaných strojů. "
+    "Servisní náklady se počítají zvlášť z údajů o stroji. Výchozí hodnota je ukázková.",
 )
+ui.sidebar_amount(sb_costs, fmt_czk(fixed_cost), "měsíčně na jeden stroj")
 
 sb_market.markdown("### 3 · Trh")
 scenario = sb_market.selectbox(
@@ -315,7 +311,7 @@ else:
     scenario_note = "Silná poptávka a vysoké vytížení."
 
 sb_market.caption(
-    f"{scenario_note} Rozmezí vytížení: {min_days} až {max_days} dní / měsíc."
+    f"{scenario_note} Simulace počítá s {min_days}–{max_days} dny pronájmu měsíčně."
 )
 
 expected_days = sb_advanced.slider(
@@ -332,12 +328,13 @@ n = sb_advanced.slider(
 
 sb_budget.markdown("### 4 · Investiční rozpočet")
 budget = sb_budget.number_input(
-    "Investiční rozpočet (Kč)",
+    "Investiční rozpočet",
     min_value=100000,
     value=3000000,
     step=100000,
     help="Kolik peněz je k dispozici na nákup strojů. Využívá záložka „Nákup strojů“.",
 )
+ui.sidebar_amount(sb_budget, fmt_czk(budget), "k dispozici na nákup strojů")
 
 
 # ==================================================

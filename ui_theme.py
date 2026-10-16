@@ -119,6 +119,16 @@ def inject_css() -> None:
             border-radius: 8px; padding: .35rem .6rem; font-size: .74rem; color: {UI_MUTED}; margin-bottom: .2rem;
         }}
         .de-demo b {{ color: {INK}; }}
+        /* Čitelnost: Streamlit dává popiskům průhlednost 0,6 a krajním hodnotám posuvníku světlou barvu */
+        [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ opacity: 1; color: {UI_MUTED}; }}
+        [data-testid="stSidebar"] [data-testid="stSliderTickBar"],
+        [data-testid="stSidebar"] [data-testid="stSliderTickBar"] p {{ color: {UI_MUTED} !important; }}
+        .de-amount {{ font-size: .85rem; color: {UI_MUTED}; margin: -.55rem 0 .3rem .1rem; }}
+        .de-amount b {{ color: {INK}; font-variant-numeric: tabular-nums; }}
+        .de-soon {{
+            font-size: .82rem; color: {UI_MUTED}; border-top: 1px solid {UI_LINE};
+            padding-top: .8rem; margin-top: .5rem; margin-bottom: .8rem;
+        }}
 
         /* Záložky */
         .stTabs [data-baseweb="tab-list"] {{ gap: .15rem; border-bottom: 1px solid {UI_LINE}; overflow-x: auto; }}
@@ -279,6 +289,17 @@ def login_intro(title: str, subtitle: str, prompt: str) -> None:
     st.markdown(
         f'<div class="de-login"><img src="{mark_src()}" alt=""><div class="t">{html.escape(title)}</div>'
         f'<div class="s">{html.escape(subtitle)}</div><div class="p">{html.escape(prompt)}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def sidebar_amount(container, amount: str, note: str) -> None:
+    """Zadaná částka pod číselným polem v českém formátu (např. „100 000 Kč měsíčně“).
+
+    Nativní st.number_input neumí oddělovat tisíce, proto se hodnota zobrazí ještě takto.
+    """
+    container.markdown(
+        f'<div class="de-amount"><b>{html.escape(amount)}</b> {html.escape(note)}</div>',
         unsafe_allow_html=True,
     )
 
