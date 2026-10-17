@@ -1452,80 +1452,241 @@ with tab3:
 # ==================================================
 
 with tab4:
+    # Tato záložka jen zobrazuje již vypočtené hodnoty (citlivost, minimální cena,
+    # bod zvratu, mapa ziskovosti) – žádný výpočet se zde nemění.
+    days_text = fmt_days(expected_days, 0)
+
+    # --- Co nejvíc mění měsíční zisk ---
     st.markdown("### Co nejvíc mění měsíční zisk")
-    tornado_colors = [
-        MACHINE_COLOR[machine_2] if label.endswith(f"– {machine_2}") else MACHINE_COLOR[machine_1]
-        for label in labels
+    st.markdown(
+        '<div class="de-intro">Graf ukazuje, jak moc se změní měsíční zisk, když se jeden údaj '
+        "změní o 10 % nahoru nebo dolů a ostatní zůstanou stejné. Délka pruhu je rozdíl zisku "
+        "mezi variantou −10 % a +10 %: čím delší pruh, tím větší vliv.</div>",
+        unsafe_allow_html=True,
+    )
+
+    driver_short = {
+        "Denní cena": "Denní cena",
+        "Vytížení (dny/měsíc)": "Dny pronájmu",
+        "Fixní náklad": "Fixní náklad",
+        "Servisní náklad": "Servisní náklad",
+    }
+    driver_phrase = {
+        "Denní cena": "denní cena",
+        "Dny pronájmu": "počet dní pronájmu",
+        "Fixní náklad": "fixní náklad",
+        "Servisní náklad": "servisní náklad",
+    }
+    effect = {driver_short[d]: {} for d, _ in drivers}
+    for label, value in sensitivity_data:
+        drv, name = label.split(" – ", 1)
+        effect[driver_short[drv]][name] = value
+    # Pořadí podle největšího vlivu (při shodě zůstává pořadí z výpočtu).
+    driver_order = sorted(effect, key=lambda d: max(effect[d].values()), reverse=True)
+    top_effect = max(values) if values else 0.0
+    top_drivers = [
+        d for d in driver_order
+        if top_effect > 0 and np.isclose(max(effect[d].values()), top_effect)
     ]
-    fig_tornado = go.Figure(
-        go.Bar(
-            x=values, y=labels, orientation="h",
-            marker=dict(color=tornado_colors, line=dict(color="#fff", width=2)),
-            text=[fmt_czk(v) for v in values], textposition="outside", cliponaxis=False,
-            hovertemplate="%{y}<br>Rozdíl zisku %{x:,.0f} Kč<extra></extra>",
+
+    fig_tornado = go.Figure()
+    for name in (machine_1, machine_2):
+        xs = [effect[d][name] for d in driver_order]
+        fig_tornado.add_trace(
+            go.Bar(
+                x=xs, y=driver_order, orientation="h", name=name,
+                marker=dict(color=MACHINE_COLOR[name], line=dict(color="#fff", width=2)),
+                text=[fmt_czk(v) for v in xs], textposition="outside", cliponaxis=False,
+                textfont=dict(color=ui.INK, size=13),
+                customdata=[fmt_czk(v / 2) for v in xs],
+                hovertemplate="<b>%{y}</b> · " + name
+                + "<br>Změna o 10 % posune zisk o ±%{customdata}"
+                + "<br>Rozdíl mezi −10 % a +10 %: %{x:,.0f} Kč<extra></extra>",
+            )
         )
+    fig_tornado.update_layout(barmode="group", bargap=0.28, bargroupgap=0.06)
+    fig_tornado.update_yaxes(
+        autorange="reversed", tickvals=driver_order,
+        ticktext=[f"<b>{d}</b>" if d in top_drivers else d for d in driver_order],
     )
-    fig_tornado.update_yaxes(autorange="reversed")
-    fig_tornado.update_xaxes(range=[0, max(values) * 1.22])
-    fig_tornado.update_xaxes(title_text="Rozdíl měsíčního zisku při změně vstupu o ±10 % (Kč)")
-    chart(ui.style_fig(fig_tornado, height=420, legend=False))
-    st.caption(
-        f"Čím delší pruh, tím víc daný údaj ovlivňuje zisk. Počítáno pro {expected_days} dní "
-        "pronájmu měsíčně. Barva pruhu odpovídá stroji."
+    fig_tornado.update_xaxes(
+        range=[0, (top_effect or 1) * 1.55], tickformat=",.0f", nticks=5,
+        title_text="Rozdíl měsíčního zisku (Kč)",
+    )
+    ui.readable_axes(ui.style_fig(fig_tornado, height=400))
+    fig_tornado.update_yaxes(tickfont=dict(size=14, color=ui.INK))
+    chart(fig_tornado)
+    ui.hint(
+        f"Počítáno pro odhad poptávky {days_text} pronájmu měsíčně (Pokročilé nastavení). "
+        "Scénář trhu tuto část neovlivňuje. Tučně je zvýrazněn údaj s největším vlivem."
     )
 
-    st.markdown(f"### Minimální denní cena pronájmu při {expected_days} dnech")
-    col_price1, col_price2 = st.columns(2)
-    for col, name, required, actual in (
-        (col_price1, machine_1, required_price_1, avg_daily_mini),
-        (col_price2, machine_2, required_price_2, avg_daily_dumper),
-    ):
+    if top_drivers:
+        top_machines = [
+            name for name in (machine_1, machine_2)
+            if any(np.isclose(effect[d][name], top_effect) for d in top_drivers)
+        ]
+        names = " a ".join(f"<b>{driver_phrase[d]}</b>" for d in top_drivers)
+        where = (
+            "u obou strojů" if len(top_machines) == 2
+            else f"u stroje <b>{top_machines[0]}</b>"
+        )
+        verb = "ovlivňují" if len(top_drivers) > 1 else "ovlivňuje"
+        which = "kteréhokoli z nich " if len(top_drivers) > 1 else ""
+        text = (
+            f"Nejvíce měsíční zisk {verb} {names} {where}: změna {which}o 10 % posune zisk "
+            f"přibližně o <b>±{fmt_czk(top_effect / 2)}</b>."
+        )
+        if {"Denní cena", "Dny pronájmu"} <= set(top_drivers):
+            text += (
+                " Oba údaje mají stejný vliv, protože tržba je součinem ceny a počtu dní."
+            )
+        weakest = driver_order[-1]
+        if weakest not in top_drivers:
+            text += f" Nejmenší vliv má {driver_phrase[weakest]}."
+        ui.insight(text)
+    else:
+        ui.insight("Při zadaných hodnotách změna žádného údaje o 10 % zisk nemění.")
+
+    # --- Minimální denní cena pronájmu ---
+    st.markdown("### Minimální denní cena pronájmu")
+
+    def price_rows(required: float, actual: float) -> list:
+        """Řádky karty: stav, minimum, aktuální cena a rozdíl (jen zobrazení)."""
+        diff = actual - required
         ok = actual >= required
-        col.metric(
-            label=f"{name} (ceník {fmt_czk(actual)}/den)",
-            value=f"{fmt_czk(required)}/den",
-            delta="Aktuální cena je dostačující" if ok else "Aktuální cena je pod minimem",
-            delta_color="normal" if ok else "inverse",
+        chip = ui.status_chip(
+            "Cena dostačuje" if ok else "Cena je pod minimem", "good" if ok else "bad"
         )
-    st.caption(
-        "Denní sazba, při které se při zadané poptávce pokryjí fixní a servisní náklady. "
-        "Vyšší rozdíl oproti ceníku znamená větší rezervu."
+        if required > 0 and diff != 0:
+            share = fmt_pct(abs(diff) / required * 100)
+            sub = f"o {share} {'více' if diff > 0 else 'méně'} než minimum"
+        else:
+            sub = "přesně na minimu" if diff == 0 else ""
+        if diff > 0:
+            diff_html = f'<span class="de-pos">+{fmt_czk(diff)}</span>'
+        else:
+            diff_html = fmt_czk(diff)
+        return [
+            ("Stav", "aktuální cena oproti minimu", chip, "", False),
+            ("Minimální denní cena", "pokryje fixní a servisní náklady",
+             fmt_czk(required), "", False),
+            ("Aktuální denní cena", "ceník stroje", fmt_czk(actual), "", False),
+            ("Rezerva nad minimem" if ok else "Chybí do minima", "", diff_html, sub, diff < 0),
+        ]
+
+    ui.results_cards(
+        [
+            dict(name=name, color=MACHINE_COLOR[name], rows=price_rows(required, actual))
+            for name, required, actual in (
+                (machine_1, required_price_1, avg_daily_mini),
+                (machine_2, required_price_2, avg_daily_dumper),
+            )
+        ],
+        rec_name="",
+        tag="",
+    )
+    if expected_days == 0:
+        ui.insight(
+            "Při odhadu 0 dní pronájmu nelze náklady pokrýt žádnou cenou. "
+            "Minimální cena je v tomto případě počítána pro 1 den.",
+            tone="bad",
+        )
+    ui.hint(
+        "Minimální denní cena je cena, při které stroj právě pokryje své měsíční náklady "
+        f"(zisk 0 Kč). Výpočet: (fixní náklad {fmt_czk(fixed_cost)} + průměrný servisní "
+        f"náklad stroje) ÷ {days_text} pronájmu. Nepočítá s výpadky kvůli poruchám "
+        "ani s kolísáním poptávky."
     )
 
+    # --- Zisk podle počtu dní pronájmu ---
     st.markdown("### Zisk podle počtu dní pronájmu")
+    be_values = {machine_1: break_even_mini, machine_2: break_even_dumper}
+    be_finite = {k: v for k, v in be_values.items() if np.isfinite(v)}
+    # Popisky míří od bodů ven (levý bod doleva nahoru, pravý doprava dolů), kde nevedou čáry.
+    be_left = min(be_finite, key=be_finite.get) if be_finite else None
+
     fig_be = go.Figure()
-    for name, curve, be in (
-        (machine_1, profit_curve_mini, break_even_mini),
-        (machine_2, profit_curve_dumper, break_even_dumper),
-    ):
+    for name, curve in ((machine_1, profit_curve_mini), (machine_2, profit_curve_dumper)):
         fig_be.add_trace(
             go.Scatter(
                 x=days_grid, y=curve, mode="lines", name=name,
-                line=dict(color=MACHINE_COLOR[name], width=2.5),
+                line=dict(color=MACHINE_COLOR[name], width=3),
                 hovertemplate="%{x} dní → %{y:,.0f} Kč<extra>" + name + "</extra>",
             )
         )
-        fig_be.add_vline(
-            x=be, line=dict(color=MACHINE_COLOR[name], dash="dot", width=1.5),
-            annotation_text=f"{fmt_num(be, 1)} dní", annotation_position="top",
+    for name, be in be_finite.items():
+        fig_be.add_vline(x=be, line=dict(color=MACHINE_COLOR[name], dash="dot", width=1.5))
+        fig_be.add_trace(
+            go.Scatter(
+                x=[be], y=[0], mode="markers+text", showlegend=False,
+                marker=dict(size=15, color=MACHINE_COLOR[name], line=dict(color="#fff", width=3)),
+                text=[f"<b>{fmt_days(be, 1)}</b>"],
+                textposition=(
+                    ("top left" if be >= 7 else "top right") if name == be_left
+                    else ("bottom right" if be <= 25 else "bottom left")
+                ),
+                textfont=dict(size=13, color=ui.INK), cliponaxis=False,
+                hovertemplate=f"Bod zvratu: {fmt_days(be, 1)}<extra>{name}</extra>",
+            )
         )
-    fig_be.add_hline(y=0, line=dict(color=ui.MUTED, dash="dash", width=1.5))
-    fig_be.update_xaxes(title_text="Dny pronájmu za měsíc")
-    fig_be.update_yaxes(title_text="Měsíční zisk / ztráta (Kč)")
-    chart(ui.style_fig(fig_be, height=380))
-    st.caption(
-        f"Bod zvratu: {machine_1} {fmt_days(break_even_mini, 2)}, "
-        f"{machine_2} {fmt_days(break_even_dumper, 2)}. Nad touto hranicí stroj pokryje "
-        "fixní náklady. Zjednodušený výpočet: denní cena × dny − fixní náklad "
-        "(bez servisních nákladů)."
+    fig_be.add_hline(y=0, line=dict(color=ui.INK, dash="dash", width=1.5))
+    fig_be.update_xaxes(title_text="Počet dní pronájmu za měsíc", dtick=5)
+    fig_be.update_yaxes(title_text="Měsíční zisk / ztráta (Kč)", tickformat=",.0f")
+    chart(ui.readable_axes(ui.style_fig(fig_be, height=400)))
+    ui.hint(
+        "Čárkovaná vodorovná čára je nulový zisk. Body na ní označují bod zvratu – od tohoto "
+        "počtu dní stroj pokryje fixní náklad. <b>Zjednodušený výpočet:</b> denní cena × počet dní − fixní náklad, "
+        "bez servisních nákladů a poruch. Skutečný bod zvratu je proto o něco vyšší."
     )
 
-    with st.expander(f"🗺️ Mapa ziskovosti – kombinace ceny a počtu dní ({machine_1})"):
+    def be_days(be: float):
+        """Celý počet dní, od kterého stroj pokryje fixní náklad (None = zvláštní případ)."""
+        return int(np.ceil(be - 1e-9)) if np.isfinite(be) and 0 < be <= days_grid[-1] else None
+
+    def be_sentence(name: str, be: float) -> str:
+        if not np.isfinite(be):
+            return f"U stroje <b>{name}</b> nelze bod zvratu určit."
+        if be <= 0:
+            return f"<b>{name}</b> pokrývá fixní náklad už od prvního dne pronájmu."
+        if be > days_grid[-1]:
+            return (
+                f"<b>{name}</b> fixní náklad nepokryje ani při pronájmu po celý měsíc "
+                f"(bod zvratu {fmt_days(be, 1)})."
+            )
+        return (
+            f"<b>{name}</b> začne pokrývat fixní náklad přibližně od "
+            f"<b>{be_days(be)} dní</b> pronájmu měsíčně."
+        )
+
+    d1, d2 = be_days(break_even_mini), be_days(break_even_dumper)
+    if d1 is not None and d2 is not None:
+        ui.insight(
+            f"<b>{machine_1}</b> začne podle tohoto modelu pokrývat fixní náklad přibližně od "
+            f"<b>{d1} dní</b> pronájmu měsíčně, <b>{machine_2}</b> přibližně od <b>{d2} dní</b>."
+        )
+    else:
+        ui.insight(
+            "Podle tohoto modelu: "
+            + " ".join(be_sentence(name, be) for name, be in be_values.items())
+        )
+
+    # --- Mapa ziskovosti ---
+    with st.expander("Mapa ziskovosti – kombinace ceny a počtu dní"):
+        st.markdown(
+            f'<div class="de-intro">Měsíční zisk stroje <b>{machine_1}</b> pro různé denní ceny '
+            "(60–140 % ceníku) a počty dní pronájmu.</div>",
+            unsafe_allow_html=True,
+        )
         fig_heat = go.Figure(
             go.Heatmap(
                 x=days_range, y=price_range, z=profit_matrix, zmid=0,
                 colorscale=[[0, ui.BAD], [0.5, "#F1F3F5"], [1, ui.BLUE]],
-                colorbar=dict(title="Zisk (Kč)"),
+                colorbar=dict(
+                    title=dict(text="Zisk / ztráta (Kč)", side="top"),
+                    orientation="h", y=-0.3, yanchor="top", x=0, xanchor="left",
+                    len=1, thickness=12, tickformat=",.0f", nticks=5,
+                ),
                 hovertemplate="%{x} dní, %{y:,.0f} Kč/den<br>Zisk %{z:,.0f} Kč<extra></extra>",
             )
         )
@@ -1537,17 +1698,66 @@ with tab4:
                 line=dict(color=ui.NAVY, width=2, dash="dash"), hoverinfo="skip",
             )
         )
-        fig_heat.update_xaxes(title_text="Dny pronájmu za měsíc")
-        fig_heat.update_yaxes(title_text="Cena pronájmu (Kč/den)")
-        chart(ui.style_fig(fig_heat, height=420, legend=False))
-        if profit_matrix.max() <= 0:
-            st.warning(
-                "V zobrazeném rozsahu ceny a poptávky není žádná zisková kombinace."
+        point_in_map = (
+            days_range[0] <= expected_days <= days_range[-1]
+            and price_range[0] <= avg_daily_mini <= price_range[-1]
+        )
+        if point_in_map:
+            fig_heat.add_trace(
+                go.Scatter(
+                    x=[expected_days], y=[avg_daily_mini], mode="markers+text",
+                    marker=dict(size=16, color="#fff", line=dict(color=ui.INK, width=3)),
+                    text=["<b>Vaše nastavení</b>"], textposition="top center",
+                    textfont=dict(size=13, color=ui.INK), cliponaxis=False,
+                    hovertemplate=(
+                        f"Vaše nastavení: {days_text}, {fmt_czk(avg_daily_mini)}/den"
+                        f"<br>Zisk {fmt_czk(profit_curve_mini[expected_days])}<extra></extra>"
+                    ),
+                )
             )
-        st.caption(
-            f"Modrá = zisk, červená = ztráta, přerušovaná čára = hranice nulového zisku. "
-            f"Mapa vychází z ceny stroje {machine_1} (60–140 % ceníku) a zjednodušeného "
-            "výpočtu bez servisních nákladů."
+        fig_heat.update_xaxes(title_text="Počet dní pronájmu za měsíc", dtick=5)
+        fig_heat.update_yaxes(title_text="Denní cena (Kč)", tickformat=",.0f")
+        chart(ui.readable_axes(ui.style_fig(fig_heat, height=470, legend=False)))
+        if profit_matrix.max() <= 0:
+            ui.insight(
+                "V zobrazeném rozsahu ceny a počtu dní není žádná zisková kombinace.",
+                tone="bad",
+            )
+        ui.explain(
+            [
+                ("Jak mapu číst",
+                 "Každé políčko je jedna kombinace: vodorovně počet dní pronájmu za měsíc, "
+                 "svisle cena za den. <b>Modrá</b> znamená zisk, <b>červená</b> ztrátu. "
+                 "Čím sytější barva, tím větší částka."),
+                ("Přerušovaná čára",
+                 "Hranice nulového zisku – tržby přesně pokryjí fixní náklad. Vpravo a nad "
+                 "čárou stroj vydělává, vlevo a pod ní prodělává."),
+                ("Bílý kroužek",
+                 "Vaše současné nastavení: ceník stroje a odhad poptávky z Pokročilého "
+                 "nastavení. Mění se spolu se vstupy v levém panelu."
+                 if point_in_map else
+                 f"Vaše nastavení ({days_text}) leží mimo zobrazený rozsah mapy "
+                 f"({days_range[0]}–{days_range[-1]} dní), proto není vyznačeno."),
+                ("Zjednodušení",
+                 "Stejně jako graf zisku podle dní počítá mapa jen s fixním nákladem, "
+                 "bez servisních nákladů a poruch."),
+            ]
+        )
+
+    with st.expander("Jak se počítají údaje na této záložce"):
+        ui.explain(
+            [
+                ("Vliv údajů (±10 %)",
+                 f"Rychlý výpočet pro odhad poptávky {days_text}: zisk = denní cena × dny "
+                 "− fixní náklad − průměrný servisní náklad. Vždy se změní jen jeden údaj. "
+                 "Nejde o simulaci, proto ho neovlivní scénář trhu."),
+                ("Minimální denní cena",
+                 "(fixní náklad + průměrný servisní náklad) ÷ odhad poptávky ve dnech. "
+                 "Zahrnuje servisní náklady."),
+                ("Bod zvratu a mapa ziskovosti",
+                 "Zjednodušeně: denní cena × dny − fixní náklad. Servisní náklady "
+                 "nezahrnují, proto se mohou mírně lišit od minimální ceny."),
+            ]
         )
 
 
