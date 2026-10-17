@@ -259,6 +259,12 @@ def inject_css() -> None:
             color: {INK}; font-size: 1rem; margin: 0 0 1.4rem 0;
         }}
         .de-insight b {{ color: {INK}; }}
+        .de-insight.bad {{ border-left-color: {BAD_TEXT}; }}
+        .de-explain {{ margin: .2rem 0 .3rem 0; }}
+        .de-explain .it {{ padding: .55rem 0; border-top: 1px solid {UI_LINE}; }}
+        .de-explain .it:first-child {{ border-top: none; padding-top: .1rem; }}
+        .de-explain .t {{ color: {INK}; font-weight: 700; font-size: .95rem; }}
+        .de-explain .d {{ color: #374151; font-size: .94rem; line-height: 1.5; margin-top: .1rem; }}
         .de-ci-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; margin: .4rem 0 .4rem 0; }}
         .de-ci {{ background: {UI_BG}; border: 1px solid {UI_LINE}; border-radius: 8px; padding: .55rem .8rem; }}
         .de-ci .n {{ color: {INK}; font-size: .88rem; font-weight: 600; display: flex; align-items: center; gap: .45rem; }}
@@ -439,9 +445,19 @@ def hint(text: str) -> None:
     st.markdown(f'<div class="de-hint">{text}</div>', unsafe_allow_html=True)
 
 
-def insight(text: str) -> None:
-    """Krátký zvýrazněný závěr (bez velké KPI karty)."""
-    st.markdown(f'<div class="de-insight">{text}</div>', unsafe_allow_html=True)
+def insight(text: str, tone: str = "") -> None:
+    """Krátký zvýrazněný závěr (bez velké KPI karty). tone="bad" = červená linka pro varování."""
+    cls = f"de-insight {tone}" if tone else "de-insight"
+    st.markdown(f'<div class="{cls}">{text}</div>', unsafe_allow_html=True)
+
+
+def explain(items: list) -> None:
+    """Čitelný seznam vysvětlivek: items = [(název, popis v HTML)]."""
+    rows = "".join(
+        f'<div class="it"><div class="t">{html.escape(t)}</div><div class="d">{d}</div></div>'
+        for t, d in items
+    )
+    st.markdown(f'<div class="de-explain">{rows}</div>', unsafe_allow_html=True)
 
 
 def interval_boxes(items: list, label: str) -> None:
