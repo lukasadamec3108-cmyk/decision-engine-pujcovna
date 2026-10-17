@@ -253,11 +253,12 @@ def inject_css() -> None:
         .de-res-row .v.neg {{ color: {BAD_TEXT}; }}
         .de-res-row .s {{ display: block; color: {UI_MUTED}; font-size: .78rem; font-weight: 500; }}
         .de-intro {{ color: {INK}; font-size: 1rem; margin: -.2rem 0 .2rem 0; }}
-        .de-hint {{ color: {UI_MUTED}; font-size: .88rem; margin: -.3rem 0 1rem 0; }}
+        .de-hint {{ color: #374151; font-size: .94rem; line-height: 1.5; margin: -.3rem 0 1rem 0; }}
         .de-insight {{
-            background: {ACCENT_SOFT}; border-left: 4px solid {ACCENT}; border-radius: 8px;
-            padding: .7rem 1rem; color: {INK}; font-size: .98rem; margin: 0 0 1.2rem 0;
+            border-left: 3px solid {ACCENT}; padding: .15rem 0 .15rem .85rem;
+            color: {INK}; font-size: 1rem; margin: 0 0 1.4rem 0;
         }}
+        .de-insight b {{ color: {INK}; }}
         .de-ci-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; margin: .4rem 0 .4rem 0; }}
         .de-ci {{ background: {UI_BG}; border: 1px solid {UI_LINE}; border-radius: 8px; padding: .55rem .8rem; }}
         .de-ci .n {{ color: {INK}; font-size: .88rem; font-weight: 600; display: flex; align-items: center; gap: .45rem; }}

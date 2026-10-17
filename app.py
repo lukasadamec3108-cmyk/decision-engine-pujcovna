@@ -1334,9 +1334,9 @@ with tab2:
                 (machine_1, MACHINE_COLOR[machine_1], f"{fmt_czk(ci_mini[0])} až {fmt_czk(ci_mini[1])}"),
                 (machine_2, MACHINE_COLOR[machine_2], f"{fmt_czk(ci_dumper[0])} až {fmt_czk(ci_dumper[1])}"),
             ],
-            label="Interval výsledků P10–P90",
+            label="Rozmezí prostředních 80 % simulovaných měsíců",
         )
-        ui.hint("Přibližně 80 % simulovaných výsledků leží mezi uvedenými hodnotami.")
+        ui.hint("Dolní hranice odpovídá slabému měsíci (P10), horní dobrému měsíci (P90).")
 
 
 # ==================================================
