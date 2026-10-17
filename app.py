@@ -1345,53 +1345,67 @@ with tab2:
 
 with tab3:
     st.markdown("### Jak velké je riziko")
-    col_k1, col_k2 = st.columns(2, gap="medium")
-    for col, name, prob, var95, row_m in (
-        (col_k1, machine_1, prob_loss_mini, var95_mini, row_1),
-        (col_k2, machine_2, prob_loss_dumper, var95_dumper, row_2),
-    ):
-        with col:
-            st.markdown(
-                ui.machine_card(
-                    name,
-                    MACHINE_COLOR[name],
-                    [
-                        ("Semafor rizika", risk_light(prob)),
-                        ("Šance ztrátového měsíce", f"{fmt_pct(prob * 100)} ({loss_share_text(prob)})"),
-                        ("Nejhorší měsíc z 20 (VaR 5 %)", fmt_czk(var95)),
-                        ("Pravděpodobnost poruchy v měsíci", fmt_pct(row_m["failure_prob"] * 100)),
-                    ],
-                    recommended=(name == better_machine),
-                    tag="Relativně lepší" if both_loss else "Doporučeno",
-                ),
-                unsafe_allow_html=True,
+
+    def risk_chip(prob: float) -> str:
+        """Štítek kategorie rizika podle stejných hranic jako semafor (risk_light)."""
+        light = risk_light(prob)
+        tone = {"🟢": "good", "🟡": "warn", "🔴": "bad"}[light[0]]
+        return ui.status_chip(light[2:], tone)
+
+    ui.results_cards(
+        [
+            dict(
+                name=name,
+                color=MACHINE_COLOR[name],
+                rows=[
+                    ("Kategorie rizika", "podle podílu ztrátových měsíců", risk_chip(prob), "", False),
+                    ("Šance ztrátového měsíce", "", fmt_pct(prob * 100), loss_share_text(prob), False),
+                    ("Velmi nepříznivý měsíc", "hranice 5 % nejhorších měsíců (VaR 5 %)",
+                     fmt_czk(var95), "", var95 < 0),
+                    ("Pravděpodobnost poruchy v měsíci", "údaj o stroji",
+                     fmt_pct(row_m["failure_prob"] * 100), "", False),
+                ],
             )
+            for name, prob, var95, row_m in (
+                (machine_1, prob_loss_mini, var95_mini, row_1),
+                (machine_2, prob_loss_dumper, var95_dumper, row_2),
+            )
+        ],
+        rec_name=better_machine,
+        tag="Relativně lepší" if both_loss else "Doporučeno",
+    )
 
     m1_dominates = prob_loss_mini < prob_loss_dumper and expected_profit_mini > expected_profit_dumper
     m2_dominates = prob_loss_dumper < prob_loss_mini and expected_profit_dumper > expected_profit_mini
     if m1_dominates or m2_dominates:
         winner = machine_1 if m1_dominates else machine_2
-        st.info(
-            f"Z pohledu rizika vychází lépe **{winner}**: má nižší šanci ztrátového měsíce "
+        ui.insight(
+            f"Z pohledu rizika vychází lépe <b>{winner}</b>: má nižší šanci ztrátového měsíce "
             "a zároveň vyšší očekávaný výsledek."
         )
     else:
-        st.info(
+        ui.insight(
             "Ani jeden stroj není lepší v obou ohledech zároveň – jeden má vyšší očekávaný "
             "výsledek, druhý nižší riziko. Rozhodnutí záleží na tom, kolik rizika jste "
             "ochotni nést."
         )
     if prob_loss_mini >= 0.15 and prob_loss_dumper >= 0.15:
-        st.warning("U obou strojů je riziko ztrátového měsíce při těchto předpokladech vysoké.")
+        ui.insight(
+            "U obou strojů je riziko ztrátového měsíce při těchto předpokladech <b>vysoké</b>.",
+            tone="bad",
+        )
 
-    st.markdown("### Riziko vs. výnos – lepší je vlevo nahoře")
+    st.markdown("### Riziko vs. výnos")
     fig_rr = go.Figure()
+    # Bod s vyšším rizikem (vpravo) má název vlevo, aby se na úzkém displeji vešel do grafu.
+    right_name = machine_1 if rr_x1 > rr_x2 else machine_2
     for name, x, y in ((machine_1, rr_x1, rr_y1), (machine_2, rr_x2, rr_y2)):
         fig_rr.add_trace(
             go.Scatter(
-                x=[x], y=[y], mode="markers+text", name=name, text=[name],
-                textposition="middle right",
-                marker=dict(size=16, color=MACHINE_COLOR[name], line=dict(color="#fff", width=2)),
+                x=[x], y=[y], mode="markers+text", name=name, text=[f"<b>{name}</b>"],
+                textposition="middle left" if name == right_name else "middle right",
+                textfont=dict(size=14, color=ui.INK),
+                marker=dict(size=24, color=MACHINE_COLOR[name], line=dict(color="#fff", width=3)),
                 hovertemplate="Šance ztráty %{x:.1f} %<br>Očekávaný zisk %{y:,.0f} Kč<extra>"
                 + name + "</extra>",
             )
@@ -1399,23 +1413,37 @@ with tab3:
     fig_rr.add_hline(y=0, line=dict(color=ui.MUTED, dash="dash", width=1.5))
     rr_pad = max(abs(rr_y1), abs(rr_y2)) * 0.25 + 1000
     fig_rr.update_xaxes(
-        title_text="Šance ztrátového měsíce (%)", range=[-2, max(rr_x1, rr_x2) * 1.35 + 5]
+        title_text="Šance ztrátového měsíce (%)", range=[-2, max(rr_x1, rr_x2) * 1.35 + 5],
+        ticksuffix=" %",
     )
     fig_rr.update_yaxes(
         title_text="Očekávaný měsíční zisk (Kč)",
         range=[min(0, rr_y1, rr_y2) - rr_pad, max(0, rr_y1, rr_y2) + rr_pad],
+        tickformat=",.0f",
     )
-    chart(ui.style_fig(fig_rr, height=360, legend=False))
+    chart(ui.readable_axes(ui.style_fig(fig_rr, height=380, legend=False)))
+    ui.hint(
+        "Čím více vlevo, tím menší riziko ztráty. Čím výše, tím vyšší očekávaný zisk. "
+        "Nejvýhodnější kombinace se proto nachází vlevo nahoře."
+    )
 
-    with st.expander("ℹ️ Jak číst ukazatele rizika"):
-        st.markdown(
-            """
-- **Semafor:** 🟢 ztráta v méně než 5 % měsíců · 🟡 5–15 % · 🔴 15 % a více.
-- **Nejhorší měsíc z 20 (VaR 5 %):** výsledek, pod který spadne jen 1 měsíc z 20.
-  Kladné číslo znamená, že i takový slabý měsíc je stále v zisku.
-- **Pravděpodobnost poruchy:** šance, že stroj v daném měsíci vypadne a přijde
-  o část dní pronájmu (údaj z demonstračních dat).
-"""
+    with st.expander("Jak číst ukazatele rizika"):
+        ui.explain(
+            [
+                ("Kategorie rizika (semafor)",
+                 "Vychází z podílu ztrátových měsíců v simulaci: <b>Nízké</b> = méně než 5 %, "
+                 "<b>Střední</b> = 5 % až méně než 15 %, <b>Vysoké</b> = 15 % a více."),
+                ("Šance ztrátového měsíce",
+                 "Podíl simulovaných měsíců, ve kterých stroj skončil ve ztrátě "
+                 "(tržby nepokryly fixní a servisní náklady)."),
+                ("Velmi nepříznivý měsíc (VaR 5 %)",
+                 "Jde o odhad výsledku na hranici 5 % nejhorších simulovaných měsíců. "
+                 "Skutečný výsledek může být i horší. Kladné číslo znamená, že i takto "
+                 "nepříznivý měsíc skončí v zisku."),
+                ("Pravděpodobnost poruchy v měsíci",
+                 "Údaj o stroji z demonstračních dat. Při poruše stroj v simulaci přijde "
+                 "o část dní pronájmu."),
+            ]
         )
 
 
