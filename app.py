@@ -1248,34 +1248,33 @@ with tab1:
 
 with tab2:
     st.markdown("### Jak mohou vypadat jednotlivé měsíce")
-    st.write(
-        f"Aplikace nasimulovala **{fmt_num(n)} možných měsíců**. Každý má jinou poptávku, "
-        "jiné servisní náklady, případné poruchy a mírně jinou cenu – tak, jak se to "
-        "v provozu skutečně děje. Díky tomu je vidět nejen průměr, ale i dobré a slabé měsíce."
+    st.markdown(
+        f'<div class="de-intro">Simulace {fmt_num(n)} možných měsíců ukazuje, jak se může měnit '
+        "zisk nebo ztráta při různém vytížení a nákladech.</div>",
+        unsafe_allow_html=True,
     )
 
-    col_r1, col_r2 = st.columns(2, gap="medium")
-    for col, name, p10, p50, p90, mean, prob in (
-        (col_r1, machine_1, p10_mini, p50_mini, p90_mini, expected_profit_mini, prob_loss_mini),
-        (col_r2, machine_2, p10_dumper, p50_dumper, p90_dumper, expected_profit_dumper, prob_loss_dumper),
-    ):
-        with col:
-            st.markdown(
-                ui.machine_card(
-                    name,
-                    MACHINE_COLOR[name],
-                    [
-                        ("Slabý měsíc (jen 1 z 10 je horší)", fmt_czk(p10)),
-                        ("Typický měsíc (medián)", fmt_czk(p50)),
-                        ("Dobrý měsíc (jen 1 z 10 je lepší)", fmt_czk(p90)),
-                        ("Průměr všech měsíců", fmt_czk(mean)),
-                        ("Ztrátových měsíců", f"{fmt_pct(prob * 100)} ({loss_share_text(prob)})"),
-                    ],
-                    recommended=(name == better_machine),
-                    tag="Relativně lepší" if both_loss else "Doporučeno",
-                ),
-                unsafe_allow_html=True,
+    ui.results_cards(
+        [
+            dict(
+                name=name,
+                color=MACHINE_COLOR[name],
+                rows=[
+                    ("Slabý měsíc (P10)", "1 z 10 měsíců dopadne hůř", fmt_czk(p10), "", p10 < 0),
+                    ("Typický měsíc (medián)", "polovina měsíců dopadne lépe", fmt_czk(p50), "", p50 < 0),
+                    ("Dobrý měsíc (P90)", "1 z 10 měsíců dopadne lépe", fmt_czk(p90), "", p90 < 0),
+                    ("Průměr všech měsíců", "", fmt_czk(mean), "", mean < 0),
+                    ("Podíl ztrátových měsíců", "", fmt_pct(prob * 100), loss_share_text(prob), False),
+                ],
             )
+            for name, p10, p50, p90, mean, prob in (
+                (machine_1, p10_mini, p50_mini, p90_mini, expected_profit_mini, prob_loss_mini),
+                (machine_2, p10_dumper, p50_dumper, p90_dumper, expected_profit_dumper, prob_loss_dumper),
+            )
+        ],
+        rec_name=better_machine,
+        tag="Relativně lepší" if both_loss else "Doporučeno",
+    )
 
     st.markdown("### Rozložení měsíčního výsledku")
     fig_mc = go.Figure()
@@ -1290,25 +1289,25 @@ with tab2:
         fig_mc.add_vline(x=med, line=dict(color=MACHINE_COLOR[name], dash="dot", width=2))
     fig_mc.add_vline(
         x=0, line=dict(color=ui.MUTED, dash="dash", width=1.5),
-        annotation_text="0 Kč – hranice zisku", annotation_position="top right",
-        annotation=dict(bgcolor="rgba(255,255,255,0.9)"),
+        annotation_text="0 Kč", annotation_position="top right",
+        annotation=dict(bgcolor="rgba(255,255,255,0.9)", font=dict(color=ui.INK, size=12)),
     )
     fig_mc.update_layout(barmode="overlay")
     fig_mc.update_xaxes(title_text="Měsíční zisk / ztráta (Kč)")
     fig_mc.update_yaxes(title_text="Počet simulovaných měsíců")
-    chart(ui.style_fig(fig_mc, height=400))
-    st.caption(
-        "Čím více vpravo je „kopec“ stroje, tím lépe. Vše vlevo od přerušované čáry jsou "
-        "ztrátové měsíce. Tečkované čáry označují typický měsíc (medián)."
+    chart(ui.readable_axes(ui.style_fig(fig_mc, height=380)))
+    ui.hint(
+        "Čím více výsledků je napravo od 0 Kč, tím častěji stroj dosahuje zisku. "
+        "Vlevo od 0 Kč jsou ztrátové měsíce. Tečkované čáry označují typický měsíc."
     )
 
-    st.success(
-        f"Pravděpodobnost, že **{machine_2}** dosáhne vyššího výsledku než "
-        f"**{machine_1}**, je **{fmt_pct(prob_dumper_better * 100)}**."
+    ui.insight(
+        f"Pravděpodobnost, že <b>{machine_2}</b> dosáhne vyššího výsledku než "
+        f"<b>{machine_1}</b>, je <b>{fmt_pct(prob_dumper_better * 100)}</b>."
     )
 
-    with st.expander("📐 Pro analytiky: kumulativní pravděpodobnost a interval nejistoty"):
-        st.markdown("**Kumulativní pravděpodobnost výsledků (CDF)**")
+    with st.expander("Podrobnější analýza výsledků"):
+        st.markdown('<div class="de-section">Kumulativní pravděpodobnost (CDF)</div>', unsafe_allow_html=True)
         fig_cdf = go.Figure()
         for name, arr in ((machine_1, profit_mini), (machine_2, profit_dumper)):
             sorted_arr = np.sort(arr)
@@ -1324,21 +1323,20 @@ with tab2:
         fig_cdf.add_vline(x=0, line=dict(color=ui.MUTED, dash="dash", width=1.5))
         fig_cdf.update_xaxes(title_text="Měsíční zisk / ztráta (Kč)")
         fig_cdf.update_yaxes(title_text="Pravděpodobnost", tickformat=".0%")
-        chart(ui.style_fig(fig_cdf, height=360))
-        st.caption(
-            "Křivka ukazuje pravděpodobnost, že měsíční výsledek bude roven dané hodnotě "
-            "nebo horší. Hodnota u 0 Kč odpovídá pravděpodobnosti ztráty."
+        chart(ui.readable_axes(ui.style_fig(fig_cdf, height=320)))
+        ui.hint(
+            "Graf ukazuje pravděpodobnost, že měsíční výsledek bude nižší nebo roven vybrané "
+            "částce. Na hranici 0 Kč vidíte pravděpodobnost ztráty."
         )
-        col_ci1, col_ci2 = st.columns(2)
-        col_ci1.metric(
-            f"Interval nejistoty P10–P90 – {machine_1}",
-            f"{fmt_czk(ci_mini[0])} až {fmt_czk(ci_mini[1])}",
+
+        ui.interval_boxes(
+            [
+                (machine_1, MACHINE_COLOR[machine_1], f"{fmt_czk(ci_mini[0])} až {fmt_czk(ci_mini[1])}"),
+                (machine_2, MACHINE_COLOR[machine_2], f"{fmt_czk(ci_dumper[0])} až {fmt_czk(ci_dumper[1])}"),
+            ],
+            label="Rozmezí prostředních 80 % simulovaných měsíců",
         )
-        col_ci2.metric(
-            f"Interval nejistoty P10–P90 – {machine_2}",
-            f"{fmt_czk(ci_dumper[0])} až {fmt_czk(ci_dumper[1])}",
-        )
-        st.caption("Interval obsahuje prostředních 80 % simulovaných měsíců.")
+        ui.hint("Dolní hranice odpovídá slabému měsíci (P10), horní dobrému měsíci (P90).")
 
 
 # ==================================================
