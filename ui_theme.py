@@ -251,6 +251,7 @@ def inject_css() -> None:
         .de-res-row .v {{ color: {INK}; font-size: 1.02rem; font-weight: 700; text-align: right;
                           font-variant-numeric: tabular-nums; white-space: nowrap; }}
         .de-res-row .v.neg {{ color: {BAD_TEXT}; }}
+        .de-res-row .v .de-pos {{ color: {OK_TEXT}; }}
         .de-res-row .s {{ display: block; color: {UI_MUTED}; font-size: .78rem; font-weight: 500; }}
         .de-intro {{ color: {INK}; font-size: 1rem; margin: -.2rem 0 .2rem 0; }}
         .de-hint {{ color: #374151; font-size: .94rem; line-height: 1.5; margin: -.3rem 0 1rem 0; }}
