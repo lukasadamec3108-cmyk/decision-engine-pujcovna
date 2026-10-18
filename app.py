@@ -14,14 +14,16 @@ from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from scipy.optimize import linprog
 
+import datamodel as dm
 import portfolio as pf
 import scheduling as sch
 import ui_theme as ui
 
 # Streamlit při novém nasazení spustí app.py znovu, ale už načtené moduly (ui_theme,
-# portfolio, scheduling) ponechá v paměti ve staré verzi. Explicitní reload zajistí, že se vždy
+# datamodel, portfolio, scheduling) ponechá v paměti ve staré verzi. Explicitní reload zajistí, že se vždy
 # použije aktuální soubor (jinak hrozí AttributeError u nově přidaných funkcí).
 ui = importlib.reload(ui)
+dm = importlib.reload(dm)
 pf = importlib.reload(pf)
 sch = importlib.reload(sch)
 from ui_theme import fmt_czk, fmt_days, fmt_num, fmt_pct
@@ -68,9 +70,15 @@ def build_mgmt_text(machine_1, machine_2, expected_profit_mini, expected_profit_
 
 
 @st.cache_data
+def load_data_model():
+    """Společná datová vrstva (data/model/, fiktivní ukázka) a výsledek její kontroly."""
+    model = dm.load_model()
+    return model, dm.validate(model)
+
+
 def load_data() -> pd.DataFrame:
-    """Načtení demonstračních dat o strojích."""
-    return pd.read_csv("data/machines_demo.csv")
+    """Data o strojích ve stejném tvaru jako dříve (převod ze společné datové vrstvy)."""
+    return dm.legacy_machines(data_model)
 
 
 # ==================================================
@@ -153,9 +161,17 @@ sb_budget = st.sidebar.container()
 sb_jobs = st.sidebar.container()
 sb_advanced = st.sidebar.expander("Pokročilé nastavení")
 
+data_model, data_issues = load_data_model()
+if dm.errors(data_issues):
+    st.error(
+        "Data aplikace neprošla kontrolou, výpočty proto nelze spustit:\n\n"
+        + "\n".join(f"- {i}" for i in dm.errors(data_issues))
+    )
+    st.stop()
+
 df = load_data()
 
-jobs_df = pd.read_csv("data/jobs_demo.csv")
+jobs_df = dm.legacy_jobs(data_model)
 
 risk_multiplier = {"Low": 0.95, "Medium": 0.85, "High": 0.70}
 
@@ -180,16 +196,8 @@ sb_jobs.markdown(
     "ho zatím neovlivňují.</div>", unsafe_allow_html=True
 )
 
-machine_capacity = {
-    "Mini bagr": 1,
-    "Pásový dumper": 1,
-    "Smykový nakladač": 1,
-    "Vibrační deska": 2,
-    "Kolový bagr": 1,
-    "Silniční válec": 1,
-    "Řezačka asfaltu": 1,
-    "Nákladní auto": 1,
-}
+# Počet kusů každého typu stroje ze společné datové vrstvy (tabulka fleet_units).
+machine_capacity = dm.fleet_capacity(data_model)
 
 if extra_dumper:
     machine_capacity["Pásový dumper"] = 2

@@ -144,13 +144,14 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 ```
 ├── app.py                           # Streamlit aplikace (výpočty, záložky, export reportu)
 ├── ui_theme.py                      # vzhled: barvy, české formátování čísel, karty, šablona grafů
+├── datamodel.py                     # společná datová vrstva: načtení, kontrola, převod pro výpočty
 ├── portfolio.py                     # výběr nákupní sestavy strojů v rámci rozpočtu
 ├── scheduling.py                    # plán zakázek (celočíselná optimalizace)
-├── tests/                           # testy (python tests/test_portfolio.py, test_scheduling.py)
+├── tests/                           # testy (python tests/test_datamodel.py, test_portfolio.py, test_scheduling.py)
+│   └── fixtures/legacy/             # původní tabulky pro kontrolu zpětné kompatibility
 ├── assets/decision_engine_mark.svg  # vlastní neutrální symbol aplikace
 ├── data/
-│   ├── machines_demo.csv            # fiktivní parametry 8 typů strojů
-│   ├── jobs_demo.csv                # fiktivní zásobník 12 zakázek
+│   ├── model/                       # společný datový model (fiktivní ukázka), popis v model/README.md
 │   └── *.xlsx                       # rozšířený fiktivní datový model (aplikace ho zatím nenačítá)
 ├── .streamlit/config.toml           # barevné téma aplikace
 ├── .streamlit/secrets.toml.example  # šablona pro nastavení přístupového hesla
@@ -163,6 +164,13 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 Složka `data/` obsahuje **výhradně fiktivní hodnoty** vytvořené pro testování a ukázku:
 typy strojů, denní sazby, pořizovací ceny, náklady, parametry poptávky a poruchovosti a vzorové zakázky.
 Neobsahuje žádná skutečná data žádné společnosti ani osobní údaje.
+
+Data jsou uložená ve **společném datovém modelu** (`data/model/`) pro pronájem strojů i vlastní
+zakázky: typy strojů, jednotlivé kusy flotily, údržba, rezervace pronájmů, poptávka, zakázky,
+jejich požadavky na stroje, obsluha a společná nastavení. Náklady jsou rozdělené na vlastnické,
+provozní fixní a variabilní, aby se později nezapočítaly dvakrát. Při načtení se data
+zkontrolují (typy, rozsahy, vazby mezi tabulkami); při chybě aplikace výpočty nespustí.
+Podrobný popis tabulek a jejich budoucího využití je v [`data/model/README.md`](data/model/README.md).
 
 ### Spuštění lokálně
 

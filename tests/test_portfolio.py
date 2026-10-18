@@ -12,7 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import portfolio as pf  # noqa: E402
 
-DATA = pd.read_csv(ROOT / "data" / "machines_demo.csv")
+import datamodel as dm  # noqa: E402
+
+DATA = dm.legacy_machines(dm.load_model())
 
 
 def machine(**kw) -> pd.Series:

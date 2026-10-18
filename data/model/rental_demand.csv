@@ -1,0 +1,9 @@
+type_id,period,expected_days,std_days,source
+MINI_BAGR,typický měsíc,18,4,fiktivní ukázka
+PASOVY_DUMPER,typický měsíc,20,4,fiktivní ukázka
+SMYKOVY_NAKLADAC,typický měsíc,17,5,fiktivní ukázka
+VIBRACNI_DESKA,typický měsíc,16,4,fiktivní ukázka
+KOLOVY_BAGR,typický měsíc,15,5,fiktivní ukázka
+SILNICNI_VALEC,typický měsíc,14,4,fiktivní ukázka
+REZACKA_ASFALTU,typický měsíc,12,3,fiktivní ukázka
+NAKLADNI_AUTO,typický měsíc,18,4,fiktivní ukázka

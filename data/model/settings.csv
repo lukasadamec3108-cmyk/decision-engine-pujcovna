@@ -1,0 +1,7 @@
+key,value,unit,note
+data_origin,fiktivní ukázková data,,Nejde o skutečná firemní data.
+currency,CZK,,
+days_per_month,30,dny,Kapacita jednoho stroje za měsíc v modelu nákupu.
+planning_horizon_days,,dny,Nezadáno – doplní majitel (E3).
+working_days_per_week,,dny,Nezadáno – model zatím počítá kalendářní dny.
+overhead_cost_month,,Kč,"Společná režie půjčovny – nezadáno, nerozpočítává se."
