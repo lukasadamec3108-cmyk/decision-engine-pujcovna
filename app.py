@@ -1513,8 +1513,11 @@ with tab4:
         range=[0, (top_effect or 1) * 1.55], tickformat=",.0f", nticks=5,
         title_text="Rozdíl měsíčního zisku (Kč)",
     )
-    ui.readable_axes(ui.style_fig(fig_tornado, height=400))
+    ui.readable_axes(ui.style_fig(fig_tornado, height=450))
     fig_tornado.update_yaxes(tickfont=dict(size=14, color=ui.INK))
+    # Vyšší horní okraj: ikony grafu (zoom, stažení…) mají vlastní řádek nad legendou
+    # a nepřekrývají ji ani na mobilu, kde se legenda zalomí do dvou řádků.
+    fig_tornado.update_layout(margin=dict(t=96))
     chart(fig_tornado)
     ui.hint(
         f"Počítáno pro odhad poptávky {days_text} pronájmu měsíčně (Pokročilé nastavení). "
@@ -1633,7 +1636,9 @@ with tab4:
     fig_be.add_hline(y=0, line=dict(color=ui.INK, dash="dash", width=1.5))
     fig_be.update_xaxes(title_text="Počet dní pronájmu za měsíc", dtick=5)
     fig_be.update_yaxes(title_text="Měsíční zisk / ztráta (Kč)", tickformat=",.0f")
-    chart(ui.readable_axes(ui.style_fig(fig_be, height=400)))
+    ui.readable_axes(ui.style_fig(fig_be, height=450))
+    fig_be.update_layout(margin=dict(t=96))  # místo pro ikony grafu nad legendou
+    chart(fig_be)
     ui.hint(
         "Čárkovaná vodorovná čára je nulový zisk. Body na ní označují bod zvratu – od tohoto "
         "počtu dní stroj pokryje fixní náklad. <b>Zjednodušený výpočet:</b> denní cena × počet dní − fixní náklad, "
