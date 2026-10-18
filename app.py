@@ -1119,12 +1119,6 @@ with tab1:
             f"{fmt_num(n)} možných měsíců. {better_machine} vydělá více než {other_machine} "
             f"přibližně v **{fmt_pct(rec_better_share * 100, 0)}** simulovaných měsíců."
         )
-        st.markdown(
-            "Stejnou variantu doporučují i lineární a diskrétní optimalizace."
-            if models_agree
-            else "Lineární a diskrétní optimalizace vycházejí jinak – posuďte i záložky "
-            "Riziko a Co ovlivňuje zisk."
-        )
         col_s1, col_s2 = st.columns(2)
         col_s1.metric(f"Bodové hodnocení – {machine_1}", f"{scorecard_mini} / 4")
         col_s2.metric(f"Bodové hodnocení – {machine_2}", f"{scorecard_dumper} / 4")
