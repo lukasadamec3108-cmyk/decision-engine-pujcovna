@@ -69,7 +69,8 @@ Přístup do aplikace je chráněn heslem.
 
 ## Analytické metody a výpočty
 
-**Monte Carlo simulace měsíčního výsledku** (100–10 000 simulovaných měsíců) pro každý stroj zvlášť:
+**Monte Carlo simulace měsíčního výsledku** (100–10 000 simulovaných měsíců) pro každý stroj zvlášť,
+s pevným náhodným základem (`SIMULATION_SEED`), takže stejné vstupy dávají stejné výsledky:
 - poptávka ve dnech: trojúhelníkové rozdělení v rozmezí daném scénářem trhu,
 - servisní náklady: normální rozdělení (oříznuté na nezáporné hodnoty),
 - poruchy: náhodný výskyt podle pravděpodobnosti poruchy, délka odstávky z Poissonova rozdělení,
@@ -80,20 +81,19 @@ Přístup do aplikace je chráněn heslem.
 a pravděpodobnost, že jeden stroj vydělá více než druhý.
 
 **Ekonomické ukazatele:** bod zvratu (počet dní pronájmu potřebný k pokrytí fixních nákladů),
-minimální denní cena pronájmu a doba návratnosti investice (využitá ve scorecard).
+minimální denní cena pronájmu a doba návratnosti investice (využitá v bodovém hodnocení).
 
 **Citlivostní analýza:** jednorozměrná citlivost na cenu, vytížení, fixní a servisní náklady (±10 %)
 a dvourozměrná mapa ziskovosti cena × dny.
 
 **Optimalizace:**
-- lineární programování (`scipy.optimize.linprog`, metoda HiGHS) pro rozdělení kapacity mezi dva stroje,
-- diskrétní optimalizace úplným prohledáním celočíselných variant,
 - výběr nákupní sestavy v rámci investičního rozpočtu (`portfolio.py`): úplné prohledání
   kombinací 0–2 kusů u všech typů strojů včetně varianty „nic nekupovat“; poptávka po typu
   stroje se mezi kusy dělí (nejvýše 30 dní na kus), náklady jsou individuální podle dat.
 
-**Rozhodovací pravidla:** bodová scorecard (očekávaný zisk, riziko ztráty, VaR, návratnost)
-a textové zdůvodnění doporučení generované **pevně danými pravidly** podle vypočtených metrik.
+**Rozhodovací pravidla:** doporučený stroj je ten s vyšším očekávaným měsíčním ziskem.
+Doplňkové bodové hodnocení (očekávaný zisk, riziko ztráty, VaR, návratnost; při shodě bez bodu)
+a textové zdůvodnění se generují **pevně danými pravidly** ze stejných vypočtených metrik.
 Aplikace nevyužívá generativní umělou inteligenci.
 
 **Plánování zakázek** (`scheduling.py`): celočíselná optimalizace (SciPy `milp`, řešič HiGHS)
@@ -132,7 +132,7 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 | Jazyk | Python |
 | Webová aplikace | Streamlit, nasazení na Streamlit Community Cloud |
 | Práce s daty | pandas, NumPy |
-| Simulace a optimalizace | NumPy (náhodná rozdělení), SciPy (`linprog`) |
+| Simulace a optimalizace | NumPy (náhodná rozdělení s pevným základem), SciPy (`milp`) |
 | Vizualizace | Plotly |
 | Reporting | python-docx |
 | Správa kódu a zabezpečení | Git, GitHub (větve, pull requesty), Streamlit secrets |

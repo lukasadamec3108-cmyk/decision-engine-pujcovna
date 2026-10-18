@@ -176,7 +176,8 @@ available_machines = set(df["machine_type"].tolist())
 # kusů stroje), proto se v panelu nenabízí a hodnota zůstává False jako dosud.
 extra_dumper = False
 sb_jobs.markdown(
-    '<div class="de-soon">Plánování zakázek – připravujeme</div>', unsafe_allow_html=True
+    '<div class="de-soon">Plán zakázek používá pevnou ukázkovou flotilu – vstupy v panelu '
+    "ho zatím neovlivňují.</div>", unsafe_allow_html=True
 )
 
 machine_capacity = {
@@ -350,28 +351,33 @@ ui.sidebar_amount(sb_budget, fmt_czk(budget), "k dispozici na nákup strojů")
 # MONTE CARLO SIMULACE
 # ==================================================
 
+# Pevný náhodný základ: stejné vstupy dají vždy stejné výsledky. Pro řízený přepočet
+# s jiným základem stačí změnit tuto konstantu (případně ji později nabídnout v panelu).
+SIMULATION_SEED = 42
+rng = np.random.RandomState(SIMULATION_SEED)
+
 # --- Stroj 1 ---
 demand_mean_1 = row_1["demand_days_mean"]
 mode_days_1 = np.clip(demand_mean_1, min_days, max_days)
-util_days_1 = np.random.triangular(min_days, mode_days_1, max_days, n)
+util_days_1 = rng.triangular(min_days, mode_days_1, max_days, n)
 
-service_cost_1 = np.random.normal(
+service_cost_1 = rng.normal(
     row_1["service_cost_mean"],
     row_1["service_cost_std"],
     n,
 )
 service_cost_1 = np.clip(service_cost_1, 0, None)
 
-failure_happens_1 = np.random.rand(n) < row_1["failure_prob"]
+failure_happens_1 = rng.rand(n) < row_1["failure_prob"]
 failure_days_1 = np.where(
     failure_happens_1,
-    np.random.poisson(row_1["failure_days_mean"], n),
+    rng.poisson(row_1["failure_days_mean"], n),
     0,
 )
 real_days_1 = np.maximum(util_days_1 - failure_days_1, 0)
 
 price_std_1 = avg_daily_mini * 0.08
-daily_price_1 = np.random.normal(avg_daily_mini, price_std_1, n)
+daily_price_1 = rng.normal(avg_daily_mini, price_std_1, n)
 daily_price_1 = np.clip(daily_price_1, avg_daily_mini * 0.8, avg_daily_mini * 1.2)
 
 rev_mini = real_days_1 * daily_price_1
@@ -380,25 +386,25 @@ profit_mini = rev_mini - fixed_cost - service_cost_1
 # --- Stroj 2 ---
 demand_mean_2 = row_2["demand_days_mean"]
 mode_days_2 = np.clip(demand_mean_2, min_days, max_days)
-util_days_2 = np.random.triangular(min_days, mode_days_2, max_days, n)
+util_days_2 = rng.triangular(min_days, mode_days_2, max_days, n)
 
-service_cost_2 = np.random.normal(
+service_cost_2 = rng.normal(
     row_2["service_cost_mean"],
     row_2["service_cost_std"],
     n,
 )
 service_cost_2 = np.clip(service_cost_2, 0, None)
 
-failure_happens_2 = np.random.rand(n) < row_2["failure_prob"]
+failure_happens_2 = rng.rand(n) < row_2["failure_prob"]
 failure_days_2 = np.where(
     failure_happens_2,
-    np.random.poisson(row_2["failure_days_mean"], n),
+    rng.poisson(row_2["failure_days_mean"], n),
     0,
 )
 real_days_2 = np.maximum(util_days_2 - failure_days_2, 0)
 
 price_std_2 = avg_daily_dumper * 0.08
-daily_price_2 = np.random.normal(avg_daily_dumper, price_std_2, n)
+daily_price_2 = rng.normal(avg_daily_dumper, price_std_2, n)
 daily_price_2 = np.clip(daily_price_2, avg_daily_dumper * 0.8, avg_daily_dumper * 1.2)
 
 rev_dumper = real_days_2 * daily_price_2
@@ -568,79 +574,87 @@ if best_d1 > best_d2:
 elif best_d2 > best_d1:
     verdict_score_dumper += 1
 
-# --- Investiční scorecard ---
-scorecard_mini = 0
-scorecard_dumper = 0
+# --- Investiční scorecard (doplňkové bodové hodnocení) ---
+# Bod získá jen stroj, který je v ukazateli skutečně lepší; při shodě nezíská bod nikdo.
+# Hlavní doporučení (better_machine) určuje vyšší očekávaný zisk – body ho jen doplňují.
 
-if expected_profit_mini > expected_profit_dumper:
-    scorecard_mini += 1
+
+def _better_index(a, b, higher_is_better: bool):
+    if a == b:
+        return None
+    return (0 if a > b else 1) if higher_is_better else (0 if a < b else 1)
+
+
+def _payback_text(months) -> str:
+    return f"{fmt_num(months, 1)} měsíce" if months is not None else "nelze určit (ztráta)"
+
+
+score_items = [
+    ("Očekávaný měsíční zisk", fmt_czk(expected_profit_mini), fmt_czk(expected_profit_dumper),
+     _better_index(expected_profit_mini, expected_profit_dumper, True)),
+    ("Šance ztrátového měsíce", fmt_pct(prob_loss_mini * 100), fmt_pct(prob_loss_dumper * 100),
+     _better_index(prob_loss_mini, prob_loss_dumper, False)),
+    ("Velmi nepříznivý měsíc (VaR 5 %)", fmt_czk(var95_mini), fmt_czk(var95_dumper),
+     _better_index(var95_mini, var95_dumper, True)),
+    ("Návratnost investice", _payback_text(roi_mini), _payback_text(roi_dumper),
+     _better_index(roi_mini, roi_dumper, False)
+     if roi_mini is not None and roi_dumper is not None else None),
+]
+scorecard_mini = sum(1 for *_, best in score_items if best == 0)
+scorecard_dumper = sum(1 for *_, best in score_items if best == 1)
+
+# --- Vysvětlení doporučení (stejné pravidlo jako hlavní karta v záložce Doporučení) ---
+_names = (machine_1, machine_2)
+_rec_i = 1 if better_machine == machine_2 else 0
+_other = _names[1 - _rec_i]
+_profits = (expected_profit_mini, expected_profit_dumper)
+_points = (scorecard_mini, scorecard_dumper)
+
+if expected_profit_mini < 0 and expected_profit_dumper < 0:
+    _head = (
+        f"**Proč ani jeden stroj není ziskový a {better_machine} vychází jen relativně lépe:**\n"
+        f"- Oba stroje mají záporný očekávaný měsíční zisk; {better_machine} prodělává méně "
+        f"({fmt_czk(_profits[_rec_i])} oproti {fmt_czk(_profits[1 - _rec_i])})."
+    )
+elif expected_profit_mini == expected_profit_dumper:
+    _head = (
+        "**Proč nelze dát jednoznačné doporučení:**\n"
+        f"- Oba stroje mají stejný očekávaný měsíční zisk ({fmt_czk(expected_profit_mini)}). "
+        "Rozhodněte podle rizika a pořizovací ceny."
+    )
 else:
-    scorecard_dumper += 1
+    _head = (
+        f"**Proč doporučujeme {better_machine}:**\n"
+        f"- Má vyšší očekávaný měsíční zisk: {fmt_czk(_profits[_rec_i])} oproti "
+        f"{fmt_czk(_profits[1 - _rec_i])} u stroje {_other}."
+    )
+if _points[1 - _rec_i] > _points[_rec_i]:
+    _head += (
+        f"\n- V doplňkovém bodovém hodnocení vychází lépe {_other} "
+        f"({_points[1 - _rec_i]} : {_points[_rec_i]}) – je výhodnější v ukazatelích rizika "
+        "nebo návratnosti. Zvažte, kolik rizika jste ochotni nést."
+    )
 
-if prob_loss_mini < prob_loss_dumper:
-    scorecard_mini += 1
-else:
-    scorecard_dumper += 1
+_rows = "\n".join(
+    f"- {label}: {machine_1} {v1} · {machine_2} {v2} – "
+    + (f"lépe {_names[best]}" if best is not None else "shodné nebo nelze porovnat")
+    for label, v1, v2, best in score_items
+)
+ai_text = f"""
+{_head}
 
-if var95_mini > var95_dumper:
-    scorecard_mini += 1
-else:
-    scorecard_dumper += 1
+**Srovnání ukazatelů:**
+{_rows}
 
-if roi_mini is not None and roi_dumper is not None:
-    if roi_mini < roi_dumper:
-        scorecard_mini += 1
-    else:
-        scorecard_dumper += 1
+**Rozpětí měsíčního výsledku (simulace):**
+- Slabý měsíc (P10): {machine_1} {fmt_czk(p10_mini)} · {machine_2} {fmt_czk(p10_dumper)}
+- Typický měsíc (medián): {machine_1} {fmt_czk(p50_mini)} · {machine_2} {fmt_czk(p50_dumper)}
+- Dobrý měsíc (P90): {machine_1} {fmt_czk(p90_mini)} · {machine_2} {fmt_czk(p90_dumper)}
 
-# --- AI doporučení ---
-if scorecard_dumper > scorecard_mini:
-    ai_text = f"""
-**Proč vychází lépe {machine_2}:**
-- Očekávaný měsíční zisk: **{machine_2} {expected_profit_dumper:,.0f} Kč** vs. **{machine_1} {expected_profit_mini:,.0f} Kč**
-- {machine_2} má **o {risk_adv_pct:.1f} p.b. nižší riziko ztráty**
-- Break-even: **{machine_2} {break_even_dumper:.2f} dní** vs. **{machine_1} {break_even_mini:.2f} dní**
-
-**Scénáře zisku (Kč) – aby bylo jasné riziko:**
-- 10% pesimistický scénář: {machine_2} **{p10_dumper:,.0f}**, {machine_1} **{p10_mini:,.0f}**
-- Medián: {machine_2} **{p50_dumper:,.0f}**, {machine_1} **{p50_mini:,.0f}**
-- 90% optimistický scénář: {machine_2} **{p90_dumper:,.0f}**, {machine_1} **{p90_mini:,.0f}**
-
-**Co je potřeba doplnit před finálním nákupem:**
-- reálnou poptávku po {machine_2}
-- servisní náklady / odstávky / pojištění
-- sezónnost (léto vs. zima)
-"""
-elif scorecard_mini > scorecard_dumper:
-    ai_text = f"""
-**Proč vychází lépe {machine_1}:**
-- Očekávaný měsíční zisk: **{machine_1} {expected_profit_mini:,.0f} Kč** vs. **{machine_2} {expected_profit_dumper:,.0f} Kč**
-- {machine_1} má **o {abs(risk_adv_pct):.1f} p.b. nižší riziko ztráty**
-- Break-even: **{machine_1} {break_even_mini:.2f} dní** vs. **{machine_2} {break_even_dumper:.2f} dní**
-
-**Scénáře zisku (Kč) – aby bylo jasné riziko:**
-- 10% pesimistický scénář: {machine_1} **{p10_mini:,.0f}**, {machine_2} **{p10_dumper:,.0f}**
-- Medián: {machine_1} **{p50_mini:,.0f}**, {machine_2} **{p50_dumper:,.0f}**
-- 90% optimistický scénář: {machine_1} **{p90_mini:,.0f}**, {machine_2} **{p90_dumper:,.0f}**
-
-**Co je potřeba doplnit před finálním nákupem:**
-- reálnou poptávku po {machine_1}
-- servisní náklady / odstávky / pojištění
-- sezónnost (léto vs. zima)
-"""
-else:
-    ai_text = f"""
-**Proč nejde dát jasné „kup“:**
-- Rozdíl není dostatečně jednoznačný při zvolených parametrech.
-
-**Rychlá fakta:**
-- Očekávaný zisk {machine_2}: **{expected_profit_dumper:,.0f} Kč**
-- Očekávaný zisk {machine_1}: **{expected_profit_mini:,.0f} Kč**
-- Riziko ztráty {machine_2}: **{prob_loss_dumper * 100:.1f} %**
-- Riziko ztráty {machine_1}: **{prob_loss_mini * 100:.1f} %**
-
-**Další krok:**
-Doplň data o poptávce, servisních nákladech a sezónnosti.
+**Co doplnit před nákupem:**
+- skutečnou poptávku po stroji {better_machine},
+- servisní náklady, odstávky a pojištění,
+- sezónnost (léto a zima).
 """
 
 
@@ -817,7 +831,7 @@ def build_docx_report() -> bytes:
     title_run = title.runs[0]
     title_run.font.size = Pt(20)
 
-    doc.add_paragraph(f"Porovnání: {machine_1} vs. {machine_2}")
+    doc.add_paragraph(f"Porovnání strojů: {machine_1} a {machine_2}")
     demo = doc.add_paragraph()
     demo_run = demo.add_run(
         "Ukázkový výstup pilotního prototypu. Všechny vstupy i výsledky vycházejí "
@@ -842,7 +856,7 @@ def build_docx_report() -> bytes:
 
     rows = [
         ("Denní cena pronájmu", fmt_czk(avg_daily_mini), fmt_czk(avg_daily_dumper)),
-        ("Bod zvratu", fmt_days(break_even_mini, 2), fmt_days(break_even_dumper, 2)),
+        ("Bod zvratu (jen fixní náklady)", fmt_days(break_even_mini, 2), fmt_days(break_even_dumper, 2)),
         ("Šance ztrátového měsíce", fmt_pct(risk_loss_mini), fmt_pct(risk_loss_dumper)),
         ("Očekávaný měsíční zisk (simulace)", fmt_czk(expected_profit_mini), fmt_czk(expected_profit_dumper)),
     ]
@@ -852,25 +866,33 @@ def build_docx_report() -> bytes:
         cells[1].text = v1
         cells[2].text = v2
 
-    doc.add_heading("Relativně výhodnější varianta", level=1)
+    # Stejné tři případy jako hlavní karta v záložce Doporučení.
+    doc.add_heading("Doporučení", level=1)
     verdict_p = doc.add_paragraph()
-    verdict_p.add_run("Relativně lépe vychází: ").bold = True
-    verdict_p.add_run(f"{better_machine}.\n")
     if expected_profit_mini < 0 and expected_profit_dumper < 0:
+        verdict_p.add_run("Žádný stroj není ziskový. ").bold = True
         verdict_p.add_run(
-            "Při zadaném nastavení jsou však obě investiční varianty ztrátové. "
-            "Investici proto nedoporučujeme realizovat bez zvýšení ceny pronájmu, "
-            "vyššího vytížení nebo snížení nákladů."
+            f"Relativně lépe vychází {better_machine}, ale při zadaném nastavení jsou obě "
+            "varianty v průměru ztrátové. Investici nedoporučujeme realizovat bez zvýšení ceny "
+            "pronájmu, vyššího vytížení nebo snížení nákladů."
         )
+    elif expected_profit_mini == expected_profit_dumper:
+        verdict_p.add_run("Stroje vycházejí stejně. ").bold = True
+        verdict_p.add_run("Oba mají stejný očekávaný zisk – rozhodněte podle rizika a ceny.")
     else:
+        verdict_p.add_run(f"Doporučený stroj: {better_machine}. ").bold = True
         verdict_p.add_run(
-            f"{better_machine} nabízí vyšší očekávaný měsíční výsledek "
-            "v simulaci. Podrobné srovnání rizika a bodu zvratu je v tabulce výše."
+            "Má vyšší očekávaný měsíční zisk v simulaci. Podrobné srovnání rizika a bodu "
+            "zvratu je v tabulce výše."
         )
+    doc.add_paragraph(
+        f"Doplňkové bodové hodnocení (zisk, šance ztráty, velmi nepříznivý měsíc, návratnost; "
+        f"při shodě bez bodu): {machine_1} {scorecard_mini} / 4, {machine_2} {scorecard_dumper} / 4."
+    )
 
     doc.add_heading("Rozpětí možných výsledků (simulace)", level=1)
     doc.add_paragraph(
-        "Simulace vytváří tisíce možných měsíců s různou poptávkou, servisními náklady, "
+        f"Simulace vytváří {fmt_num(n)} možných měsíců s různou poptávkou, servisními náklady, "
         "poruchami a cenou. Následující hodnoty shrnují rozpětí měsíčního výsledku."
     )
     doc.add_paragraph(
@@ -916,8 +938,9 @@ def build_docx_report() -> bytes:
         "zisku a rizika ztráty."
     )
     doc.add_paragraph(
-        "Optimalizační model testuje možné kombinace nákupu strojů a vybírá sestavu, "
-        "která maximalizuje očekávaný měsíční zisk při daném investičním rozpočtu."
+        "Výběr nákupní sestavy (záložka Nákup strojů) a plán zakázek (záložka Plán zakázek) "
+        "jsou v aplikaci samostatné analýzy na ukázkových datech. Tento report je nezahrnuje "
+        "a navzájem zatím propojené nejsou."
     )
     doc.add_paragraph(
         "Doporučení jsou sestavena pevně danými pravidly z vypočtených ukazatelů."
@@ -1116,17 +1139,32 @@ with tab1:
 
     # --- E. Podrobnosti (ve výchozím stavu sbalené) ---
     with st.expander("Jak aplikace došla k doporučení"):
-        st.markdown(
-            f"Doporučený je stroj s **vyšším průměrným měsíčním ziskem** v simulaci "
-            f"{fmt_num(n)} možných měsíců. {better_machine} vydělá více než {other_machine} "
-            f"přibližně v **{fmt_pct(rec_better_share * 100, 0)}** simulovaných měsíců."
-        )
+        # Stejné tři případy jako hlavní karta výše (oba ztrátové / shoda / doporučení).
+        if both_loss:
+            st.markdown(
+                f"Oba stroje jsou v simulaci {fmt_num(n)} možných měsíců **v průměru ztrátové**. "
+                f"{better_machine} vychází jen relativně lépe – vydělá více než {other_machine} "
+                f"přibližně v **{fmt_pct(rec_better_share * 100, 0)}** simulovaných měsíců."
+            )
+        elif rec_profit == other_profit:
+            st.markdown(
+                f"Oba stroje mají v simulaci {fmt_num(n)} možných měsíců **stejný průměrný "
+                "měsíční zisk**."
+            )
+        else:
+            st.markdown(
+                f"Doporučený je stroj s **vyšším průměrným měsíčním ziskem** v simulaci "
+                f"{fmt_num(n)} možných měsíců. {better_machine} vydělá více než {other_machine} "
+                f"přibližně v **{fmt_pct(rec_better_share * 100, 0)}** simulovaných měsíců."
+            )
         col_s1, col_s2 = st.columns(2)
         col_s1.metric(f"Bodové hodnocení – {machine_1}", f"{scorecard_mini} / 4")
         col_s2.metric(f"Bodové hodnocení – {machine_2}", f"{scorecard_dumper} / 4")
-        st.caption(
-            "Body za vyšší zisk, nižší riziko ztráty, lepší nejhorší měsíc z 20 a rychlejší "
-            "návratnost (jen když jsou oba stroje v zisku). Text níže sestavují pevná pravidla."
+        ui.hint(
+            "Doplňkové body za vyšší očekávaný zisk, nižší šanci ztrátového měsíce, lepší velmi "
+            "nepříznivý měsíc (VaR 5 %) a rychlejší návratnost (jen když jsou oba stroje "
+            "v zisku). Při shodě bod nezíská žádný stroj. Doporučení určuje očekávaný zisk; "
+            "text níže sestavují pevná pravidla ze stejných výsledků."
         )
         st.markdown(ai_text)
 
@@ -1147,7 +1185,7 @@ with tab1:
             rec_index=1 if rec_is_m2 else 0,
             tag="Relativně lepší" if both_loss else "Doporučeno",
         )
-        st.caption(
+        ui.hint(
             "Minimální cena pokryje fixní a průměrné servisní náklady při zadaném odhadu poptávky. "
             "Bod zvratu na hlavní stránce počítá jen s fixními náklady (fixní náklad ÷ denní cena)."
         )
@@ -1156,7 +1194,7 @@ with tab1:
         col_q1, col_q2 = st.columns(2)
         col_q1.metric(f"{machine_1} – měsíční výsledek", fmt_czk(expected_profit_mini_real))
         col_q2.metric(f"{machine_2} – měsíční výsledek", fmt_czk(expected_profit_dumper_real))
-        st.caption(
+        ui.hint(
             "Denní cena × počet dní − fixní náklad − průměrný servis. "
             "Počet dní změníte v postranním panelu v „Pokročilém nastavení“."
         )
