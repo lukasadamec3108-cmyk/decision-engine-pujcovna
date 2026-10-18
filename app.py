@@ -2,7 +2,6 @@ import hmac
 import importlib
 import os
 from io import BytesIO
-from itertools import product
 
 import numpy as np
 import pandas as pd
@@ -15,12 +14,14 @@ from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from scipy.optimize import linprog
 
+import portfolio as pf
 import ui_theme as ui
 
-# Streamlit při novém nasazení spustí app.py znovu, ale už načtený modul ui_theme
-# ponechá v paměti ve staré verzi. Explicitní reload zajistí, že se vždy použije
-# aktuální soubor (jinak hrozí AttributeError u nově přidaných funkcí).
+# Streamlit při novém nasazení spustí app.py znovu, ale už načtené moduly (ui_theme,
+# portfolio) ponechá v paměti ve staré verzi. Explicitní reload zajistí, že se vždy
+# použije aktuální soubor (jinak hrozí AttributeError u nově přidaných funkcí).
 ui = importlib.reload(ui)
+pf = importlib.reload(pf)
 from ui_theme import fmt_czk, fmt_days, fmt_num, fmt_pct
 
 # ==================================================
@@ -778,67 +779,13 @@ for i, price in enumerate(price_range):
 required_price_1 = (fixed_cost + row_1["service_cost_mean"]) / max(expected_days, 1)
 required_price_2 = (fixed_cost + row_2["service_cost_mean"]) / max(expected_days, 1)
 
-# --- Optimalizace portfolia ---
-machine_summary = []
-for _, row in df.iterrows():
-    expected_unit_profit = (
-        row["daily_price"] * row["demand_days_mean"]
-        - row["monthly_fixed_cost"]
-        - row["service_cost_mean"]
-    )
-    machine_summary.append(
-        {
-            "machine_type": row["machine_type"],
-            "purchase_price": row["purchase_price"],
-            "expected_unit_profit": expected_unit_profit,
-        }
-    )
-
-machines = sorted(
-    machine_summary,
-    key=lambda x: x["expected_unit_profit"],
-    reverse=True,
-)[:5]
-
-best_profit = -1e18
-best_combo = None
-n_machines = len(machines)
-max_units = 2
-
-for counts in product(range(max_units + 1), repeat=n_machines):
-    total_cost = sum(
-        counts[i] * machines[i]["purchase_price"] for i in range(n_machines)
-    )
-    total_profit = sum(
-        counts[i] * machines[i]["expected_unit_profit"] for i in range(n_machines)
-    )
-
-    if total_cost <= budget and total_profit > best_profit and sum(counts) > 0:
-        best_profit = total_profit
-        best_combo = counts
-
-# --- Budget vs profit křivka ---
-budget_values = np.arange(500000, 3000001, 500000)
-max_profits = []
-
-for test_budget in budget_values:
-    best_profit_curve = -1e18
-
-    for counts in product(range(3), repeat=n_machines):
-        total_cost = sum(
-            counts[i] * machines[i]["purchase_price"] for i in range(n_machines)
-        )
-        total_profit = sum(
-            counts[i] * machines[i]["expected_unit_profit"] for i in range(n_machines)
-        )
-
-        if total_cost <= test_budget and total_profit > best_profit_curve:
-            best_profit_curve = total_profit
-
-    if best_profit_curve == -1e18:
-        best_profit_curve = 0
-
-    max_profits.append(best_profit_curve)
+# --- Nákup strojů: nejlepší sestava v rámci rozpočtu (výpočet v portfolio.py) ---
+# Prohledají se všechny kombinace 0–2 kusů u všech typů strojů včetně „nic nekupovat“.
+# Používají se individuální náklady strojů z dat, ne fixní náklad z postranního panelu.
+purchase_options = pf.all_portfolios(df)
+purchase_best = pf.best_portfolio(purchase_options, budget)
+purchase_frontier = pf.budget_frontier(purchase_options)
+purchase_min_profitable = pf.cheapest_profitable(purchase_options)
 
 # Složka pro export grafů
 os.makedirs("outputs", exist_ok=True)
@@ -1772,94 +1719,174 @@ with tab4:
 
 with tab5:
     st.markdown(f"### Jaké stroje koupit za {fmt_czk(budget)}")
-    ui.note(
-        "Model zkouší kombinace 0–2 kusů u pěti strojů s nejvyšším očekávaným ziskem a vybere "
-        "tu s nejvyšším měsíčním ziskem v rámci rozpočtu. Počítá s fixními náklady a průměrnou "
-        "poptávkou jednotlivých strojů z demonstračních dat – nastavení fixního nákladu "
-        "a scénáře trhu v postranním panelu se zde neuplatní. Rozpočet změníte v panelu."
+    st.markdown(
+        '<div class="de-intro">Aplikace projde všechny kombinace strojů, které se vejdou do '
+        "rozpočtu, a vybere tu s nejvyšším očekávaným měsíčním provozním ziskem. Pokud se "
+        "žádný nákup nevyplatí, doporučí nic nekupovat.</div>",
+        unsafe_allow_html=True,
     )
-    st.write("")
 
-    if best_combo is not None:
-        active_machines = [
-            (machines[i]["machine_type"], best_combo[i])
-            for i in range(n_machines)
-            if best_combo[i] > 0
-        ]
-        total_cost = sum(
-            best_combo[i] * machines[i]["purchase_price"] for i in range(n_machines)
+    def months_text(m) -> str:
+        if m is None:
+            return "–"
+        return f"{fmt_num(m, 1)} měsíce"
+
+    def portfolio_title(p: dict) -> str:
+        return " · ".join(f"{k}× {name}" if k > 1 else name for name, k in p["counts"].items())
+
+    pb = purchase_best
+    if pb["units"] > 0:
+        n_units = pb["units"]
+        unit_word = "stroj" if n_units == 1 else "stroje" if n_units < 5 else "strojů"
+        ui.hero(
+            "Doporučená sestava",
+            portfolio_title(pb),
+            f"{n_units} {unit_word} za {fmt_czk(pb['investment'])} z rozpočtu {fmt_czk(budget)}.",
         )
-        cols = st.columns(max(len(active_machines), 1))
-        for col, (machine_name, count) in zip(cols, active_machines):
-            col.metric(label=f"🚜 {machine_name}", value=f"{count} ks")
+        payback = pf.payback_months(pb)
+        ui.kpi_cards(
+            [
+                dict(label="Celková investice", value=fmt_czk(pb["investment"]),
+                     sub=f"zbývá {fmt_czk(budget - pb['investment'])} z rozpočtu"),
+                dict(label="Očekávaný měsíční provozní zisk", value=fmt_czk(pb["profit"]),
+                     sub=f"tržby {fmt_czk(pb['revenue'])} − náklady {fmt_czk(pb['costs'])}"),
+                dict(label="Prostá návratnost", value=months_text(payback),
+                     sub="investice ÷ měsíční provozní zisk"),
+            ]
+        )
+        stress = pf.profit_with_demand(df, pb["counts"], 0.8)
+        ui.insight(
+            "Jde o <b>průměrný měsíc</b> při očekávané poptávce, ne o zaručený výsledek. "
+            f"Pokud by poptávka byla o 20&nbsp;% nižší, zisk této sestavy by klesl na "
+            f"<b>{fmt_czk(stress)}</b>.",
+            tone="bad" if stress < 0 else "",
+        )
 
-        col_p1, col_p2, col_p3 = st.columns(3)
-        col_p1.metric("Celková investice", fmt_czk(total_cost))
-        col_p2.metric("Očekávaný měsíční zisk sestavy", fmt_czk(best_profit))
-        col_p3.metric("Zbývá z rozpočtu", fmt_czk(budget - total_cost))
-        if total_cost > 0:
-            st.caption(
-                f"Měsíční zisk odpovídá přibližně {fmt_pct(best_profit / total_cost * 100, 2)} "
-                "hodnoty investice."
-            )
+        st.markdown("### Stroje v sestavě")
+        ui.results_cards(
+            [
+                dict(
+                    name=f"{name} – {line['units']} ks",
+                    color=ui.NAVY,
+                    rows=[
+                        ("Investice", "pořizovací cena", fmt_czk(line["investment"]), "", False),
+                        ("Dny pronájmu za měsíc", "poptávka po odečtení poruch",
+                         fmt_num(line["days"], 1), "", False),
+                        ("Tržby", "", fmt_czk(line["revenue"]), "", False),
+                        ("Náklady", "fixní náklad a servis stroje", fmt_czk(line["costs"]), "", False),
+                        ("Provozní zisk", "", fmt_czk(line["profit"]), "", line["profit"] < 0),
+                    ],
+                )
+                for name, line in pb["lines"]
+            ],
+            rec_name="",
+            tag="",
+        )
     else:
-        st.warning("Při daném rozpočtu se nepodařilo najít vhodnou kombinaci strojů.")
+        mp = purchase_min_profitable
+        if mp is None:
+            ui.hero(
+                "Doporučení",
+                "Nekupovat žádný stroj",
+                "Žádná sestava strojů nemá při těchto datech kladný očekávaný provozní zisk.",
+                tone="bad",
+            )
+        else:
+            ui.hero(
+                "Doporučení",
+                "Zatím nekupovat",
+                f"Rozpočet nestačí na žádnou ziskovou sestavu. Nejlevnější zisková volba "
+                f"({portfolio_title(mp)}) stojí {fmt_czk(mp['investment'])}.",
+                tone="bad",
+            )
 
+    # --- Graf: nejlepší zisk podle rozpočtu (stejný výpočet jako doporučení) ---
     st.markdown("### Jak roste zisk s rozpočtem")
-    current_idx = int(np.argmin(np.abs(np.array(budget_values) - budget)))
+    x_max = max(3_000_000, budget * 1.25)
+    steps = [(x, p) for x, p in purchase_frontier if x <= x_max]
+    xs = [x for x, _ in steps] + [x_max]
+    ys = [p["profit"] for _, p in steps] + [steps[-1][1]["profit"]]
+    step_labels = [portfolio_title(p) or "nic nekupovat" for _, p in steps]
+    step_labels.append(step_labels[-1])
     fig_budget = go.Figure()
     fig_budget.add_trace(
         go.Scatter(
-            x=budget_values, y=max_profits, mode="lines+markers", name="Maximální zisk",
-            line=dict(color=ui.BLUE, width=2.5), marker=dict(size=9, color=ui.BLUE),
-            hovertemplate="Rozpočet %{x:,.0f} Kč<br>Max. zisk %{y:,.0f} Kč/měs.<extra></extra>",
+            x=xs, y=ys, mode="lines", line_shape="hv", name="Nejlepší sestava",
+            line=dict(color=ui.BLUE, width=2.5), customdata=step_labels,
+            hovertemplate="Rozpočet od %{x:,.0f} Kč<br>Zisk %{y:,.0f} Kč/měs."
+            "<br>%{customdata}<extra></extra>",
         )
     )
     fig_budget.add_trace(
         go.Scatter(
-            x=[budget_values[current_idx]], y=[max_profits[current_idx]], mode="markers+text",
-            name="Nejbližší zadanému rozpočtu", text=["Váš rozpočet"], textposition="bottom left",
-            marker=dict(size=16, color=ui.ORANGE, line=dict(color="#fff", width=2)),
-            hoverinfo="skip",
+            x=[budget], y=[pb["profit"]], mode="markers+text", name="Váš rozpočet",
+            text=["<b>Váš rozpočet</b>"],
+            textposition="top left" if budget > x_max * 0.5 else "top right",
+            textfont=dict(size=13, color=ui.INK), cliponaxis=False,
+            marker=dict(size=15, color=ui.ORANGE, line=dict(color="#fff", width=2)),
+            hovertemplate=f"Váš rozpočet {fmt_czk(budget)}<br>Zisk {fmt_czk(pb['profit'])}/měs."
+            "<extra></extra>",
         )
     )
-    fig_budget.update_xaxes(title_text="Investiční rozpočet (Kč)", tickformat=",.0f")
-    fig_budget.update_yaxes(title_text="Maximální očekávaný měsíční zisk (Kč)")
-    chart(ui.style_fig(fig_budget, height=380))
-    st.caption(
-        "Křivka je počítána pro rozpočty 0,5–3 mil. Kč. Oranžový bod je hodnota "
-        "nejbližší vašemu rozpočtu."
+    fig_budget.update_xaxes(title_text="Investiční rozpočet (Kč)", tickformat=",.0f",
+                            range=[0, x_max], nticks=6)
+    fig_budget.update_yaxes(title_text="Očekávaný měsíční provozní zisk (Kč)", tickformat=",.0f",
+                            rangemode="tozero")
+    chart(ui.readable_axes(ui.style_fig(fig_budget, height=380, legend=False)))
+    ui.hint(
+        "Každý schod znamená, že vyšší rozpočet umožní lepší sestavu. Oranžový bod je přesně "
+        "váš rozpočet. Najetím na křivku zobrazíte, jaká sestava za daným ziskem stojí."
     )
 
-    with st.expander("🧮 Kontrola jinými výpočetními modely (LP, DP)"):
-        if models_agree:
-            st.success(
-                f"Všechny tři rozhodovací modely se shodují: preferovanou variantou je **{mc_better}**."
-            )
-        else:
-            st.warning(
-                "Rozhodovací modely se neshodují. "
-                "Výsledek je vhodné posoudit také podle rizika a citlivosti vstupů."
-            )
-        col_model1, col_model2, col_model3 = st.columns(3)
-        col_model1.metric("Simulace (Monte Carlo)", mc_better)
-        col_model2.metric("Lineární optimalizace (LP)", lp_better)
-        col_model3.metric("Diskrétní optimalizace (DP)", dp_better)
-
-        st.markdown(
-            "**Jak modely fungují:** simulace pracuje s nejistotou a ukazuje rozpětí výsledků. "
-            "LP a DP rozdělují 30 dní v měsíci mezi oba stroje při pevných předpokladech "
-            "(plné vytížení, průměrné náklady) – jejich částky jsou proto teoretickým stropem, "
-            "ne odhadem skutečného zisku."
+    with st.expander("Předpoklady a metodika"):
+        ui.explain(
+            [
+                ("Jak se sestava vybírá",
+                 f"Prohledají se všechny kombinace 0–{pf.MAX_UNITS} kusů u všech "
+                 f"{len(df)} typů strojů ({fmt_num(len(purchase_options))} možností, včetně "
+                 "varianty nic nekupovat). Vybere se ta s nejvyšším měsíčním provozním ziskem, "
+                 "která se vejde do rozpočtu; při shodě ta levnější. Ztrátová sestava se "
+                 "nikdy nedoporučí."),
+                ("Poptávka",
+                 "Průměrná měsíční poptávka z dat je poptávka po celém typu stroje. Druhý kus "
+                 "stejného typu ji nenásobí: pokryje jen dny, na které první kus nestačí "
+                 "(nejvýše 30 dní na kus). Od dní se odečtou očekávané výpadky kvůli poruchám "
+                 "(pravděpodobnost × průměrná délka)."),
+                ("Náklady",
+                 "Individuální měsíční fixní náklad a průměrný servis každého stroje z dat. "
+                 "Fixní náklad z postranního panelu se zde nepoužívá – ostatní záložky s ním "
+                 "počítají, proto se jejich částky liší. Data neuvádějí, zda fixní náklad "
+                 "zahrnuje splátky."),
+                ("Co model nezahrnuje",
+                 "Společné provozní náklady půjčovny (prostory, mzdy, administrativa – v datech "
+                 "nejsou), úroky, odpisy, daně, sezónnost a kolísání poptávky. Skutečný zisk "
+                 "proto může být nižší."),
+                ("Prostá návratnost",
+                 "Za kolik měsíců by se investice vrátila z provozního zisku, bez úroků a "
+                 "společných nákladů. Pokud fixní náklad obsahuje splátky, je návratnost "
+                 "uvedena opatrně (spíše delší)."),
+                ("Proč zde nejsou LP a DP",
+                 "Dřívější srovnání lineární a diskrétní optimalizace se týkalo jen dvou strojů "
+                 "z panelu a nemohlo potvrdit nákupní sestavu. Úplné prohledání všech kombinací "
+                 "je samo přesnou diskrétní optimalizací."),
+            ]
         )
-        col_lp1, col_lp2, col_lp3 = st.columns(3)
-        col_lp1.metric(f"LP – dny pro {machine_1}", fmt_num(x1_opt, 1))
-        col_lp2.metric(f"LP – dny pro {machine_2}", fmt_num(x2_opt, 1))
-        col_lp3.metric("LP – teoretický zisk", fmt_czk(lp_profit))
-        col_dp1, col_dp2, col_dp3 = st.columns(3)
-        col_dp1.metric(f"DP – dny pro {machine_1}", fmt_num(best_d1))
-        col_dp2.metric(f"DP – dny pro {machine_2}", fmt_num(best_d2))
-        col_dp3.metric("DP – teoretický zisk", fmt_czk(best_dp_profit))
+        st.markdown('<div class="de-section">Ekonomika jednoho kusu podle dat</div>',
+                    unsafe_allow_html=True)
+        unit_rows = []
+        for _, row in df.iterrows():
+            one = pf.type_month(row, 1)
+            unit_rows.append(
+                {
+                    "Stroj": row["machine_type"],
+                    "Cena (Kč)": fmt_num(row["purchase_price"]),
+                    "Poptávka (dny)": fmt_num(row["demand_days_mean"], 0),
+                    "Tržby (Kč/měs.)": fmt_num(one["revenue"]),
+                    "Náklady (Kč/měs.)": fmt_num(one["costs"]),
+                    "Zisk (Kč/měs.)": fmt_num(one["profit"]),
+                }
+            )
+        st.dataframe(pd.DataFrame(unit_rows), hide_index=True, width="stretch")
 
 
 # ==================================================
