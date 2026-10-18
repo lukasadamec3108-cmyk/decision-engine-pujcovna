@@ -15,13 +15,15 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from scipy.optimize import linprog
 
 import portfolio as pf
+import scheduling as sch
 import ui_theme as ui
 
 # Streamlit při novém nasazení spustí app.py znovu, ale už načtené moduly (ui_theme,
-# portfolio) ponechá v paměti ve staré verzi. Explicitní reload zajistí, že se vždy
+# portfolio, scheduling) ponechá v paměti ve staré verzi. Explicitní reload zajistí, že se vždy
 # použije aktuální soubor (jinak hrozí AttributeError u nově přidaných funkcí).
 ui = importlib.reload(ui)
 pf = importlib.reload(pf)
+sch = importlib.reload(sch)
 from ui_theme import fmt_czk, fmt_days, fmt_num, fmt_pct
 
 # ==================================================
@@ -1887,218 +1889,246 @@ with tab5:
 # ZÁLOŽKA 6 – PLÁN ZAKÁZEK
 # ==================================================
 
+@st.cache_data(show_spinner="Hledám plán zakázek…")
+def plan_jobs(jobs: pd.DataFrame, capacity: dict):
+    """Nový plán (celočíselná optimalizace) a přínos jednotlivých zakázek pro plán."""
+    result = sch.optimize_schedule(jobs, capacity)
+    new_plan = sch.evaluate(jobs, result["starts"])
+    contributions = sch.job_contributions(jobs, capacity, sch.summary(new_plan)["penalty"])
+    return result, new_plan, contributions
+
+
 with tab6:
     st.markdown("### Plán zakázek a vytížení strojů")
-    st.caption(
-        "Zakázky ze zásobníku (fiktivní) jsou seřazeny podle očekávaného zisku, rizika "
-        "a priority a naplánovány tak, aby se potřebné stroje nepřekrývaly."
+    st.markdown(
+        '<div class="de-intro">Aplikace rozvrhne 12 zakázek ze zásobníku (fiktivní data) tak, '
+        "aby žádný stroj nebyl ve stejný den využit víckrát, než kolik je kusů, a aby byl "
+        "<b>zisk po penále co nejvyšší</b>.</div>",
+        unsafe_allow_html=True,
     )
 
-    plan = scheduled_jobs.copy()
-    planned_mask = plan["schedule_status"].str.contains("Naplánováno")
-    planned = plan[planned_mask].copy()
+    plan_result, job_plan, job_contrib = plan_jobs(jobs_df, machine_capacity)
+    plan_sum = sch.summary(job_plan)
+    plan_conflicts = sch.conflicts(job_plan, machine_capacity)
 
-    # Zobrazení termínů a penále z existujících dat – plánovací algoritmus se nemění.
-    planned["days_late"] = (planned["end_day"] - planned["deadline_days"]).clip(lower=0).astype(int)
-    planned["penalty"] = planned["days_late"] * planned["delay_penalty_per_day"]
-    planned["deadline_status"] = np.where(planned["days_late"] > 0, "Po termínu", "Včas")
+    # Původní plán (dřívější pravidlo) – jen pro srovnání na stejných datech.
+    old_starts = {
+        idx: int(r["start_day"])
+        for idx, r in scheduled_jobs.iterrows()
+        if str(r["schedule_status"]).endswith("Naplánováno")
+    }
+    old_plan = sch.evaluate(jobs_df, old_starts)
+    old_sum = sch.summary(old_plan)
+    old_conflicts = sch.conflicts(old_plan, machine_capacity)
 
-    planned_count = int(planned_mask.sum())
-    waiting_count = int(plan["schedule_status"].str.contains("Čeká").sum())
-    total_plan_days = int(planned["end_day"].max()) if planned_count else 0
-    late_count = int((planned["days_late"] > 0).sum())
-    total_penalty = float(planned["penalty"].sum())
-
-    col_j1, col_j2, col_j3, col_j4, col_j5 = st.columns(5)
-    col_j1.metric("Naplánované zakázky", planned_count)
-    col_j2.metric("Čekající zakázky", waiting_count)
-    col_j3.metric("Délka plánu", f"{total_plan_days} dní")
-    col_j4.metric("Po termínu", f"{late_count} z {planned_count}")
-    col_j5.metric("Penále za zpoždění", fmt_czk(total_penalty))
-
-    if late_count:
-        st.warning(
-            f"**{late_count} z {planned_count} zakázek skončí po smluvním termínu.** "
-            f"Penále za zpoždění celkem {fmt_czk(total_penalty)} (fiktivní hodnoty). "
-            "Současný plánovací algoritmus termíny zatím nezohledňuje – jeho úprava je "
-            "součástí další etapy vývoje."
+    ui.kpi_cards(
+        [
+            dict(label="Zisk po penále", value=fmt_czk(plan_sum["profit_after_penalty"]),
+                 sub=f"zisk {fmt_czk(plan_sum['profit'])} − penále {fmt_czk(plan_sum['penalty'])}",
+                 negative=plan_sum["profit_after_penalty"] < 0),
+            dict(label="Zakázky po termínu", value=f"{plan_sum['late']} z {plan_sum['scheduled']}",
+                 sub=f"penále celkem {fmt_czk(plan_sum['penalty'])}"),
+            dict(label="Délka plánu", value=fmt_days(plan_sum["length"], 0),
+                 sub=f"{plan_sum['scheduled']} naplánovaných zakázek"),
+        ]
+    )
+    if plan_result["optimal"]:
+        ui.insight(
+            "Řešič <b>prokázal</b>, že při zadaných délkách zakázek, termínech a počtech strojů "
+            "nemá žádný jiný plán nižší celkové penále. Nejde o záruku – skutečné zakázky se "
+            "mohou zdržet nebo změnit."
         )
     else:
-        st.success("Všechny naplánované zakázky skončí do smluvního termínu.")
+        ui.insight(
+            "Zobrazený plán je <b>nejlepší nalezený</b>, optimalitu se v časovém limitu "
+            "nepodařilo prokázat.",
+            tone="bad",
+        )
+    if plan_sum["waiting"]:
+        waiting = job_plan[~job_plan["scheduled"]]["job_name"].tolist()
+        ui.insight(
+            f"Nelze naplánovat (chybí potřebný stroj): <b>{', '.join(waiting)}</b>.", tone="bad"
+        )
 
-    # Doporučená prioritní zakázka (stejné pravidlo jako dosud)
-    available_jobs = planned.copy()
-    available_jobs["priority_score"] = available_jobs["priority"].map(priority_score).fillna(0)
-    available_jobs["risk_score"] = available_jobs["risk_level"].map(risk_score).fillna(0)
-    available_jobs["decision_score"] = (
-        available_jobs["priority_score"] * 100000
-        + available_jobs["expected_revenue"]
-        - available_jobs["risk_score"] * 50000
+    st.markdown("### Srovnání s původním plánem")
+    ui.compare_table(
+        ["Původní plán", "Nový plán"],
+        [
+            ("Zakázky po termínu", [f"{old_sum['late']} z {old_sum['scheduled']}",
+                                    f"{plan_sum['late']} z {plan_sum['scheduled']}"],
+             1 if plan_sum["late"] < old_sum["late"] else None),
+            ("Penále celkem", [fmt_czk(old_sum["penalty"]), fmt_czk(plan_sum["penalty"])],
+             1 if plan_sum["penalty"] < old_sum["penalty"] else None),
+            ("Délka plánu", [fmt_days(old_sum["length"], 0), fmt_days(plan_sum["length"], 0)],
+             1 if plan_sum["length"] < old_sum["length"] else None),
+            ("Zisk po penále", [fmt_czk(old_sum["profit_after_penalty"]),
+                                fmt_czk(plan_sum["profit_after_penalty"])],
+             1 if plan_sum["profit_after_penalty"] > old_sum["profit_after_penalty"] else None),
+            ("Překročení kapacity strojů", [str(len(old_conflicts)), str(len(plan_conflicts))], None),
+        ],
+        rec_index=1,
+        tag="Nový",
     )
-    ranked_jobs = available_jobs.sort_values(
-        by=["decision_score", "risk_score", "expected_revenue"],
-        ascending=[False, True, False],
+    gain = plan_sum["profit_after_penalty"] - old_sum["profit_after_penalty"]
+    ui.hint(
+        f"Obě varianty plánují stejných {plan_sum['scheduled']} zakázek na stejných ukázkových "
+        f"datech. Nový plán je o <b>{fmt_czk(gain)}</b> výhodnější jen díky jinému pořadí a "
+        "využití volných dní strojů. Původní plán řadil zakázky podle skóre bez ohledu na "
+        "termíny a stroj nevyužil, dokud nebyl volný pro další zakázku v pořadí."
     )
-    best_job = ranked_jobs.iloc[0] if not ranked_jobs.empty else None
 
+    # --- Harmonogram ---
     st.markdown("### Harmonogram")
+    planned = job_plan[job_plan["scheduled"]].copy()
+    planned["status"] = np.where(planned["days_late"] > 0, "Po termínu", "Včas")
+    best_job = job_plan.loc[job_contrib.iloc[0]["job_index"]] if not job_contrib.empty else None
     gantt = planned.sort_values(["start_day", "end_day"])
     gantt["hover"] = [
-        f"<b>{r.job_name}</b><br>Den {int(r.start_day)}–{int(r.end_day)} · termín den {int(r.deadline_days)}"
-        f"<br>{r.deadline_status}"
-        + (f" ({int(r.days_late)} dní, penále {fmt_czk(r.penalty)})" if r.days_late else "")
-        + f"<br>Stroje: {r.required_machines.replace(';', ', ')}"
-        f"<br>Priorita: {ui.PRIORITY_CZ.get(r.priority, r.priority)} · "
-        f"Riziko: {ui.RISK_CZ.get(r.risk_level, r.risk_level)}"
-        f"<br>Očekávaný zisk: {fmt_czk(r.expected_profit)}"
+        f"<b>{r.job_name}</b><br>Den {int(r.start_day)}–{int(r.end_day)} · termín den {r.deadline}"
+        f"<br>{r.status}"
+        + (f" ({r.days_late} dní, penále {fmt_czk(r.penalty)})" if r.days_late else "")
+        + f"<br>Stroje: {', '.join(r.machines)}"
+        f"<br>Zisk {fmt_czk(r.profit)} · po penále {fmt_czk(r.profit_after_penalty)}"
         for r in gantt.itertuples()
     ]
     fig_gantt = go.Figure()
     for status, color in (("Včas", ui.BLUE), ("Po termínu", ui.BAD)):
-        part = gantt[gantt["deadline_status"] == status]
+        part = gantt[gantt["status"] == status]
         if part.empty:
             continue
         fig_gantt.add_trace(
             go.Bar(
-                y=part["job_name"], x=part["duration_days"], base=part["start_day"] - 1,
+                y=part["job_name"], x=part["duration"], base=part["start_day"] - 1,
                 orientation="h", name=status,
                 marker=dict(color=color, line=dict(color="#fff", width=2)),
                 hovertext=part["hover"], hoverinfo="text",
             )
         )
-    # pořadí řádků podle začátku zakázky (jedna osa pro obě řady)
-    fig_gantt.update_yaxes(categoryorder="array", categoryarray=list(gantt["job_name"]))
     fig_gantt.add_trace(
         go.Scatter(
-            y=gantt["job_name"], x=gantt["deadline_days"], mode="markers", name="Smluvní termín",
+            y=gantt["job_name"], x=gantt["deadline"], mode="markers", name="Termín",
             marker=dict(symbol="line-ns", size=18, line=dict(color=ui.NAVY, width=3)),
             hovertemplate="Termín: den %{x}<extra></extra>",
         )
     )
-    if best_job is not None:
-        fig_gantt.add_annotation(
-            x=int(best_job["end_day"]), y=best_job["job_name"], text="⭐ Prioritní zakázka",
-            showarrow=False, xanchor="left", xshift=8, font=dict(color=ui.NAVY, size=12),
-        )
+    fig_gantt.update_yaxes(categoryorder="array", categoryarray=list(gantt["job_name"]),
+                           autorange="reversed", title_text="")
+    x_end = max(plan_sum["length"], int(planned["deadline"].max()) if len(planned) else 0) + 1
+    fig_gantt.update_xaxes(title_text="Den plánu", dtick=5, range=[0, x_end])
     fig_gantt.update_layout(barmode="overlay")
-    fig_gantt.update_yaxes(autorange="reversed", title_text="")
-    fig_gantt.update_xaxes(title_text="Den plánu", dtick=5, range=[0, max(total_plan_days, int(planned["deadline_days"].max())) + 4])
-    chart(ui.style_fig(fig_gantt, height=max(360, 34 * len(gantt) + 80)))
-    st.caption(
-        "Modrá = zakázka skončí včas, červená = po termínu. Svislá čárka označuje smluvní termín."
+    ui.readable_axes(ui.style_fig(fig_gantt, height=max(420, 34 * len(gantt) + 140)))
+    # Legenda pod grafem – na mobilu se tak nepřekrývá s ikonami grafu.
+    fig_gantt.update_layout(legend=dict(orientation="h", yanchor="top", y=-0.1, x=0))
+    chart(fig_gantt)
+    ui.hint(
+        "Modrá = zakázka skončí včas, červená = po termínu. Svislá čárka je smluvní termín "
+        "(poslední den, kdy má být zakázka hotová)."
     )
 
-    st.markdown("### Detail zakázek")
-    detail = gantt.assign(
-        **{
-            "Zakázka": gantt["job_name"],
-            "Priorita": gantt["priority"].map(ui.PRIORITY_CZ),
-            "Riziko": gantt["risk_level"].map(ui.RISK_CZ),
-            "Potřebné stroje": gantt["required_machines"].str.replace(";", ", "),
-            "Začátek (den)": gantt["start_day"].astype(int),
-            "Konec (den)": gantt["end_day"].astype(int),
-            "Termín (den)": gantt["deadline_days"].astype(int),
-            "Zpoždění (dny)": gantt["days_late"],
-            "Penále": gantt["penalty"].apply(fmt_czk),
-            "Očekávaný výnos": gantt["expected_revenue"].apply(fmt_czk),
-        }
-    )[["Zakázka", "Priorita", "Riziko", "Potřebné stroje", "Začátek (den)", "Konec (den)",
-       "Termín (den)", "Zpoždění (dny)", "Penále", "Očekávaný výnos"]]
-    st.dataframe(detail, width="stretch", hide_index=True)
-
-    st.markdown("### Vytížení strojů")
-    machine_usage = []
-    for machine in machine_capacity.keys():
-        used_days = 0
-        for _, job in scheduled_jobs.iterrows():
-            required = [m.strip() for m in job["required_machines"].split(";")]
-            if machine in required:
-                used_days += int(job["duration_days"])
-        utilization = used_days / total_plan_days * 100 if total_plan_days > 0 else 0
-        machine_usage.append(
-            {"Stroj": machine, "Využité dny": used_days, "Vytížení (%)": round(utilization, 1)}
-        )
-    machine_usage_df = pd.DataFrame(machine_usage).sort_values("Vytížení (%)", ascending=False)
-
-    most_used_machine = machine_usage_df.iloc[0]
-    bottleneck_machine = most_used_machine["Stroj"]
-    bottleneck_utilization = most_used_machine["Vytížení (%)"]
-
-    fig_usage = go.Figure(
-        go.Bar(
-            x=machine_usage_df["Vytížení (%)"], y=machine_usage_df["Stroj"], orientation="h",
-            marker=dict(
-                color=[ui.ORANGE if v >= 70 else ui.BLUE for v in machine_usage_df["Vytížení (%)"]],
-                line=dict(color="#fff", width=2),
-            ),
-            text=[fmt_pct(v) for v in machine_usage_df["Vytížení (%)"]], textposition="outside",
-            cliponaxis=False,
-            customdata=machine_usage_df["Využité dny"],
-            hovertemplate="%{y}<br>Vytížení %{x:.1f} %<br>Využité dny: %{customdata}<extra></extra>",
-        )
-    )
-    fig_usage.add_vline(
-        x=70, line=dict(color=ui.MUTED, dash="dash", width=1.5),
-        annotation_text="70 % – hranice úzkého hrdla", annotation_position="top",
-    )
-    fig_usage.update_yaxes(autorange="reversed")
-    fig_usage.update_xaxes(title_text="Vytížení v plánu (%)", range=[0, 110])
-    chart(ui.style_fig(fig_usage, height=360, legend=False))
-
-    if bottleneck_utilization >= 70:
-        st.warning(
-            f"🚨 Úzké hrdlo: **{bottleneck_machine}** je vytížen na "
-            f"{fmt_pct(bottleneck_utilization, 0)} délky plánu. Tento stroj brzdí další zakázky."
-        )
-    else:
-        st.success(
-            f"✅ Kapacity jsou vyvážené. Nejvíce vytížený stroj je **{bottleneck_machine}** "
-            f"({fmt_pct(bottleneck_utilization, 0)})."
-        )
-
+    # --- Prioritní zakázka ---
     if best_job is not None:
-        st.markdown("### Doporučená prioritní zakázka")
+        st.markdown("### Zakázka s největším přínosem pro plán")
+        top = job_contrib.iloc[0]
         st.markdown(
             ui.machine_card(
                 best_job["job_name"],
                 ui.ORANGE,
                 [
-                    ("Očekávaný výnos", fmt_czk(best_job["expected_revenue"])),
-                    ("Priorita", ui.PRIORITY_CZ.get(best_job["priority"], best_job["priority"])),
-                    ("Riziko", ui.RISK_CZ.get(best_job["risk_level"], best_job["risk_level"])),
-                    ("Termín v plánu", f"den {int(best_job['start_day'])}–{int(best_job['end_day'])}"),
-                    ("Rozhodovací skóre", f"{fmt_num(best_job['decision_score'])} bodů"),
+                    ("Zisk zakázky", fmt_czk(top["profit"])),
+                    ("Penále, které zakázka přidá plánu", fmt_czk(top["added_penalty"])),
+                    ("Čistý přínos pro plán", f"<b>{fmt_czk(top['contribution'])}</b>"),
+                    ("Termín v plánu", f"den {int(best_job['start_day'])}–{int(best_job['end_day'])}"
+                     f" (smluvní termín den {int(best_job['deadline'])})"),
                 ],
                 recommended=True,
                 tag="Priorita",
             ),
             unsafe_allow_html=True,
         )
+        ui.hint(
+            "Čistý přínos = zisk zakázky − o kolik se kvůli ní zvýší nejnižší možné penále "
+            "celého plánu (její vlastní zpoždění i zdržení ostatních zakázek). Tuto zakázku "
+            "je proto nejméně výhodné ztratit nebo odložit."
+        )
+        with st.expander("Přínos všech zakázek pro plán"):
+            ctab = job_contrib.assign(
+                **{
+                    "Zakázka": job_contrib["job_name"],
+                    "Zisk": job_contrib["profit"].apply(fmt_czk),
+                    "Přidané penále": job_contrib["added_penalty"].apply(fmt_czk),
+                    "Čistý přínos": job_contrib["contribution"].apply(fmt_czk),
+                }
+            )[["Zakázka", "Zisk", "Přidané penále", "Čistý přínos"]]
+            st.dataframe(ctab, width="stretch", hide_index=True)
 
-        with st.expander("📊 Pořadí zakázek podle rozhodovacího skóre"):
-            score_table = ranked_jobs[
-                ["job_name", "priority", "risk_level", "expected_revenue", "decision_score"]
-            ].copy()
-            score_table["priority"] = score_table["priority"].map(ui.PRIORITY_CZ)
-            score_table["risk_level"] = score_table["risk_level"].map(ui.RISK_CZ)
-            score_table["expected_revenue"] = score_table["expected_revenue"].apply(fmt_czk)
-            score_table["decision_score"] = score_table["decision_score"].apply(fmt_num)
-            score_table.columns = ["Zakázka", "Priorita", "Riziko", "Očekávaný výnos", "Rozhodovací skóre"]
-            st.dataframe(score_table, width="stretch", hide_index=True)
-            st.caption(
-                "Skóre = priorita × 100 000 + očekávaný výnos − riziko × 50 000. "
-                "Pořadí v plánu používá jiné skóre (zisk upravený o riziko, priorita, "
-                "dostupnost strojů, penále) – sjednocení je navrženo do další etapy."
-            )
+    # --- Detail ---
+    st.markdown("### Detail zakázek")
+    detail = gantt.assign(
+        **{
+            "Zakázka": gantt["job_name"],
+            "Stroje": gantt["machines"].apply(", ".join),
+            "Začátek (den)": gantt["start_day"].astype(int),
+            "Konec (den)": gantt["end_day"].astype(int),
+            "Termín (den)": gantt["deadline"].astype(int),
+            "Zpoždění (dny)": gantt["days_late"].astype(int),
+            "Tržba": gantt["revenue"].apply(fmt_czk),
+            "Náklady": gantt["costs"].apply(fmt_czk),
+            "Zisk": gantt["profit"].apply(fmt_czk),
+            "Penále": gantt["penalty"].apply(fmt_czk),
+            "Zisk po penále": gantt["profit_after_penalty"].apply(fmt_czk),
+            "Priorita": gantt["priority"].map(ui.PRIORITY_CZ),
+            "Riziko": gantt["risk_level"].map(ui.RISK_CZ),
+        }
+    )[["Zakázka", "Stroje", "Začátek (den)", "Konec (den)", "Termín (den)", "Zpoždění (dny)",
+       "Tržba", "Náklady", "Zisk", "Penále", "Zisk po penále", "Priorita", "Riziko"]]
+    st.dataframe(detail, width="stretch", hide_index=True)
 
-    with st.expander("⏱️ Ilustrativní úspora času"):
-        baseline_days = 30
-        saved_days = baseline_days - total_plan_days
-        daily_profit = 15000
-        col_i1, col_i2 = st.columns(2)
-        col_i1.metric("Úspora proti referenčnímu plánu 30 dní", f"{saved_days} dní")
-        col_i2.metric("Ilustrativní hodnota úspory", fmt_czk(saved_days * daily_profit))
-        st.caption(
-            "Ilustrativní výpočet s pevnými předpoklady: referenční plán 30 dní a hodnota "
-            "15 000 Kč za každý ušetřený den. Nezohledňuje penále za zpoždění."
+    # --- Vytížení strojů ---
+    st.markdown("### Vytížení strojů")
+    machine_usage_df = sch.utilization(job_plan, machine_capacity)
+    bottleneck_machine = machine_usage_df.iloc[0]["machine"]
+    bottleneck_utilization = float(machine_usage_df.iloc[0]["utilization"])
+    fig_usage = go.Figure(
+        go.Bar(
+            x=machine_usage_df["utilization"],
+            y=[f"{m} ({u} ks)" if u > 1 else m
+               for m, u in zip(machine_usage_df["machine"], machine_usage_df["units"])],
+            orientation="h",
+            marker=dict(color=ui.BLUE, line=dict(color="#fff", width=2)),
+            text=[fmt_pct(v) for v in machine_usage_df["utilization"]], textposition="outside",
+            cliponaxis=False, customdata=machine_usage_df["used_days"],
+            hovertemplate="%{y}<br>Vytížení %{x:.1f} %<br>Obsazené dny: %{customdata}<extra></extra>",
+        )
+    )
+    fig_usage.update_yaxes(autorange="reversed")
+    fig_usage.update_xaxes(title_text="Vytížení v plánu (%)", range=[0, 130])
+    chart(ui.readable_axes(ui.style_fig(fig_usage, height=360, legend=False)))
+    ui.hint(
+        f"Vytížení = obsazené dny stroje ÷ (počet kusů × délka plánu {fmt_days(plan_sum['length'], 0)}). "
+        f"Nejvytíženější je <b>{bottleneck_machine}</b> ({fmt_pct(bottleneck_utilization, 0)})."
+    )
+
+    with st.expander("Předpoklady a metodika"):
+        ui.explain(
+            [
+                ("Cíl plánu",
+                 "Co nejvyšší zisk po penále. Tržba, náklady a zisk zakázky na pořadí nezávisí, "
+                 "takže při plánování všech zakázek je to totéž jako co nejnižší celkové penále. "
+                 "Při stejném penále se zakázky dokončí co nejdříve."),
+                ("Pojmy",
+                 "<b>Tržba</b> = očekávaná tržba zakázky, <b>náklady</b> = přímé náklady zakázky "
+                 "(z dat), <b>zisk</b> = tržba − náklady, <b>penále</b> = dny po termínu × denní "
+                 "penále, <b>zisk po penále</b> = zisk − penále."),
+                ("Stroje",
+                 "Každá zakázka potřebuje po celou dobu všechny své stroje. V jednom dni lze stroj "
+                 "použít tolikrát, kolik je kusů (vibrační deska 2 ks, ostatní 1 ks). Volné dny "
+                 "stroje může využít kterákoli zakázka."),
+                ("Jak se plán hledá",
+                 "Celočíselná optimalizace (SciPy, řešič HiGHS) projde všechny přípustné začátky "
+                 "zakázek. Pokud řešič optimum v časovém limitu neprokáže, aplikace to uvede."),
+                ("Co model nezahrnuje",
+                 "Víkendy a svátky, pozdější možný začátek zakázky, přejezdy a obsluhu strojů, "
+                 "pronájmy strojů mimo zakázky, nejistotu délky zakázek a riziko (priorita "
+                 "a riziko jsou jen informativní)."),
+            ]
         )

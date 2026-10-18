@@ -96,9 +96,10 @@ a dvourozměrná mapa ziskovosti cena × dny.
 a textové zdůvodnění doporučení generované **pevně danými pravidly** podle vypočtených metrik.
 Aplikace nevyužívá generativní umělou inteligenci.
 
-**Plánování zakázek:** zakázky se řadí podle rozhodovacího skóre (zisk upravený o riziko, priorita,
-dostupnost strojů, penále za zpoždění) a plánují se postupně tak, aby nedošlo ke kolizi
-v obsazenosti potřebných strojů.
+**Plánování zakázek** (`scheduling.py`): celočíselná optimalizace (SciPy `milp`, řešič HiGHS)
+hledá rozvrh s nejnižším celkovým penále za zpoždění, tedy s nejvyšším ziskem po penále,
+při respektování počtu kusů každého stroje v každém dni. Pokud řešič optimum neprokáže,
+aplikace to uvede. Pro srovnání zobrazuje i původní plán podle rozhodovacího skóre.
 
 ## Ukázkový scénář rozhodování
 
@@ -118,7 +119,8 @@ Provozovatel zvažuje, zda dokoupit **mini bagr**, nebo **pásový dumper**.
 5. **Nákup strojů:** aplikace projde všechny kombinace strojů v rámci rozpočtu a ukáže sestavu
    s nejvyšším očekávaným provozním ziskem, její návratnost a zisk podle výše rozpočtu.
    Pokud se nákup nevyplatí, doporučí nic nekupovat.
-6. **Zakázky:** posoudí, zda by druhý kus stroje uvolnil úzké hrdlo v plánování zakázek.
+6. **Plán zakázek:** uvidí rozvrh zakázek s nejnižším penále, srovnání s původním plánem
+   a zakázku s největším čistým přínosem pro plán.
 7. **Report:** stáhne investiční report ve formátu DOCX jako podklad pro další diskusi.
 
 Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investiční doporučení.
@@ -143,7 +145,8 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 ├── app.py                           # Streamlit aplikace (výpočty, záložky, export reportu)
 ├── ui_theme.py                      # vzhled: barvy, české formátování čísel, karty, šablona grafů
 ├── portfolio.py                     # výběr nákupní sestavy strojů v rámci rozpočtu
-├── tests/test_portfolio.py          # testy výběru sestavy (python tests/test_portfolio.py)
+├── scheduling.py                    # plán zakázek (celočíselná optimalizace)
+├── tests/                           # testy (python tests/test_portfolio.py, test_scheduling.py)
 ├── assets/decision_engine_mark.svg  # vlastní neutrální symbol aplikace
 ├── data/
 │   ├── machines_demo.csv            # fiktivní parametry 8 typů strojů
