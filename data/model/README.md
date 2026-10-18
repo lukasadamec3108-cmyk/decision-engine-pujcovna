@@ -96,6 +96,28 @@ jako fiktivní nesou příznak „fiktivní data“.
 Volitelné nastavení `direct_cost_includes_machines` (`ano` / `ne`) v `settings.csv` určuje, zda přímé
 náklady zakázek už obsahují vlastní stroje. Dokud není zadané, je příspěvek zakázky neúplný.
 
+## Kapacitní modul (`capacity.py`, E2.3A)
+
+Modul počítá nad `fleet_units`, `maintenance`, `rental_bookings`, `jobs` a `job_requirements`;
+aplikace ho zatím nepoužívá.
+
+- **Dny:** celé dny, začátek i konec **včetně** (pronájem `start_day`–`end_day`, servis
+  `start_day` + `days` − 1, zakázka začátek + `duration_days` − 1). Navazující termín (den po
+  skončení) je v pořádku, předání ve stejný den je konflikt. Volitelné datum prvního dne plánu
+  převede čísla dní na kalendářní data (správně přes konec měsíce i roku).
+- **Kapacita typu v daný den** = kusy ve `fleet_units` k dispozici ten den (`owned`, `leased`;
+  `ordered` až od `available_from_day`) − kusy v servisu. Počítá se v kusech, ne ve strojodnech.
+- **Stavy:** `confirmed` blokuje kapacitu; `tentative` a `opportunity` se vykazují zvlášť jako
+  riziko; `cancelled` (zatím není v datech) se ignoruje.
+- **Rezervace pronájmu** jsou jen na úrovni typu – konkrétní kus se jim nepřiřazuje.
+- **Potvrzené zakázky** nemají v datech pevný termín: bez plánu se berou jako možné obsazení
+  v okně nejdřívější začátek – termín, a výsledek tam je „nelze určit“, pokud by na tom záleželo.
+- **Neplatné nebo neúplné záznamy** se vypíšou a dotčený typ je „nelze určit“, nikdy „volno“.
+
+Pro spolehlivý kalendář chybí: datum prvního dne plánu, skutečné rezervace pronájmů, plánovaný
+servis, pevné termíny zakázek, stav `cancelled`, dny na převoz / předání mezi nasazeními
+a případně přiřazení rezervací ke konkrétním kusům.
+
 ## Budoucí využití
 
 - **E2 – jednotná ekonomika:** jeden zdroj nákladů a cen pro všechny záložky.
