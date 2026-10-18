@@ -13,7 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import scheduling as sch  # noqa: E402
 
-DEMO = pd.read_csv(ROOT / "data" / "jobs_demo.csv")
+import datamodel as dm  # noqa: E402
+
+DEMO = dm.legacy_jobs(dm.load_model())
 DEMO_CAPACITY = {
     "Mini bagr": 1, "Pásový dumper": 1, "Smykový nakladač": 1, "Vibrační deska": 2,
     "Kolový bagr": 1, "Silniční válec": 1, "Řezačka asfaltu": 1, "Nákladní auto": 1,
