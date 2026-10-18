@@ -88,8 +88,9 @@ a dvourozměrná mapa ziskovosti cena × dny.
 **Optimalizace:**
 - lineární programování (`scipy.optimize.linprog`, metoda HiGHS) pro rozdělení kapacity mezi dva stroje,
 - diskrétní optimalizace úplným prohledáním celočíselných variant,
-- výběr portfolia strojů v rámci investičního rozpočtu: prohledání kombinací 0–2 kusů
-  u pěti strojů s nejvyšším očekávaným ziskem.
+- výběr nákupní sestavy v rámci investičního rozpočtu (`portfolio.py`): úplné prohledání
+  kombinací 0–2 kusů u všech typů strojů včetně varianty „nic nekupovat“; poptávka po typu
+  stroje se mezi kusy dělí (nejvýše 30 dní na kus), náklady jsou individuální podle dat.
 
 **Rozhodovací pravidla:** bodová scorecard (očekávaný zisk, riziko ztráty, VaR, návratnost)
 a textové zdůvodnění doporučení generované **pevně danými pravidly** podle vypočtených metrik.
@@ -114,8 +115,9 @@ Provozovatel zvažuje, zda dokoupit **mini bagr**, nebo **pásový dumper**.
    scénář (P10), hodnotu v riziku a pravděpodobnost ztrátového měsíce.
 4. **Citlivost:** zjistí, které vstupy mají na výsledek největší vliv, při jakém vytížení se stroj
    dostává do zisku a jaká je minimální denní cena pronájmu.
-5. **Optimalizace:** ověří, zda se doporučení shoduje napříč modely, a podívá se, jakou kombinaci strojů
-   by bylo výhodné pořídit v rámci zadaného rozpočtu.
+5. **Nákup strojů:** aplikace projde všechny kombinace strojů v rámci rozpočtu a ukáže sestavu
+   s nejvyšším očekávaným provozním ziskem, její návratnost a zisk podle výše rozpočtu.
+   Pokud se nákup nevyplatí, doporučí nic nekupovat.
 6. **Zakázky:** posoudí, zda by druhý kus stroje uvolnil úzké hrdlo v plánování zakázek.
 7. **Report:** stáhne investiční report ve formátu DOCX jako podklad pro další diskusi.
 
@@ -140,6 +142,8 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 ```
 ├── app.py                           # Streamlit aplikace (výpočty, záložky, export reportu)
 ├── ui_theme.py                      # vzhled: barvy, české formátování čísel, karty, šablona grafů
+├── portfolio.py                     # výběr nákupní sestavy strojů v rámci rozpočtu
+├── tests/test_portfolio.py          # testy výběru sestavy (python tests/test_portfolio.py)
 ├── assets/decision_engine_mark.svg  # vlastní neutrální symbol aplikace
 ├── data/
 │   ├── machines_demo.csv            # fiktivní parametry 8 typů strojů
