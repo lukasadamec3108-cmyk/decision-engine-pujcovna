@@ -71,9 +71,15 @@ def build_mgmt_text(machine_1, machine_2, expected_profit_mini, expected_profit_
 
 @st.cache_data
 def load_data_model():
-    """Společná datová vrstva (data/model/, fiktivní ukázka) a výsledek její kontroly."""
+    """Společná datová vrstva (data/model/, fiktivní ukázka) a výsledek její kontroly.
+
+    Do mezipaměti se ukládají jen obyčejné tabulky a n-tice – ne objekty tříd z modulu
+    datamodel. Ten se při každém běhu znovu načítá (importlib.reload); kdyby se to stalo
+    souběžně v jiné relaci, uložení objektu staré třídy do mezipaměti by selhalo.
+    """
     model = dm.load_model()
-    return model, dm.validate(model)
+    issues = [(i.severity, i.table, i.message) for i in dm.validate(model)]
+    return {name: getattr(model, name) for name in dm.SCHEMA}, issues
 
 
 def load_data() -> pd.DataFrame:
@@ -161,7 +167,9 @@ sb_budget = st.sidebar.container()
 sb_jobs = st.sidebar.container()
 sb_advanced = st.sidebar.expander("Pokročilé nastavení")
 
-data_model, data_issues = load_data_model()
+_tables, _issues = load_data_model()
+data_model = dm.DataModel(**_tables)
+data_issues = [dm.Issue(*issue) for issue in _issues]
 if dm.errors(data_issues):
     st.error(
         "Data aplikace neprošla kontrolou, výpočty proto nelze spustit:\n\n"
