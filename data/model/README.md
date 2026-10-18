@@ -77,6 +77,25 @@ přesně stejné tabulky.
 | počty kusů natvrdo v `app.py` | řádky v `fleet_units` |
 | — | `jobs.status = confirmed` (všechny ukázkové zakázky se plánují jako dosud) |
 
+## Ekonomický modul (`economics.py`, E2.1)
+
+Modul počítá nad těmito tabulkami, ale aplikace ho zatím nepoužívá.
+
+- **Náklady flotily (fixní)** – za každý vlastněný nebo leasingový kus a měsíc, jen jednou za flotilu.
+  Celek je přesný i s nerozdělenými náklady; rozpad na vlastnické / provozní je do doplnění neúplný.
+- **Příspěvek z pronájmu** = cena/den × dny − variabilní náklad pronájmu × dny.
+- **Příspěvek ze zakázky** = tržba − přímé náklady − variabilní náklady strojů × strojodny − penále;
+  náklady strojů se odečtou jen tehdy, když nejsou v přímých nákladech.
+- **Celkový výsledek** = příspěvky z pronájmů a zakázek − fixní náklady flotily − režie.
+- **Ušlý zisk** = dny pronájmu, o které firma přijde kvůli zakázce, × příspěvek dne pronájmu.
+
+Stavy údajů: „0“ = skutečná nula; prázdná buňka = nezadáno → výsledek je **neúplný** a vypíše,
+co chybí; text nebo záporné číslo = neplatné → **nelze spočítat**. Výsledky z dat označených
+jako fiktivní nesou příznak „fiktivní data“.
+
+Volitelné nastavení `direct_cost_includes_machines` (`ano` / `ne`) v `settings.csv` určuje, zda přímé
+náklady zakázek už obsahují vlastní stroje. Dokud není zadané, je příspěvek zakázky neúplný.
+
 ## Budoucí využití
 
 - **E2 – jednotná ekonomika:** jeden zdroj nákladů a cen pro všechny záložky.

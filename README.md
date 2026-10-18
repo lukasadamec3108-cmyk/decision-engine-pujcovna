@@ -145,9 +145,10 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 ├── app.py                           # Streamlit aplikace (výpočty, záložky, export reportu)
 ├── ui_theme.py                      # vzhled: barvy, české formátování čísel, karty, šablona grafů
 ├── datamodel.py                     # společná datová vrstva: načtení, kontrola, převod pro výpočty
+├── economics.py                     # ekonomický modul (E2.1): náklady flotily, příspěvky, celkový výsledek
 ├── portfolio.py                     # výběr nákupní sestavy strojů v rámci rozpočtu
 ├── scheduling.py                    # plán zakázek (celočíselná optimalizace)
-├── tests/                           # testy (python tests/test_datamodel.py, test_portfolio.py, test_scheduling.py)
+├── tests/                           # testy (python -m pytest tests)
 │   └── fixtures/legacy/             # původní tabulky pro kontrolu zpětné kompatibility
 ├── assets/decision_engine_mark.svg  # vlastní neutrální symbol aplikace
 ├── data/
@@ -171,6 +172,12 @@ jejich požadavky na stroje, obsluha a společná nastavení. Náklady jsou rozd
 provozní fixní a variabilní, aby se později nezapočítaly dvakrát. Při načtení se data
 zkontrolují (typy, rozsahy, vazby mezi tabulkami); při chybě aplikace výpočty nespustí.
 Podrobný popis tabulek a jejich budoucího využití je v [`data/model/README.md`](data/model/README.md).
+
+**Ekonomický modul** (`economics.py`, etapa E2.1) je připravený výpočtový základ pro společnou
+ekonomiku pronájmu i vlastních zakázek: fixní náklady flotily (vlastnické, provozní, nerozdělené),
+variabilní náklady podle využití, příspěvek z pronájmu, příspěvek ze zakázky, podklady pro ušlý
+zisk a celkový výsledek. Každý výsledek nese stav **úplný / neúplný (co chybí) / nelze spočítat**
+a příznak fiktivních dat. Aplikace modul zatím nepoužívá – zobrazené výsledky se nemění.
 
 ### Spuštění lokálně
 
