@@ -129,6 +129,11 @@ def inject_css() -> None:
             font-size: .82rem; color: {UI_MUTED}; border-top: 1px solid {UI_LINE};
             padding-top: .8rem; margin-top: .5rem; margin-bottom: .8rem;
         }}
+        .de-user {{
+            font-size: .85rem; color: {UI_MUTED}; border-top: 1px solid {UI_LINE};
+            padding-top: .8rem; margin-top: .6rem; margin-bottom: .4rem;
+        }}
+        .de-user b {{ color: {INK}; }}
 
         /* Záložky */
         .stTabs [data-baseweb="tab-list"] {{ gap: .15rem; border-bottom: 1px solid {UI_LINE}; overflow-x: auto; }}

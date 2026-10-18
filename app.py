@@ -1,4 +1,4 @@
-import hmac
+import html
 import importlib
 import os
 from io import BytesIO
@@ -14,15 +14,17 @@ from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from scipy.optimize import linprog
 
+import auth
 import datamodel as dm
 import portfolio as pf
 import scheduling as sch
 import ui_theme as ui
 
-# Streamlit při novém nasazení spustí app.py znovu, ale už načtené moduly (ui_theme,
+# Streamlit při novém nasazení spustí app.py znovu, ale už načtené moduly (ui_theme, auth,
 # datamodel, portfolio, scheduling) ponechá v paměti ve staré verzi. Explicitní reload zajistí, že se vždy
 # použije aktuální soubor (jinak hrozí AttributeError u nově přidaných funkcí).
 ui = importlib.reload(ui)
+auth = importlib.reload(auth)
 dm = importlib.reload(dm)
 pf = importlib.reload(pf)
 sch = importlib.reload(sch)
@@ -71,9 +73,15 @@ def build_mgmt_text(machine_1, machine_2, expected_profit_mini, expected_profit_
 
 @st.cache_data
 def load_data_model():
-    """Společná datová vrstva (data/model/, fiktivní ukázka) a výsledek její kontroly."""
+    """Společná datová vrstva (data/model/, fiktivní ukázka) a výsledek její kontroly.
+
+    Do mezipaměti se ukládají jen obyčejné tabulky a n-tice – ne objekty tříd z modulu
+    datamodel. Ten se při každém běhu znovu načítá (importlib.reload); kdyby se to stalo
+    souběžně v jiné relaci, uložení objektu staré třídy do mezipaměti by selhalo.
+    """
     model = dm.load_model()
-    return model, dm.validate(model)
+    issues = [(i.severity, i.table, i.message) for i in dm.validate(model)]
+    return {name: getattr(model, name) for name in dm.SCHEMA}, issues
 
 
 def load_data() -> pd.DataFrame:
@@ -97,39 +105,78 @@ APP_SUBTITLE = "Investiční analýza půjčovny"
 APP_FOCUS = "Půjčovna malostrojů"
 DEMO_BADGE = "Ukázková data"
 
-# Heslo se načítá pouze ze Streamlit secrets (klíč "password" na nejvyšší úrovni).
-# str() a strip() zajistí, že nevadí číselná hodnota bez uvozovek ani mezery navíc.
+# Přihlášení (modul auth.py). Údaje jsou jen ve Streamlit secrets:
+# - jen klíč `password` → dosavadní přihlášení jedním heslem (beze změny),
+# - sekce [users] → samostatné účty (jméno + heslo, v secrets jen hash hesla).
 try:
-    PASSWORD = str(st.secrets.get("password", "")).strip()
+    AUTH = auth.load_config(st.secrets)
 except Exception:
-    PASSWORD = ""
+    AUTH = auth.load_config({})
 
-if not PASSWORD:
-    st.error(
-        "Přístupové heslo není nastaveno. Doplňte klíč `password` "
-        "do Streamlit secrets (Settings → Secrets)."
-    )
+
+def _log_out() -> None:
+    """Odhlásí uživatele. Přihlašovací pole dostanou nový klíč, aby prohlížeč znovu
+    neodeslal dříve vyplněné heslo (jinak by uživatele hned přihlásil zpět)."""
+    for key in ("authenticated", "user_id", "user_name", "user_role", "admin_pw1", "admin_pw2"):
+        st.session_state.pop(key, None)
+    nonce = st.session_state.get("login_nonce", 0)
+    for key in (f"login_user_{nonce}", f"login_password_{nonce}"):
+        st.session_state.pop(key, None)
+    st.session_state["login_nonce"] = nonce + 1
+
+
+if not auth.can_log_in(AUTH):
+    if AUTH["mode"] == "missing":
+        st.error(
+            "Přístupové heslo není nastaveno. Doplňte klíč `password` "
+            "do Streamlit secrets (Settings → Secrets)."
+        )
+    else:
+        st.error(
+            "Přihlašovací účty nejsou správně nastavené – žádný aktivní účet nemá platné heslo. "
+            "Zkontrolujte sekci `[users]` ve Streamlit secrets (Settings → Secrets)."
+        )
     st.stop()
+
+# Změna secrets (např. deaktivace účtu) se projeví při další akci přihlášeného uživatele.
+if st.session_state.get("authenticated") and not auth.still_allowed(
+    AUTH, st.session_state.get("user_id", auth.SINGLE_USER.username)
+):
+    _log_out()
 
 # Po úspěšném přihlášení se přihlašovací pole skryje (stav je uložen v relaci).
 if not st.session_state.get("authenticated", False):
+    users_mode = AUTH["mode"] == "users"
     _, login_col, _ = st.columns([1, 1.2, 1])
     with login_col:
-        ui.login_intro(APP_TITLE, APP_SUBTITLE, "Pro pokračování zadejte přístupové heslo.")
-        password = st.text_input(
-            "Přístupové heslo",
-            type="password",
-            help="Heslo je nastaveno ve Streamlit secrets. Po zadání stiskněte Enter.",
+        ui.login_intro(
+            APP_TITLE, APP_SUBTITLE,
+            "Přihlaste se svým uživatelským jménem a heslem." if users_mode
+            else "Pro pokračování zadejte přístupové heslo.",
         )
-        # Tlačítko jen potvrdí zadané heslo (stejně jako Enter); ověření níže je beze změny.
+        nonce = st.session_state.get("login_nonce", 0)
+        username = ""
+        if users_mode:
+            username = st.text_input("Uživatelské jméno", key=f"login_user_{nonce}")
+        password = st.text_input(
+            "Heslo" if users_mode else "Přístupové heslo",
+            type="password",
+            key=f"login_password_{nonce}",
+            help="Po zadání stiskněte Enter." if users_mode
+            else "Heslo je nastaveno ve Streamlit secrets. Po zadání stiskněte Enter.",
+        )
+        # Tlačítko jen potvrdí zadané údaje (stejně jako Enter).
         st.button("Přihlásit se", type="primary", width="stretch")
-        if password and hmac.compare_digest(
-            password.strip().encode("utf-8"), PASSWORD.encode("utf-8")
-        ):
-            st.session_state["authenticated"] = True
-            st.rerun()
-        if password:
-            st.error("Nesprávné heslo.")
+        if password and (username or not users_mode):
+            user = auth.authenticate(AUTH, username, password)
+            if user is not None:
+                _log_out()
+                st.session_state.update(
+                    authenticated=True, user_id=user.username, user_name=user.name,
+                    user_role=user.role,
+                )
+                st.rerun()
+            st.error(auth.GENERIC_ERROR if users_mode else "Nesprávné heslo.")
         st.caption(
             "Pilotní prototyp. Všechny stroje, ceny, náklady a zakázky jsou fiktivní ukázková data."
         )
@@ -160,8 +207,42 @@ sb_market = st.sidebar.container()
 sb_budget = st.sidebar.container()
 sb_jobs = st.sidebar.container()
 sb_advanced = st.sidebar.expander("Pokročilé nastavení")
+sb_user = st.sidebar.container()
 
-data_model, data_issues = load_data_model()
+# --- Přihlášený uživatel, odhlášení a nástroj správce (jen role admin) ---
+with sb_user:
+    st.markdown(
+        f'<div class="de-user">Přihlášen: <b>{html.escape(st.session_state.get("user_name", ""))}</b>'
+        f' · {html.escape(auth.ROLES.get(st.session_state.get("user_role", ""), ""))}</div>',
+        unsafe_allow_html=True,
+    )
+    st.button("Odhlásit se", key="logout", on_click=_log_out, width="stretch")
+    if st.session_state.get("user_role") == "admin":
+        with st.expander("Správa účtů (jen administrátor)"):
+            if AUTH["mode"] == "users":
+                for u in AUTH["users"].values():
+                    st.markdown(f"- **{html.escape(u.name)}** (`{u.username}`) – {u.role_label}, "
+                                + ("aktivní" if u.active else "neaktivní"))
+                for problem in AUTH["problems"]:
+                    st.warning(problem)
+            else:
+                st.markdown("Aplikace používá jedno společné heslo (účty zatím nejsou nastavené).")
+            st.markdown("**Vytvořit hash hesla pro Streamlit secrets**")
+            pw1 = st.text_input("Nové heslo", type="password", key="admin_pw1")
+            pw2 = st.text_input("Heslo znovu", type="password", key="admin_pw2")
+            if pw1 or pw2:
+                problems = auth.password_problems(pw1)
+                if pw1 != pw2:
+                    st.error("Hesla se neshodují.")
+                elif problems:
+                    st.error("Heslo nevyhovuje: " + ", ".join(problems) + ".")
+                else:
+                    st.code(auth.hash_password(pw1), language=None)
+                    st.caption("Hash zkopírujte do password_hash v secrets. Heslo se nikam neukládá.")
+
+_tables, _issues = load_data_model()
+data_model = dm.DataModel(**_tables)
+data_issues = [dm.Issue(*issue) for issue in _issues]
 if dm.errors(data_issues):
     st.error(
         "Data aplikace neprošla kontrolou, výpočty proto nelze spustit:\n\n"
