@@ -144,10 +144,12 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 ```
 ├── app.py                           # Streamlit aplikace (výpočty, záložky, export reportu)
 ├── ui_theme.py                      # vzhled: barvy, české formátování čísel, karty, šablona grafů
+├── auth.py                          # přihlašování: jedno heslo nebo uživatelské účty (hash hesel)
 ├── datamodel.py                     # společná datová vrstva: načtení, kontrola, převod pro výpočty
 ├── economics.py                     # ekonomický modul (E2.1): náklady flotily, příspěvky, celkový výsledek
 ├── portfolio.py                     # výběr nákupní sestavy strojů v rámci rozpočtu
 ├── scheduling.py                    # plán zakázek (celočíselná optimalizace)
+├── tools/hash_password.py           # vytvoření hashe hesla pro secrets (heslo se zadává skrytě)
 ├── tests/                           # testy (python -m pytest tests)
 │   └── fixtures/legacy/             # původní tabulky pro kontrolu zpětné kompatibility
 ├── assets/decision_engine_mark.svg  # vlastní neutrální symbol aplikace
@@ -198,6 +200,34 @@ Heslo se načítá výhradně ze Streamlit secrets (klíč `password`) a není s
 
 - **Lokálně:** soubor `.streamlit/secrets.toml`. Je uvedený v `.gitignore`, takže se do repozitáře nedostane.
 - **Streamlit Community Cloud:** nastavení aplikace → *Settings* → *Secrets* → řádek `password = "..."`.
+
+### Uživatelské účty (volitelné)
+
+Bez sekce `[users]` v secrets funguje přihlášení jedním heslem jako dosud. Po přidání sekce
+`[users]` se přihlašuje **uživatelským jménem a heslem** a každý účet má vlastní údaje:
+
+```toml
+password = "…"                 # stávající heslo – zůstává
+
+[users.lukas]
+name = "Lukáš"
+role = "admin"                 # admin | tester | owner
+active = true
+legacy_password = true         # přihlašuje se stávajícím heslem `password`
+
+[users.honza]
+name = "Honza Podroužek"
+role = "tester"
+active = true
+password_hash = "pbkdf2_sha256$600000$…"
+```
+
+- V secrets se ukládá jen **hash hesla** (PBKDF2-HMAC-SHA256 se solí), ne heslo samotné.
+  Hash vytvoří administrátor v aplikaci (*Správa účtů*) nebo příkazem `python tools/hash_password.py`.
+- Účet bez `active = true` se nepřihlásí; deaktivace nebo změna hesla jednoho účtu ostatní neovlivní
+  a přihlášeného uživatele odhlásí při jeho další akci.
+- Nástroj *Správa účtů* vidí jen role `admin`. Veřejná registrace neexistuje.
+- V postranním panelu je jméno přihlášeného uživatele a tlačítko **Odhlásit se**.
 
 ### Vizuální identita
 
