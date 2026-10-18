@@ -3,5 +3,5 @@ numpy
 python-docx
 openpyxl
 streamlit>=1.50
-scipy
+scipy>=1.9
 plotly
