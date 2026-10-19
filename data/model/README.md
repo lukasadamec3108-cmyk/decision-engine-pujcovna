@@ -129,6 +129,23 @@ Pro spolehlivý kalendář chybí: datum prvního dne plánu, skutečné rezerva
 servis, plán zakázek, který bere ohled na pronájmy a servis, stav `cancelled`, dny na převoz / předání mezi nasazeními
 a případně přiřazení rezervací ke konkrétním kusům.
 
+## Přehled využití (E2.4)
+
+Záložka **Kapacita strojů → Přehled využití** sčítá denní kapacitu z kapacitního modulu (stejná
+data, filtry a plán zakázek jako kalendář):
+
+- **Kapacita** = součet kusů k dispozici v jednotlivých dnech (kusodny).
+- Každý den a typ stroje patří do jedné skupiny: běžný den → pronájem, vlastní zakázky, servis
+  a volno (při neúplných údajích „nelze určit“ místo volna); konfliktní den (víc nároků než kusů)
+  → celá kapacita jako **konflikt** – bez rozhodnutí o přednosti nelze určit, kdo stroj má.
+  Nároky nad počet kusů = **poptávka nad kapacitu**, do kapacity se nepočítají.
+- **Využití** = (pronájmy + vlastní zakázky) ÷ kapacita; servis se nepočítá. V konfliktním dni je
+  jistě produktivních nejméně kusy − servis, nejvýše min(kusy, pronájmy + zakázky) → případné
+  rozpětí. Nikdy nepřesáhne 100 %.
+- **Předběžné rezervace** kapacitu neblokují a do využití se nepočítají.
+- Hodnocení (orientační): vysoké ≥ 80 %, nízké < 40 %; zasahuje-li rozpětí do dvou kategorií,
+  „nelze určit“.
+
 ## Obnovení dat v běžící aplikaci
 
 Aplikace drží načtená data v mezipaměti. Klíčem je otisk obsahu všech CSV souborů v této složce

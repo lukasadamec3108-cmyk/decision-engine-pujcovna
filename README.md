@@ -62,7 +62,7 @@ Výsledky jsou rozděleny do sedmi záložek:
 | 🎯 **Co ovlivňuje zisk** | Tornádo graf citlivosti na změnu vstupů o ±10 %, minimální denní cena pronájmu, zisk podle počtu dní (bod zvratu) a mapa ziskovosti (cena × počet dní). |
 | 🛒 **Nákup strojů** | Optimální nákup strojů v rámci rozpočtu, křivka rozpočet vs. maximální zisk; v detailu kontrola lineární (LP) a diskrétní (DP) optimalizací. |
 | 🗓️ **Plán zakázek** | Harmonogram (Ganttův diagram) se smluvními termíny, zakázky po termínu a penále za zpoždění, detail zakázek, vytížení strojů, úzké hrdlo a prioritní zakázka. |
-| 📅 **Kapacita strojů** | Kalendář dostupnosti strojů po dnech: volné kusy, pronájmy, zakázky z plánu (i po termínu), servis, konflikty a stav „nelze určit“; filtr typů a období, detail dne a ověření nového požadavku. |
+| 📅 **Kapacita strojů** | Kalendář dostupnosti strojů po dnech: volné kusy, pronájmy, zakázky z plánu (i po termínu), servis, konflikty a stav „nelze určit“; filtr typů a období, detail dne a ověření nového požadavku. Přepínač **Přehled využití**: kapacita flotily v kusodnech, pronájmy, vlastní zakázky, servis, volno, využití a konfliktní dny – celkem i podle typu stroje. |
 
 Čísla jsou zobrazena v českém formátu, grafy jsou interaktivní (Plotly) a vzhled je přizpůsoben i menším obrazovkám.
 

@@ -404,3 +404,151 @@ def check_request(cal: cp.Calendar, type_id: str, start: int, end: int, quantity
                 reasons=[describe(x, jobs) for x in r["reasons"]],
                 warnings=[(day_label(d, plan_start), describe(t, jobs)) for d, t in r["warnings"]],
                 raw=r)
+
+
+# ---------------------------------------------------------------------------
+# E2.4 – Přehled využití strojového parku
+# ---------------------------------------------------------------------------
+# Vše se počítá z denní tabulky capacity.daily_capacity (stejná jako pro kalendář).
+#
+# Kapacita = součet kusů k dispozici v jednotlivých dnech (kusodny). Každý den a typ stroje
+# se rozdělí do právě jedné skupiny, takže se nic nezapočítá dvakrát:
+#   - běžný den (bez konfliktu): pronájem, vlastní zakázky, servis a volno přesně podle
+#     potvrzených nároků; při stavu „nelze určit“ (např. zakázka bez termínu) je zbytek místo
+#     volna „nelze určit“,
+#   - konfliktní den (nároky > kusy): všechny kusy jsou obsazené, ale bez rozhodnutí o prioritě
+#     nelze určit, zda pronájmem, zakázkou, nebo servisem → skupina „konflikt“. Nároky nad
+#     počet kusů se vykazují zvlášť jako „poptávka nad kapacitu“ (není součástí kapacity).
+# Využití = produktivní obsazení (pronájem + vlastní zakázky; servis ne) ÷ kapacita.
+# U konfliktních dní je produktivní část jistá jen zčásti: nejméně kusy – servis, nejvýše
+# min(kusy, pronájem + zakázky). Kde se dolní a horní mez liší, ukáže se rozpětí.
+# Předběžné rezervace kapacitu neblokují – vykazují se jen informativně.
+
+HIGH_USE, LOW_USE = 80.0, 40.0       # orientační hranice vysokého / nízkého využití (%)
+UTIL_GROUPS = ["rental", "job", "maintenance", "conflict", "unknown", "free"]
+UTIL_LABELS = {"rental": "pronájem", "job": "vlastní zakázky", "maintenance": "servis",
+               "conflict": "konflikt – rozdělení nelze určit", "unknown": "nelze určit",
+               "free": "volná kapacita"}
+UTIL_COLORS = {**COLORS, "conflict": COLORS["over"], "unknown": "#9CA3AF"}
+
+
+def utilization_table(df: pd.DataFrame, names: dict, uncertain_types=()) -> pd.DataFrame:
+    """Využití podle typu stroje z výstupu grid() / capacity.daily_capacity.
+
+    Sloupce: type_id, name, units_max (nejvíc kusů v jednom dni), capacity (kusodny),
+    rental, job, maintenance, conflict, unknown, free (kusodny; součet = capacity),
+    productive_min, productive_max, util_min, util_max (%), conflict_days, excess_demand
+    (nároky nad kapacitu), tentative (předběžné), capacity_known, rating.
+    `uncertain_types` = typy, u nichž nelze spolehlivě určit počet kusů (Calendar.unknown_capacity).
+    """
+    rows = []
+    for t in [x for x in names if x in set(df["type_id"])] + sorted(set(df["type_id"]) - set(names)):
+        part = df[df["type_id"] == t]
+        acc = {g: 0 for g in UTIL_GROUPS}
+        p_min = p_max = excess = conflict_days = 0
+        for r in part.itertuples():
+            units, m, rent, job, free = int(r.units), int(r.maintenance), int(r.rental), int(r.job), int(r.free)
+            if free < 0:                                  # konfliktní den – rozdělení nelze určit
+                acc["conflict"] += units
+                p_min += max(0, units - m)
+                p_max += min(units, rent + job)
+                excess += -free
+                conflict_days += 1
+            else:
+                acc["rental"] += rent
+                acc["job"] += job
+                acc["maintenance"] += m
+                acc["unknown" if r.status == cp.UNKNOWN else "free"] += free
+                p_min += rent + job
+                p_max += rent + job + (free if r.status == cp.UNKNOWN else 0)
+        capacity = int(part["units"].sum())
+        known = t not in set(uncertain_types)
+        u_min = 100.0 * p_min / capacity if capacity else None
+        u_max = 100.0 * p_max / capacity if capacity else None
+        level = lambda v: "vysoké" if v >= HIGH_USE else "nízké" if v < LOW_USE else "střední"
+        if not known or u_min is None or level(u_min) != level(u_max):
+            rating = "nelze určit"        # chybí kapacita, nebo rozpětí zasahuje do dvou kategorií
+        else:
+            rating = level(u_min)
+        rows.append(dict(type_id=t, name=names.get(t, t), units_max=int(part["units"].max()) if len(part) else 0,
+                         capacity=capacity, **acc, productive_min=p_min, productive_max=p_max,
+                         util_min=u_min, util_max=u_max, conflict_days=conflict_days, excess_demand=excess,
+                         tentative=int(part["tentative"].sum()), capacity_known=known, rating=rating))
+    cols = (["type_id", "name", "units_max", "capacity"] + UTIL_GROUPS
+            + ["productive_min", "productive_max", "util_min", "util_max", "conflict_days", "excess_demand",
+               "tentative", "capacity_known", "rating"])
+    return pd.DataFrame(rows, columns=cols)
+
+
+def fleet_utilization(table: pd.DataFrame, df: pd.DataFrame) -> dict:
+    """Souhrn za flotilu. Typy s nejistým počtem kusů se do součtů nezapočítají a vypíšou se."""
+    known = table[table["capacity_known"]]
+    sums = {k: int(known[k].sum()) for k in ["capacity"] + UTIL_GROUPS
+            + ["productive_min", "productive_max", "excess_demand", "tentative"]}
+    cap = sums["capacity"]
+    conflict_days = sorted(df.loc[(df["free"] < 0) & df["type_id"].isin(known["type_id"]), "day"].unique())
+    return dict(**sums, util_min=100.0 * sums["productive_min"] / cap if cap else None,
+                util_max=100.0 * sums["productive_max"] / cap if cap else None,
+                conflict_days=[int(d) for d in conflict_days],
+                excluded=table.loc[~table["capacity_known"], "name"].tolist())
+
+
+def share_text(lo, hi, decimals: int = 1) -> str:
+    """„62,0 %“, při nejistotě rozpětí „61,8–62,2 %“, bez kapacity „nelze určit“."""
+    if lo is None or hi is None or pd.isna(lo) or pd.isna(hi):    # v tabulce se None mění na NaN
+        return "nelze určit"
+    fmt = lambda v: f"{v:.{decimals}f}".replace(".", ",")
+    return f"{fmt(lo)} %" if round(lo, decimals) == round(hi, decimals) else f"{fmt(lo)}–{fmt(hi)} %"
+
+
+def utilization_display(table: pd.DataFrame) -> pd.DataFrame:
+    """Tabulka pro zobrazení (texty v češtině, nejisté hodnoty slovy, ne nulou)."""
+    out = []
+    for r in table.itertuples():
+        cap = f"{r.capacity}" if r.capacity_known else "nelze určit"
+        out.append({
+            "Stroj": r.name, "Kusů": r.units_max if r.capacity_known else "nelze určit",
+            "Kapacita (kusodny)": cap, "Pronájem": r.rental, "Vlastní zakázky": r.job, "Servis": r.maintenance,
+            "Konflikt (nelze rozdělit)": r.conflict, "Nelze určit": r.unknown, "Volno": r.free,
+            "Využití": share_text(r.util_min, r.util_max) if r.capacity_known else "nelze určit",
+            "Konfliktní dny": r.conflict_days, "Hodnocení": r.rating,
+        })
+    return pd.DataFrame(out)
+
+
+def utilization_figure(table: pd.DataFrame, fleet: dict):
+    """Vodorovný skládaný graf: rozdělení kapacity (% kusodnů) pro celou flotilu a každý typ.
+
+    Typy s nejistým počtem kusů se nekreslí (jejich kapacitu nelze určit). Řazení podle jistého
+    využití sestupně; využití (případně rozpětí) je součástí popisku řádku.
+    """
+    import plotly.graph_objects as go
+
+    known = table[table["capacity_known"] & (table["capacity"] > 0)].sort_values(
+        ["util_min", "name"], ascending=[False, True])
+    fleet_row = {g: fleet[g] for g in UTIL_GROUPS}
+    utils = [share_text(fleet["util_min"], fleet["util_max"], 0)] + [
+        share_text(r.util_min, r.util_max, 0) for r in known.itertuples()]
+    labels = [f"{name} · {u}" for name, u in zip(["Celá flotila"] + known["name"].tolist(), utils)]
+    caps = [fleet["capacity"]] + known["capacity"].tolist()
+    patterns = {"conflict": "/", "unknown": "x"}
+    fig = go.Figure()
+    for g in UTIL_GROUPS:
+        values = [fleet_row[g]] + known[g].tolist()
+        shares = [100.0 * v / c if c else 0 for v, c in zip(values, caps)]
+        if not any(values):
+            continue
+        fig.add_trace(go.Bar(
+            y=labels, x=shares, orientation="h", name=UTIL_LABELS[g], customdata=values,
+            marker=dict(color=UTIL_COLORS[g], line=dict(color="#fff", width=1),
+                        pattern=dict(shape=patterns.get(g, ""), fgcolor="#fff", size=6)),
+            hovertemplate="%{y}<br>" + UTIL_LABELS[g] + ": %{customdata} kusodnů (%{x:.1f} %)<extra></extra>",
+        ))
+    fig.update_layout(barmode="stack", bargap=0.3, legend_traceorder="normal")
+    fig.update_xaxes(range=[0, 100], ticksuffix=" %")
+    fig.update_yaxes(autorange="reversed")
+    return fig, 150 + 34 * len(labels)
+
+
+# Legenda pod grafem – nahoře by na mobilu kolidovala s ikonami grafu (jako v záložce 6).
+LEGEND_BELOW = dict(orientation="h", yanchor="top", y=-0.08, xanchor="left", x=0, title_text="")
