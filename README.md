@@ -151,6 +151,7 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 ├── datamodel.py                     # společná datová vrstva: načtení, kontrola, převod pro výpočty
 ├── economics.py                     # ekonomický modul (E2.1): náklady flotily, příspěvky, celkový výsledek
 ├── capacity.py                      # kapacitní plánování strojů (E2.3A): dostupnost, konflikty, požadavky
+├── planner.py                       # plánovací a rozhodovací model (E2.5a) – zatím bez napojení na aplikaci
 ├── capacity_view.py                 # kapacitní kalendář (E2.3B): převod výsledků capacity.py na mřížku
 ├── portfolio.py                     # výběr nákupní sestavy strojů v rámci rozpočtu
 ├── scheduling.py                    # plán zakázek (celočíselná optimalizace)
