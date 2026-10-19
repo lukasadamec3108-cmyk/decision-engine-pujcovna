@@ -129,6 +129,15 @@ Pro spolehlivý kalendář chybí: datum prvního dne plánu, skutečné rezerva
 servis, plán zakázek, který bere ohled na pronájmy a servis, stav `cancelled`, dny na převoz / předání mezi nasazeními
 a případně přiřazení rezervací ke konkrétním kusům.
 
+## Obnovení dat v běžící aplikaci
+
+Aplikace drží načtená data v mezipaměti. Klíčem je otisk obsahu všech CSV souborů v této složce
+(`datamodel.data_fingerprint`, SHA-256, < 1 ms), takže se po jakékoli změně dat – i po novém
+nasazení na Streamlit Cloud bez restartu – načtou znovu. Stejně tak klíč obsahuje otisk
+zdrojového kódu modulů, které uložené výpočty volají (`datamodel`, `scheduling`, `capacity`,
+`capacity_view`), aby se po nasazení nového kódu nepoužily staré výsledky. Záložka **Kapacita strojů** ukazuje
+pod kalendářem počet načtených pronájmů a servisních odstávek a zkrácenou verzi dat.
+
 ## Budoucí využití
 
 - **E2 – jednotná ekonomika:** jeden zdroj nákladů a cen pro všechny záložky.

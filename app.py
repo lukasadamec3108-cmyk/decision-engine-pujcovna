@@ -75,9 +75,15 @@ def build_mgmt_text(machine_1, machine_2, expected_profit_mini, expected_profit_
         )
 
 
-@st.cache_data
-def load_data_model():
+@st.cache_data(max_entries=4)
+def load_data_model(data_version: str, code_version: str):
     """Společná datová vrstva (data/model/, fiktivní ukázka) a výsledek její kontroly.
+
+    data_version = otisk obsahu datových souborů (dm.data_fingerprint). Je součástí klíče
+    mezipaměti: Streamlit Cloud při novém nasazení neukončí běžící proces, takže bez otisku by
+    se vracela data načtená před nasazením. Při změně dat se tak načtou znovu bez restartu.
+    code_version = otisk zdrojového kódu modulů, které uložené funkce volají (CODE_MODULES) –
+    totéž pro nasazení nového kódu (mezipaměť jinak pozná jen změnu kódu této funkce).
 
     Do mezipaměti se ukládají jen obyčejné tabulky a n-tice – ne objekty tříd z modulu
     datamodel. Ten se při každém běhu znovu načítá (importlib.reload); kdyby se to stalo
@@ -244,7 +250,11 @@ with sb_user:
                     st.code(auth.hash_password(pw1), language=None)
                     st.caption("Hash zkopírujte do password_hash v secrets. Heslo se nikam neukládá.")
 
-_tables, _issues = load_data_model()
+# Verze dat a kódu jako součást klíčů mezipaměti (≈ 1 ms na běh) – viz load_data_model.
+CODE_MODULES = (dm, sch, cp, cv)
+data_version = dm.data_fingerprint()
+code_version = dm.files_fingerprint([m.__file__ for m in CODE_MODULES])
+_tables, _issues = load_data_model(data_version, code_version)
 data_model = dm.DataModel(**_tables)
 data_issues = [dm.Issue(*issue) for issue in _issues]
 if dm.errors(data_issues):
@@ -2022,8 +2032,9 @@ with tab5:
 # ==================================================
 
 @st.cache_data(show_spinner="Hledám plán zakázek…")
-def plan_jobs(jobs: pd.DataFrame, capacity: dict):
-    """Nový plán (celočíselná optimalizace) a přínos jednotlivých zakázek pro plán."""
+def plan_jobs(jobs: pd.DataFrame, capacity: dict, code_version: str):
+    """Nový plán (celočíselná optimalizace) a přínos jednotlivých zakázek pro plán.
+    code_version jen obnoví mezipaměť po nasazení nového kódu (viz load_data_model)."""
     result = sch.optimize_schedule(jobs, capacity)
     new_plan = sch.evaluate(jobs, result["starts"])
     contributions = sch.job_contributions(jobs, capacity, sch.summary(new_plan)["penalty"])
@@ -2039,7 +2050,7 @@ with tab6:
         unsafe_allow_html=True,
     )
 
-    plan_result, job_plan, job_contrib = plan_jobs(jobs_df, machine_capacity)
+    plan_result, job_plan, job_contrib = plan_jobs(jobs_df, machine_capacity, code_version)
     plan_sum = sch.summary(job_plan)
     plan_conflicts = sch.conflicts(job_plan, machine_capacity)
 
@@ -2273,11 +2284,11 @@ with tab6:
 # Termíny zakázek přebírá z plánu záložky 6 (stejná funkce plan_jobs, výsledek z mezipaměti).
 
 @st.cache_data(show_spinner=False, max_entries=64)
-def capacity_grid(job_starts: tuple, start: int, end: int, types: tuple, plan_start):
+def capacity_grid(data_version: str, code_version: str, job_starts: tuple, start: int, end: int, types: tuple, plan_start):
     """Mřížka, její HTML a konflikty za období. Streamlit spouští kód všech záložek při každém
-    kliknutí – mezipaměť zajistí, že se kalendář přepočítá jen při změně jeho vstupů.
-    Ukládají se jen obyčejné tabulky a text (viz load_data_model)."""
-    tables, _ = load_data_model()
+    kliknutí – mezipaměť zajistí, že se kalendář přepočítá jen při změně jeho vstupů (včetně
+    změny dat: data_version). Ukládají se jen obyčejné tabulky a text (viz load_data_model)."""
+    tables, _ = load_data_model(data_version, code_version)
     model = dm.DataModel(**tables)
     cal = cv.build(model, dict(job_starts))
     names = cv.type_names(model)
@@ -2297,7 +2308,7 @@ with tab7:
         unsafe_allow_html=True,
     )
 
-    _, cap_plan, _ = plan_jobs(jobs_df, machine_capacity)
+    _, cap_plan, _ = plan_jobs(jobs_df, machine_capacity, code_version)
     cap_jobs = cv.job_info(data_model)
     cap_names = cv.type_names(data_model)
     cap_starts = cv.job_starts_from_plan(jobs_df, cap_plan)
@@ -2329,7 +2340,7 @@ with tab7:
 
     if cap_types:
         cap_grid, cap_html, cap_conf = capacity_grid(
-            tuple(sorted(cap_starts.items())), cap_from, cap_to, tuple(cap_types), cap_start)
+            data_version, code_version, tuple(sorted(cap_starts.items())), cap_from, cap_to, tuple(cap_types), cap_start)
         cap_sum = cv.summary(cap_grid, cap_names)
         n_conf = len(cap_sum["conflict_days"])
         ui.kpi_cards(
@@ -2351,6 +2362,7 @@ with tab7:
             "Konec rezervace i zakázky je včetně posledního dne. Na mobilu kalendář posuňte do strany; "
             "po podržení buňky (na počítači najetí myší) se zobrazí podrobnosti."
         )
+        ui.hint(cv.data_info(data_model, data_version))
         cap_late = cv.late_jobs(cap_cal, cap_jobs, cap_types, cap_from, cap_to)
         if cap_late:
             ui.insight(
