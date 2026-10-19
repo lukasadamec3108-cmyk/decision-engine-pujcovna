@@ -133,7 +133,9 @@ a případně přiřazení rezervací ke konkrétním kusům.
 
 Aplikace drží načtená data v mezipaměti. Klíčem je otisk obsahu všech CSV souborů v této složce
 (`datamodel.data_fingerprint`, SHA-256, < 1 ms), takže se po jakékoli změně dat – i po novém
-nasazení na Streamlit Cloud bez restartu – načtou znovu. Záložka **Kapacita strojů** ukazuje
+nasazení na Streamlit Cloud bez restartu – načtou znovu. Stejně tak klíč obsahuje otisk
+zdrojového kódu modulů, které uložené výpočty volají (`datamodel`, `scheduling`, `capacity`,
+`capacity_view`), aby se po nasazení nového kódu nepoužily staré výsledky. Záložka **Kapacita strojů** ukazuje
 pod kalendářem počet načtených pronájmů a servisních odstávek a zkrácenou verzi dat.
 
 ## Budoucí využití

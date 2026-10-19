@@ -34,6 +34,7 @@ at.run(); at.text_input[0].set_value(password).run()
 def snapshot():
     md = [m.value for m in at.tabs[6].markdown] if len(at.tabs) == 7 else []
     return dict(kpi=[m for m in md if "Dny s konfliktem" in m],
+                new_code=any("NOVÁ VERZE KÓDU" in m for m in md if "cc-table" in m),
                 info=[m for m in md if "Načtená data" in m],
                 plan=[d.value["Konec (den)"].tolist() for d in at.tabs[5].dataframe
                       if "Konec (den)" in d.value.columns],
@@ -53,6 +54,17 @@ path = os.path.join(app_dir, "data", "model", "jobs.csv")                 # data
 text = open(path, encoding="utf-8").read()
 open(path, "w", encoding="utf-8").write(text.replace("J010,", "J010,", 1).replace(",2,1,5,", ",3,1,5,", 1))
 at.run(); out["delsi_J010"] = snapshot()
+# nové nasazení jen s kódem (data beze změny): jiný popisek mřížky a jiné načítání dat
+path = os.path.join(app_dir, "capacity_view.py")
+text = open(path, encoding="utf-8").read()
+open(path, "w", encoding="utf-8").write(text.replace("Stroj / den plánu", "NOVÁ VERZE KÓDU"))
+path = os.path.join(app_dir, "datamodel.py")
+text = open(path, encoding="utf-8").read()
+open(path, "w", encoding="utf-8").write(text.replace(
+    "    return DataModel(**tables)",
+    "    tables['rental_bookings'] = tables['rental_bookings'][tables['rental_bookings']['booking_id'] != 'FIKT-P01']\n"
+    "    return DataModel(**tables)", 1))
+at.run(); out["novy_kod"] = snapshot()
 print("VYSLEDEK" + json.dumps(out, ensure_ascii=False))
 '''
 
@@ -91,6 +103,9 @@ def test_changed_data_files_are_reloaded_without_restart():
     assert out["start"]["plan"] == out["bez_FIKT_P05"]["plan"] == out["bez_servisu"]["plan"]
     # změna dat zakázky (delší J010) se projeví i v plánu záložky 6 – bez restartu
     assert out["delsi_J010"]["plan"] != out["bez_servisu"]["plan"]
+    # nasazení nového kódu bez změny dat se projeví také (mezipaměť zná i verzi kódu)
+    assert not out["delsi_J010"]["new_code"] and out["novy_kod"]["new_code"]
+    assert "5 pronájmů" in out["novy_kod"]["info"][0]
 
 
 def test_data_fingerprint_changes_only_with_csv_content():
@@ -111,6 +126,30 @@ def test_data_fingerprint_changes_only_with_csv_content():
         assert dm.data_fingerprint(tmp) != first                                 # nový soubor
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_code_fingerprint_changes_with_module_source():
+    import scheduling as sch
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        files = []
+        for module in (dm, sch):
+            target = tmp / Path(module.__file__).name
+            shutil.copy(module.__file__, target)
+            files.append(target)
+        first = dm.files_fingerprint(files)
+        assert first == dm.files_fingerprint(list(reversed(files)))              # nezávislé na pořadí
+        files[1].write_text(files[1].read_text(encoding="utf-8") + "\n# změna\n", encoding="utf-8")
+        assert dm.files_fingerprint(files) != first                              # změna scheduling.py
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    # aplikace do klíče mezipaměti zahrnuje všechny moduly, které uložené funkce volají
+    src = (ROOT / "app.py").read_text(encoding="utf-8")
+    assert "CODE_MODULES = (dm, sch, cp, cv)" in src
+    for call in ("load_data_model(data_version, code_version)",
+                 "plan_jobs(jobs_df, machine_capacity, code_version)",
+                 "data_version, code_version, tuple(sorted(cap_starts.items()))"):
+        assert call in src, call
 
 
 def test_data_info_line():

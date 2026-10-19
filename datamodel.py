@@ -124,6 +124,19 @@ def data_fingerprint(directory=DEFAULT_DIR) -> str:
     return digest.hexdigest()
 
 
+def files_fingerprint(paths) -> str:
+    """Otisk obsahu zadaných souborů (SHA-256) – např. zdrojového kódu modulů.
+
+    Mezipaměť Streamlitu (st.cache_data) pozná změnu jen u kódu samotné uložené funkce, ne
+    u modulů, které volá. Otisk jejich zdrojového kódu v klíči zajistí, že se po nasazení
+    nového kódu výsledky spočítají znovu i bez restartu běžícího procesu.
+    """
+    digest = hashlib.sha256()
+    for path in sorted(str(p) for p in paths):
+        digest.update(Path(path).name.encode("utf-8") + b"\0" + Path(path).read_bytes() + b"\0")
+    return digest.hexdigest()
+
+
 def load_model(directory=DEFAULT_DIR) -> DataModel:
     """Načte všechny tabulky jako text (typy kontroluje až validate)."""
     directory = Path(directory)
