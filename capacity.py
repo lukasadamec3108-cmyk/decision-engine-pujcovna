@@ -12,7 +12,9 @@ PRAVIDLA
   (datetime.date) – pak výpočet správně přechází přes konec měsíce i roku. V jednom
   výpočtu se obojí nesmí míchat.
 - Kapacita typu v daný den = kusy ve flotile, které jsou ten den k dispozici (vlastněné
-  a leasingové; objednané až od data dodání) − kusy v servisu / údržbě.
+  a leasingové; objednané až od data dodání) − kusy v servisu / údržbě. Konkrétní kus je
+  v servisu nejvýše jednou za den, i když se jeho servisní záznamy překrývají (dva různé
+  kusy se počítají zvlášť); překryv se hlásí jako upozornění na data (overlapping_maintenance).
 - Počet strojů ≠ strojodny: kapacita i obsazenost se počítají v kusech pro každý den zvlášť.
 - Stavy a blokování kapacity (návrh):
     confirmed              … potvrzené → BLOKUJE kapacitu
@@ -294,9 +296,14 @@ def daily_capacity(cal: Calendar, start, end, type_ids=None) -> pd.DataFrame:
             units = sum(1 for u in cal.units if u.type_id == t and _unit_available(u, day))
             use = {"maintenance": 0, "rental": 0, "job": 0}
             tentative = 0
+            serviced = set()                       # kus v servisu se počítá jednou za den
             for a in cal.assignments:
                 if a.type_id == t and _counts(cal, a, day):
                     if a.status == BLOCKING:
+                        if a.kind == "maintenance" and a.unit_id is not None:
+                            if a.unit_id in serviced:
+                                continue               # překrývající se servis téhož kusu
+                            serviced.add(a.unit_id)
                         use[a.kind] += a.quantity
                     else:
                         tentative += a.quantity
@@ -327,7 +334,7 @@ def unit_occupancy(cal: Calendar, start, end) -> pd.DataFrame:
         for u in cal.units:
             hits = [a for a in cal.assignments if a.unit_id == u.unit_id and a.status == BLOCKING
                     and a.start <= day <= a.end]
-            used = " + ".join(KIND_LABEL[a.kind] for a in hits)
+            used = " + ".join(dict.fromkeys(KIND_LABEL[a.kind] for a in hits))
             if not _unit_available(u, day):
                 planned = " + ".join(KIND_LABEL[a.kind] for a in hits if a.kind != "maintenance")
                 state = "mimo flotilu" + (f" (přesto naplánováno: {planned})" if planned else "")
@@ -385,6 +392,8 @@ def find_conflicts(cal: Calendar, start=None, end=None) -> list:
     for unit_id, items in sorted(by_unit.items()):
         for i, a in enumerate(items):
             for b in items[i + 1:]:
+                if a.kind == b.kind == "maintenance":
+                    continue       # dva servisy téhož kusu nejsou souběh využití (viz overlapping_maintenance)
                 s, e = max(a.start, b.start, start), min(a.end, b.end, end)
                 if s <= e:
                     out.append(dict(kind=_conflict_kind({a.kind, b.kind}), scope="kus",
@@ -405,6 +414,28 @@ def find_conflicts(cal: Calendar, start=None, end=None) -> list:
                                scope="typ", id=t, days=[r.day], sources=src, max_over=int(-r.free),
                                certain=t not in cal.unknown_capacity)
                 out.append(current)
+    return out
+
+
+def overlapping_maintenance(cal: Calendar, start=None, end=None) -> list:
+    """Překrývající se servisní záznamy téhož kusu – upozornění na data (možná duplicita).
+
+    Kapacitu to neovlivní (kus je v servisu jednou za den). Vrací
+    [{unit_id, type_id, days, sources}] pro každou dvojici překrývajících se záznamů.
+    """
+    items = {}
+    for a in cal.assignments:
+        if a.kind == "maintenance" and a.status == BLOCKING and a.unit_id is not None:
+            items.setdefault(a.unit_id, []).append(a)
+    out = []
+    for unit_id, recs in sorted(items.items()):
+        type_id = next(u.type_id for u in cal.units if u.unit_id == unit_id)
+        for i, a in enumerate(recs):
+            for b in recs[i + 1:]:
+                s = max(a.start, b.start, *(x for x in [start] if x is not None))
+                e = min(a.end, b.end, *(x for x in [end] if x is not None))
+                if s <= e:
+                    out.append(dict(unit_id=unit_id, type_id=type_id, days=days(s, e), sources=[a.label, b.label]))
     return out
 
 

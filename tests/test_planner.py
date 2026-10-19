@@ -292,14 +292,18 @@ def test_audit_duplicate_request_refs_are_rejected():
         pl.plan(BASE, {}, [Request("FIKT-P06", "rental", pl.NEW, (("PASOVY_DUMPER", 1),), 21, 22)])
 
 
-def test_audit_overlapping_service_records_are_conservative_and_flagged():
-    # dva servisní záznamy téhož kusu se překrývají: kapacitní model (E2.3A) počítá 2 kusy v servisu
+def test_overlapping_service_records_count_once_in_planner():
+    # dva servisní záznamy téhož kusu se překrývají: kus je v servisu jednou, druhý kus zůstává volný
     m = model(units=2, maintenance=[(f"{BAGR}-01", 1, 3), (f"{BAGR}-01", 2, 3)])
     p = pl.plan(m, new_requests=[rent("N", 2, 3)])
-    assert p.requests["N"]["operational"] == pl.NOT_FEASIBLE          # opatrně – nikdy nad kapacitu
-    assert any("servis" in x["text"] for x in p.manual)               # překryv servisů k ručnímu řešení
-    assert any("podhodnocená" in n for n in p.notes)
-    assert "překrývající se servis" in p.requests["N"]["decision"]
+    assert p.requests["N"]["operational"] == pl.OK_ALONE
+    assert p.manual == []                                             # není to konflikt využití
+    assert any("jen jednou" in n and "duplicitní" in n for n in p.notes)
+    # jediný kus se dvěma servisy: požadavek dál neproveditelný, příčinou je servis
+    m = model(units=1, maintenance=[(f"{BAGR}-01", 1, 3), (f"{BAGR}-01", 2, 3)])
+    p = pl.plan(m, new_requests=[rent("N", 2, 3)])
+    assert p.requests["N"]["operational"] == pl.NOT_FEASIBLE
+    assert all(x[2] == 0 for x in p.requests["N"]["problems"])          # volno 0, ne −1
 
 
 def test_audit_shift_alternatives_stay_inside_window_without_penalty():

@@ -111,7 +111,8 @@ proti zakázce J005. Záložky 1–6 tabulky pronájmů a servisu nepoužívají
   skončení) je v pořádku, předání ve stejný den je konflikt. Volitelné datum prvního dne plánu
   převede čísla dní na kalendářní data (správně přes konec měsíce i roku).
 - **Kapacita typu v daný den** = kusy ve `fleet_units` k dispozici ten den (`owned`, `leased`;
-  `ordered` až od `available_from_day`) − kusy v servisu. Počítá se v kusech, ne ve strojodnech.
+  `ordered` až od `available_from_day`) − kusy v servisu (každý kus nejvýše jednou za den, i při
+  překrývajících se servisních záznamech). Počítá se v kusech, ne ve strojodnech.
 - **Stavy:** `confirmed` blokuje kapacitu; `tentative` a `opportunity` se vykazují zvlášť jako
   riziko; `cancelled` (zatím není v datech) se ignoruje.
 - **Rezervace pronájmu** jsou jen na úrovni typu – konkrétní kus se jim nepřiřazuje.
@@ -165,8 +166,8 @@ Samostatná logika (aplikace ji zatím nepoužívá) nad `capacity.py` a `econom
 - Ekonomicky se porovnávají **všechny** proveditelné kombinace (i menší) – ztrátový požadavek
   (příspěvek < 0) se tak nedoporučí jen proto, že se „vejde“; u zakázky po termínu se odečte penále.
 - Označení požadavků musí být jedinečná (i vůči předběžným rezervacím v datech).
-- Překrývající se servisní záznamy téhož kusu počítá kapacitní model (E2.3A) dvakrát – výsledek je
-  opatrný (kapacita podhodnocená, nikdy překročená), plánovač na to upozorní a překryv jde k ručnímu řešení.
+- Překrývající se servisní záznamy téhož kusu: kus je v servisu nejvýše jednou za den (dva různé
+  kusy zvlášť); překryv není konflikt využití, plánovač na něj upozorní jako na možnou duplicitu dat.
 - **Alternativy**: jen posun zakázky v okně bez penále. Jiný stroj ani externí zapůjčení se
   nenabízí – chybí údaje o zaměnitelnosti strojů a o externích cenách a dostupnosti.
 

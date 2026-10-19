@@ -384,14 +384,9 @@ def plan(model: dm.DataModel, job_starts: Optional[dict] = None, new_requests=()
                                + ", ".join(f"{s}–{e}" for s, e in shifts)) if shifts
                          else f"zakázku {ref} nelze v jejím okně bez penále posunout"))
         out.manual.append(item)
-    double_service = {}
-    for c in cp.find_conflicts(cal):
-        if c["scope"] == "kus" and all(s.startswith(cp.KIND_LABEL["maintenance"]) for s in c["sources"]):
-            unit = next(u for u in cal.units if u.unit_id == c["id"])
-            double_service.setdefault(unit.type_id, set()).update(c["days"])
-            out.notes.append(f"Překrývající se servisní záznamy kusu {c['id']} (dny {c['days'][0]}–{c['days'][-1]}): "
-                             "kapacitní model je počítá dvakrát, kapacita je proto podhodnocená (opatrný "
-                             "výsledek – nikdy nad kapacitu). Opravte záznamy a vyhodnoťte znovu.")
+    for o in cp.overlapping_maintenance(cal):
+        out.notes.append(f"Překrývající se servisní záznamy kusu {o['unit_id']} (dny {o['days'][0]}–{o['days'][-1]}): "
+                         "kus se v servisu počítá jen jednou; zkontrolujte, zda nejde o duplicitní záznam.")
     if cal.open_jobs:
         out.notes.append("Potvrzené zakázky bez termínu v plánu: obsazení nelze určit – "
                          + ", ".join(sorted({j.ref for j in cal.open_jobs})))
@@ -419,9 +414,6 @@ def plan(model: dm.DataModel, job_starts: Optional[dict] = None, new_requests=()
                 shifts = _shift_options(cal, r)
                 entry["alternatives"] = [dict(shift=s, text=f"posun bez penále na dny {s[0]}–{s[1]}") for s in shifts]
                 entry["decision"] = "nelze přijmout v požadovaném termínu – kapacitu drží závazky"
-                if any(d in double_service.get(t, ()) for t, d, _, _, _ in problems):
-                    entry["decision"] += (" (pozor: překrývající se servisní záznamy – kapacita může být "
-                                          "podhodnocená)")
             elif status == UNDETERMINED:
                 entry["decision"] = "nelze rozhodnout – obsazení nelze spolehlivě určit"
                 out.missing_data += [f"{r.ref}: {x}" for x in reasons]

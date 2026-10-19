@@ -310,11 +310,16 @@ def test_random_cases_match_simple_reference():
         for d in range(1, 26):
             n = sum(available(u, d) for u in units)
             used = 0
+            serviced = set()                     # kus v servisu nejvýše jednou za den
             for a in items:
                 if a.status != "confirmed" or not (a.start <= d <= a.end):
                     continue
                 if a.kind == "maintenance" and not available(by_id[a.unit_id], d):
                     continue
+                if a.kind == "maintenance":
+                    if a.unit_id in serviced:
+                        continue
+                    serviced.add(a.unit_id)
                 used += a.quantity
             assert cap.loc[d, "units"] == n and cap.loc[d, "free"] == n - used, (units, items, d)
             r = cp.evaluate_request(cal, BAGR, d, d)
