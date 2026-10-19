@@ -147,6 +147,7 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 ├── auth.py                          # přihlašování: jedno heslo nebo uživatelské účty (hash hesel)
 ├── datamodel.py                     # společná datová vrstva: načtení, kontrola, převod pro výpočty
 ├── economics.py                     # ekonomický modul (E2.1): náklady flotily, příspěvky, celkový výsledek
+├── capacity.py                      # kapacitní plánování strojů (E2.3A): dostupnost, konflikty, požadavky
 ├── portfolio.py                     # výběr nákupní sestavy strojů v rámci rozpočtu
 ├── scheduling.py                    # plán zakázek (celočíselná optimalizace)
 ├── tools/hash_password.py           # vytvoření hashe hesla pro secrets (heslo se zadává skrytě)
@@ -180,6 +181,13 @@ ekonomiku pronájmu i vlastních zakázek: fixní náklady flotily (vlastnické,
 variabilní náklady podle využití, příspěvek z pronájmu, příspěvek ze zakázky, podklady pro ušlý
 zisk a celkový výsledek. Každý výsledek nese stav **úplný / neúplný (co chybí) / nelze spočítat**
 a příznak fiktivních dat. Aplikace modul zatím nepoužívá – zobrazené výsledky se nemění.
+
+**Kapacitní modul** (`capacity.py`, etapa E2.3A) počítá, kolik kusů každého typu stroje je
+v jednotlivých dnech k dispozici a čím jsou obsazené (pronájem, vlastní zakázka, servis), hledá
+konflikty (překryv rezervací, pronájem × zakázka, konflikt se servisem, překročení kapacity typu)
+a vyhodnotí nový požadavek na typ stroje v termínu: **realizovatelné / nerealizovatelné / nelze
+určit**, s problémovými dny a příčinami. Nic nepřesouvá ani neurčuje přednost. Chybějící údaje se
+nikdy nepovažují za volno. Aplikace modul zatím nepoužívá.
 
 ### Spuštění lokálně
 
