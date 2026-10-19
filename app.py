@@ -2297,6 +2297,17 @@ def capacity_grid(data_version: str, code_version: str, job_starts: tuple, start
             cv.conflicts_table(cal, start, end, list(types), names, cv.job_info(model), plan_start))
 
 
+CAP_VIEWS = ["Kalendář dostupnosti", "Přehled využití"]
+
+
+def show_in_calendar(type_id: str) -> None:
+    """Z přehledu využití do kalendáře: filtr i detail dne na vybraný typ stroje.
+    Volá se jako callback tlačítka – před vykreslením widgetů, proto lze měnit jejich stav."""
+    st.session_state["cap_types"] = [type_id]
+    st.session_state["cap_detail_type"] = type_id
+    st.session_state["cap_view"] = CAP_VIEWS[0]
+
+
 with tab7:
     st.markdown("### Kapacita strojů po dnech")
     st.markdown(cv.TAB_CSS, unsafe_allow_html=True)
@@ -2338,7 +2349,11 @@ with tab7:
             + "\n".join(f"- {text}" for _, text in cap_cal.issues)
         )
 
-    if cap_types:
+    cap_view = st.radio(
+        "Zobrazení", CAP_VIEWS, horizontal=True, key="cap_view", label_visibility="collapsed",
+    )
+
+    if cap_view == CAP_VIEWS[0]:
         cap_grid, cap_html, cap_conf = capacity_grid(
             data_version, code_version, tuple(sorted(cap_starts.items())), cap_from, cap_to, tuple(cap_types), cap_start)
         cap_sum = cv.summary(cap_grid, cap_names)
@@ -2352,7 +2367,7 @@ with tab7:
                 dict(label="Nelze určit", value=str(cap_sum["unknown_cells"]),
                      sub="dní × strojů s neúplnými údaji" if cap_sum["unknown_cells"] else "údaje jsou úplné"),
                 dict(label="Nejvytíženější stroj", value=html.escape(cap_sum["busiest"] or "–"),
-                     sub=(f"obsazeno {fmt_pct(cap_sum['busiest_share'], 0)} kusodnů v období"
+                     sub=(f"obsazenost vč. servisu {fmt_pct(cap_sum['busiest_share'], 0)} kusodnů v období"
                           if cap_sum["busiest"] else "")),
             ]
         )
@@ -2407,52 +2422,177 @@ with tab7:
         ui.hint("Pronájmy a zakázky jsou rezervované na typ stroje, ne na konkrétní kus – o volnu rozhodují "
                 "počty kusů výše.")
 
-    st.markdown("### Ověřit nový požadavek")
-    ui.hint("Zjistí, zda lze přijmout požadavek na stroj v daném termínu. Nic se nerezervuje ani nepřesouvá.")
-    q1, q2, q3, q4 = st.columns([3, 1, 1, 1])
-    with q1:
-        req_type = st.selectbox("Typ stroje", cap_types_all, format_func=lambda t: cap_names[t], key="cap_req_type")
-    with q2:
-        req_from = st.number_input("Od dne", min_value=1, max_value=365, value=13, step=1, key="cap_req_from")
-    with q3:
-        req_to = st.number_input("Do dne (včetně)", min_value=1, max_value=365, value=16, step=1,
-                                 key="cap_req_to")
-    with q4:
-        req_qty = st.number_input("Počet kusů", min_value=1, max_value=10, value=1, step=1, key="cap_req_qty")
-    req_tent = st.checkbox("Počítat i s předběžnými rezervacemi (opatrnější pohled)", key="cap_req_tent")
-    req = cv.check_request(cap_cal, req_type, int(req_from), int(req_to), int(req_qty), req_tent,
-                           cap_jobs, cap_start)
-    st.markdown(
-        ui.status_chip(req["status"], req["tone"]) + " " + html.escape(req["headline"]),
-        unsafe_allow_html=True,
-    )
-    if not req["problems"].empty:
-        st.dataframe(req["problems"], width="stretch", hide_index=True)
-    for text in req["reasons"]:
-        st.markdown(f"- {html.escape(text)}")
-    for day_text, text in req["warnings"]:
-        st.markdown(f"- ⚠️ {html.escape(day_text)}: {html.escape(text)}")
+    if cap_view == CAP_VIEWS[0]:
+        st.markdown("### Ověřit nový požadavek")
+        ui.hint("Zjistí, zda lze přijmout požadavek na stroj v daném termínu. Nic se nerezervuje ani nepřesouvá.")
+        q1, q2, q3, q4 = st.columns([3, 1, 1, 1])
+        with q1:
+            req_type = st.selectbox("Typ stroje", cap_types_all, format_func=lambda t: cap_names[t], key="cap_req_type")
+        with q2:
+            req_from = st.number_input("Od dne", min_value=1, max_value=365, value=13, step=1, key="cap_req_from")
+        with q3:
+            req_to = st.number_input("Do dne (včetně)", min_value=1, max_value=365, value=16, step=1,
+                                     key="cap_req_to")
+        with q4:
+            req_qty = st.number_input("Počet kusů", min_value=1, max_value=10, value=1, step=1, key="cap_req_qty")
+        req_tent = st.checkbox("Počítat i s předběžnými rezervacemi (opatrnější pohled)", key="cap_req_tent")
+        req = cv.check_request(cap_cal, req_type, int(req_from), int(req_to), int(req_qty), req_tent,
+                               cap_jobs, cap_start)
+        st.markdown(
+            ui.status_chip(req["status"], req["tone"]) + " " + html.escape(req["headline"]),
+            unsafe_allow_html=True,
+        )
+        if not req["problems"].empty:
+            st.dataframe(req["problems"], width="stretch", hide_index=True)
+        for text in req["reasons"]:
+            st.markdown(f"- {html.escape(text)}")
+        for day_text, text in req["warnings"]:
+            st.markdown(f"- ⚠️ {html.escape(day_text)}: {html.escape(text)}")
 
-    with st.expander("Jak kalendář počítá"):
-        ui.explain(
+        with st.expander("Jak kalendář počítá"):
+            ui.explain(
+                [
+                    ("Zdroj výpočtu",
+                     "Všechny počty, konflikty i ověření požadavku počítá modul kapacitního plánování "
+                     "(capacity.py); kalendář je jen zobrazuje."),
+                    ("Dny",
+                     "Celé dny, začátek i konec včetně. Rezervace může navázat den po skončení předchozí; "
+                     "předání ve stejný den je konflikt."),
+                    ("Kapacita",
+                     "Kusy ve flotile k dispozici ten den minus kusy v servisu. Počítají se kusy, ne strojodny."),
+                    ("Stavy",
+                     "Potvrzené pronájmy, zakázky a servis kapacitu blokují. Předběžné rezervace (přerušovaná linka) ji "
+                     "neblokují, jen varují. Zakázka bez termínu v plánu (nebo neplatný údaj) znamená "
+                     "„nelze určit“ – nikdy volno."),
+                    ("Zakázky",
+                     "Termíny zakázek jsou z plánu záložky 6 včetně zpoždění. Plán zatím nebere ohled na "
+                     "pronájmy a servis, proto tu mohou být konflikty."),
+                    ("Data",
+                     "Pronájmy (FIKT-…) a servisní odstávky jsou fiktivní ukázka; dva konflikty jsou v nich "
+                     "záměrně. Ostatní záložky je nepoužívají."),
+                ]
+            )
+
+    # ------------------------------------------------------------------
+    # E2.4 – Přehled využití (stejné filtry typu a období jako kalendář)
+    # ------------------------------------------------------------------
+    if cap_view == CAP_VIEWS[1]:
+        use_grid, _, _ = capacity_grid(
+            data_version, code_version, tuple(sorted(cap_starts.items())), cap_from, cap_to, tuple(cap_types), cap_start)
+        use_table = cv.utilization_table(use_grid, cap_names, cap_cal.unknown_capacity)
+        use_fleet = cv.fleet_utilization(use_table, use_grid)
+        n_days = cap_to - cap_from + 1
+        cap_total = use_fleet["capacity"]
+        pct = lambda v: (fmt_pct(100.0 * v / cap_total, 0) if cap_total else "nelze určit")
+
+        ui.note(
+            "<b>Ukázková data</b> – přehled vychází z fiktivních pronájmů, servisu a plánu zakázek "
+            "ze záložky 6. Výsledky jsou ilustrativní."
+        )
+        st.markdown(
+            f"**Kapacita flotily ve zvoleném období:** {fmt_num(cap_total)} kusodnů "
+            f"({len(use_table)} typů strojů, {n_days} {'den' if n_days == 1 else 'dny' if n_days < 5 else 'dní'})"
+            + (f" – bez typů s neúplnými údaji o flotile: {html.escape(', '.join(use_fleet['excluded']))}"
+               if use_fleet["excluded"] else "")
+        )
+        use_conf = use_fleet["conflict_days"]
+        ui.kpi_cards(
             [
-                ("Zdroj výpočtu",
-                 "Všechny počty, konflikty i ověření požadavku počítá modul kapacitního plánování "
-                 "(capacity.py); kalendář je jen zobrazuje."),
-                ("Dny",
-                 "Celé dny, začátek i konec včetně. Rezervace může navázat den po skončení předchozí; "
-                 "předání ve stejný den je konflikt."),
-                ("Kapacita",
-                 "Kusy ve flotile k dispozici ten den minus kusy v servisu. Počítají se kusy, ne strojodny."),
-                ("Stavy",
-                 "Potvrzené pronájmy, zakázky a servis kapacitu blokují. Předběžné rezervace (přerušovaná linka) ji "
-                 "neblokují, jen varují. Zakázka bez termínu v plánu (nebo neplatný údaj) znamená "
-                 "„nelze určit“ – nikdy volno."),
-                ("Zakázky",
-                 "Termíny zakázek jsou z plánu záložky 6 včetně zpoždění. Plán zatím nebere ohled na "
-                 "pronájmy a servis, proto tu mohou být konflikty."),
-                ("Data",
-                 "Pronájmy (FIKT-…) a servisní odstávky jsou fiktivní ukázka; dva konflikty jsou v nich "
-                 "záměrně. Ostatní záložky je nepoužívají."),
+                dict(label="Využití flotily", value=cv.share_text(use_fleet["util_min"], use_fleet["util_max"]),
+                     sub=f"pronájmy a vlastní zakázky z {fmt_num(cap_total)} kusodnů (servis se nepočítá)"),
+                dict(label="Volná kapacita", value=f"{fmt_num(use_fleet['free'])} kusodnů",
+                     sub=f"{pct(use_fleet['free'])} kapacity"
+                     + (f" · nelze určit {fmt_num(use_fleet['unknown'])}" if use_fleet["unknown"] else "")),
+                dict(label="Konfliktní dny", value=str(len(use_conf)),
+                     sub=("bez konfliktu v období" if not use_conf else
+                          "dny: " + cv.days_text(use_conf, cap_start)
+                          + f" · poptávka nad kapacitu {fmt_num(use_fleet['excess_demand'])} kusodnů"),
+                     negative=bool(use_conf)),
             ]
         )
+        ui.kpi_cards(
+            [
+                dict(label="Pronájmy", value=f"{fmt_num(use_fleet['rental'])} kusodnů",
+                     sub=f"{pct(use_fleet['rental'])} kapacity · potvrzené rezervace"),
+                dict(label="Vlastní zakázky", value=f"{fmt_num(use_fleet['job'])} kusodnů",
+                     sub=f"{pct(use_fleet['job'])} kapacity · podle plánu záložky 6"),
+                dict(label="Servis", value=f"{fmt_num(use_fleet['maintenance'])} kusodnů",
+                     sub=f"{pct(use_fleet['maintenance'])} kapacity · stroj nedostupný"),
+            ]
+        )
+        if use_fleet["conflict"]:
+            ui.insight(
+                f"V konfliktních dnech je <b>{fmt_num(use_fleet['conflict'])} kusodnů</b> obsazených, ale bez "
+                "rozhodnutí o přednosti nelze určit, zda pronájmem, zakázkou, nebo servisem – v grafu "
+                "i tabulce jsou vedené zvlášť jako „konflikt“. Proto může být využití uvedené rozpětím.",
+                tone="bad",
+            )
+
+        use_fig, use_height = cv.utilization_figure(use_table, use_fleet)
+        use_fig = ui.readable_axes(ui.style_fig(use_fig, height=use_height))
+        use_fig.update_layout(legend=cv.LEGEND_BELOW)
+        chart(use_fig)
+        ui.hint(
+            "Každý řádek = 100 % kapacity typu stroje (kusy × dny). Číslo za názvem = využití "
+            "(pronájmy + vlastní zakázky). Servis je nedostupná kapacita, ne využití."
+        )
+
+        high = use_table[use_table["rating"] == "vysoké"]["name"].tolist()
+        low = use_table[use_table["rating"] == "nízké"]["name"].tolist()
+        ui.insight(
+            f"<b>Vysoké využití</b> (aspoň {fmt_num(cv.HIGH_USE)} %): "
+            f"{html.escape(', '.join(high)) if high else 'žádný stroj'} · "
+            f"<b>Nízké využití</b> (pod {fmt_num(cv.LOW_USE)} %): "
+            f"{html.escape(', '.join(low)) if low else 'žádný stroj'}. Hranice jsou orientační."
+        )
+        if use_fleet["tentative"]:
+            ui.hint(
+                f"Předběžné rezervace: {fmt_num(use_fleet['tentative'])} kusodnů – kapacitu neblokují "
+                "a do využití se nepočítají."
+            )
+
+        st.markdown("### Využití podle typu stroje")
+        st.dataframe(cv.utilization_display(use_table), width="stretch", hide_index=True)
+
+        n1, n2 = st.columns([3, 2])
+        with n1:
+            use_pick = st.selectbox("Detail stroje v kalendáři", use_table["type_id"].tolist(),
+                                    format_func=lambda t: cap_names.get(t, t), key="use_detail_type")
+        with n2:
+            st.button("Zobrazit v kalendáři", key="use_to_calendar", on_click=show_in_calendar,
+                      args=(use_pick,), width="stretch")
+
+        with st.expander("Jak se přehled počítá"):
+            ui.explain(
+                [
+                    ("Zdroj",
+                     "Denní kapacita z kapacitního modulu – stejná jako v kalendáři (stejné filtry, data "
+                     "a plán zakázek ze záložky 6)."),
+                    ("Kapacita",
+                     "Součet kusů k dispozici v jednotlivých dnech (kusodny). Objednaný stroj se počítá až "
+                     "od dodání."),
+                    ("Rozdělení",
+                     "Každý den a stroj patří do jedné skupiny – nic se nepočítá dvakrát. Běžný den: "
+                     "pronájem, vlastní zakázky, servis a volno. Konfliktní den (víc nároků než kusů): "
+                     "celá kapacita je „konflikt“, protože bez rozhodnutí o přednosti nelze určit, kdo "
+                     "stroj skutečně má. Nároky nad počet kusů jsou „poptávka nad kapacitu“ a do "
+                     "kapacity se nepočítají."),
+                    ("Využití",
+                     "(pronájmy + vlastní zakázky) ÷ kapacita. Servis se nepočítá. V konfliktním dni je "
+                     "jisté jen to, co servis nemůže zabrat; proto může vyjít rozpětí. Nikdy nepřesáhne "
+                     "100 %."),
+                    ("Obsazenost × využití",
+                     "Obsazenost v kalendáři („Nejvytíženější stroj“) zahrnuje i servis – stroj je "
+                     "nedostupný. Využití v tomto přehledu servis nezahrnuje – jen produktivní obsazení "
+                     "pronájmy a vlastními zakázkami."),
+                    ("Předběžné rezervace",
+                     "Kapacitu neblokují a do využití se nepočítají – jsou uvedené jen pro informaci."),
+                    ("Hodnocení",
+                     f"Vysoké využití od {fmt_num(cv.HIGH_USE)} %, nízké pod {fmt_num(cv.LOW_USE)} %. Hranice jsou "
+                     "orientační – nejsou podložené skutečnými firemními daty. Zasahuje-li rozpětí využití "
+                     "do dvou kategorií, je hodnocení „nelze určit“."),
+                    ("Nelze určit",
+                     "Kde chybí údaje (např. zakázka bez termínu v plánu), zbylá kapacita není volno, "
+                     "ale „nelze určit“."),
+                ]
+            )

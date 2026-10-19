@@ -69,12 +69,12 @@ print("VYSLEDEK" + json.dumps(out, ensure_ascii=False))
 '''
 
 
-def run_copy(app_root: Path = ROOT) -> dict:
+def run_copy(app_root: Path = ROOT, script: str = SCRIPT) -> dict:
     tmp = Path(tempfile.mkdtemp())
     try:
         shutil.copytree(app_root, tmp / "app", ignore=shutil.ignore_patterns(
             ".git", "tests", "__pycache__", "secrets.toml", "*.xlsx"))
-        (tmp / "run.py").write_text(SCRIPT, encoding="utf-8")
+        (tmp / "run.py").write_text(script, encoding="utf-8")
         res = subprocess.run([sys.executable, str(tmp / "run.py"), str(tmp / "app"), secrets.token_urlsafe(12)],
                              capture_output=True, text=True, timeout=600, cwd=tmp)
         line = [x for x in res.stdout.splitlines() if x.startswith("VYSLEDEK")]
