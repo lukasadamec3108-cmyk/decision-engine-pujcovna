@@ -269,11 +269,13 @@ def contribution(model: dm.DataModel, req: Request) -> Value:
             parts.append(ec.rental_contribution(model, t, days, req.price_day).scaled(q))
         result = ec.total(parts)
     else:
+        # dny po termínu dokončení → penále (economics.job_contribution, days_late)
+        late = max(0, req.end - req.deadline) if req.deadline is not None else 0
         if req.in_data:
-            result = ec.job_contribution(model, req.ref)
+            result = ec.job_contribution(model, req.ref, days_late=late)
             revenue_known = _float(model.jobs.set_index("job_id").loc[req.ref, "revenue"]) is not None
         else:
-            result = ec.job_contribution(_with_new_job(model, req), req.ref)
+            result = ec.job_contribution(_with_new_job(model, req), req.ref, days_late=late)
             revenue_known = req.revenue is not None
     if result.value is None:                                   # neplatný údaj
         return Value(None, None, result.invalid + result.missing, result)
@@ -290,14 +292,29 @@ def _sum(values) -> Value:
     return Value(lo, hi, missing)
 
 
+def economic_note(v: Value) -> str:
+    """Ekonomický stav jednoho požadavku slovy (odděleně od provozní proveditelnosti)."""
+    czk = lambda x: f"{x:,.0f} Kč".replace(",", " ")
+    if v.hi is not None and v.hi < 0:
+        return f"ztrátový – příspěvek nejvýše {czk(v.hi)}"
+    if v.exact:
+        return f"příspěvek {czk(v.lo)}"
+    if v.hi is not None:
+        return f"příspěvek nejvýše {czk(v.hi)} – chybí: " + "; ".join(v.missing)
+    return "příspěvek nelze určit – chybí: " + ("; ".join(v.missing) or "neznámé")
+
+
 def _economic_verdict(options: list, values: dict) -> dict:
-    """options = [kombinace (tuple požadavků)]. Doporučí jen jasně lepší kombinaci."""
+    """options = všechny proveditelné kombinace (i menší – ztrátový požadavek je lepší vynechat).
+    Doporučí jen kombinaci, která je lepší i v nejhorším případě než každá jiná."""
     sums = {o: _sum(values[r.ref] for r in o) for o in options}
     missing = tuple(dict.fromkeys(m for v in sums.values() for m in v.missing))
-    for o in options:
-        others = [p for p in options if p != o]
-        if sums[o].lo is not None and all(sums[p].hi is not None and sums[o].lo > sums[p].hi for p in others):
-            return dict(verdict=RECOMMEND, choice=o, values=sums, missing=missing,
+    known = [o for o in options if sums[o].lo is not None]
+    if known:
+        best = max(known, key=lambda o: sums[o].lo)
+        others = [o for o in options if o is not best]
+        if all(sums[o].hi is not None and sums[best].lo > sums[o].hi for o in others):
+            return dict(verdict=RECOMMEND, choice=best, values=sums, missing=missing,
                         text="Kombinace je ekonomicky lepší i v nejhorším případě.")
     if all(v.exact for v in sums.values()) and len({v.lo for v in sums.values()}) == 1:
         return dict(verdict=EQUAL, choice=None, values=sums, missing=missing,
@@ -367,16 +384,29 @@ def plan(model: dm.DataModel, job_starts: Optional[dict] = None, new_requests=()
                                + ", ".join(f"{s}–{e}" for s, e in shifts)) if shifts
                          else f"zakázku {ref} nelze v jejím okně bez penále posunout"))
         out.manual.append(item)
+    double_service = {}
+    for c in cp.find_conflicts(cal):
+        if c["scope"] == "kus" and all(s.startswith(cp.KIND_LABEL["maintenance"]) for s in c["sources"]):
+            unit = next(u for u in cal.units if u.unit_id == c["id"])
+            double_service.setdefault(unit.type_id, set()).update(c["days"])
+            out.notes.append(f"Překrývající se servisní záznamy kusu {c['id']} (dny {c['days'][0]}–{c['days'][-1]}): "
+                             "kapacitní model je počítá dvakrát, kapacita je proto podhodnocená (opatrný "
+                             "výsledek – nikdy nad kapacitu). Opravte záznamy a vyhodnoťte znovu.")
     if cal.open_jobs:
         out.notes.append("Potvrzené zakázky bez termínu v plánu: obsazení nelze určit – "
                          + ", ".join(sorted({j.ref for j in cal.open_jobs})))
 
     # 2) Požadavky: předběžné z dat + nové; každý zůstává ve výsledku viditelný
     requests = (tentative_requests(model, job_starts) if include_data_tentative else []) + list(new_requests)
+    refs = [r.ref for r in requests]
+    dups = sorted({x for x in refs if refs.count(x) > 1})
+    if dups:
+        raise ValueError("Označení požadavků musí být jedinečná (i vůči předběžným rezervacím v datech): "
+                         + ", ".join(dups))
     economics_needed = []
     for r in requests:
         entry = dict(request=r, label=r.label, operational=None, problems=[], reasons=[], alternatives=[],
-                     economics=None, decision="", note="")
+                     economics=None, economic_note="", decision="", note="")
         invalid = _validate(r, cal)
         if invalid:
             entry.update(operational=UNDETERMINED, reasons=invalid,
@@ -389,6 +419,9 @@ def plan(model: dm.DataModel, job_starts: Optional[dict] = None, new_requests=()
                 shifts = _shift_options(cal, r)
                 entry["alternatives"] = [dict(shift=s, text=f"posun bez penále na dny {s[0]}–{s[1]}") for s in shifts]
                 entry["decision"] = "nelze přijmout v požadovaném termínu – kapacitu drží závazky"
+                if any(d in double_service.get(t, ()) for t, d, _, _, _ in problems):
+                    entry["decision"] += (" (pozor: překrývající se servisní záznamy – kapacita může být "
+                                          "podhodnocená)")
             elif status == UNDETERMINED:
                 entry["decision"] = "nelze rozhodnout – obsazení nelze spolehlivě určit"
                 out.missing_data += [f"{r.ref}: {x}" for x in reasons]
@@ -401,6 +434,7 @@ def plan(model: dm.DataModel, job_starts: Optional[dict] = None, new_requests=()
     values = {r.ref: contribution(model, r) for r in economics_needed}
     for r in economics_needed:
         out.requests[r.ref]["economics"] = values[r.ref]
+        out.requests[r.ref]["economic_note"] = economic_note(values[r.ref])
 
     # 3) Soupeřící proveditelné požadavky → kombinace, které se vejdou, a ekonomický verdikt
     residual = _residual(cal, economics_needed) if economics_needed else {}
@@ -421,8 +455,11 @@ def plan(model: dm.DataModel, job_starts: Optional[dict] = None, new_requests=()
             continue
         feasible = [s for k in range(len(group), 0, -1) for s in combinations(group, k) if _fits(residual, s)]
         maximal = [s for s in feasible if not any(set(s) < set(t) for t in feasible)]
-        maximal = [s for s in maximal if _verify_with_capacity(cal, s)]
-        verdict = _economic_verdict(maximal, values)
+        verified = [s for s in maximal if _verify_with_capacity(cal, s)]
+        # ekonomicky se porovnávají všechny proveditelné kombinace (podmnožiny ověřených variant)
+        candidates = [s for s in feasible if any(set(s) <= set(v) for v in verified)]
+        maximal = verified
+        verdict = _economic_verdict(candidates, values)
         for ref in refs:
             out.requests[ref]["decision"] = ("v konfliktu s jinými požadavky – vejde se jen část; "
                                              + verdict["verdict"])
@@ -431,7 +468,8 @@ def plan(model: dm.DataModel, job_starts: Optional[dict] = None, new_requests=()
         out.groups.append(dict(requests=refs, verdict=verdict["verdict"],
                                options=[tuple(r.ref for r in o) for o in maximal],
                                choice=tuple(r.ref for r in verdict["choice"]) if verdict["choice"] else None,
-                               values={tuple(r.ref for r in o): v for o, v in verdict["values"].items()},
+                               values={tuple(r.ref for r in o): v for o, v in verdict["values"].items()
+                                       if o in maximal or o == verdict["choice"]},
                                text=verdict["text"]))
 
     for ref, v in values.items():

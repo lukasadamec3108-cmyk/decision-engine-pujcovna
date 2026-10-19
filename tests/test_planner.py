@@ -248,6 +248,128 @@ def test_inputs_and_data_files_are_not_modified():
     assert before == after
 
 
+# ---------------------------------------------------------------------------
+# Regresní testy z auditu PR #25
+# ---------------------------------------------------------------------------
+
+def test_audit_loss_making_request_is_not_recommended_inside_a_combination():
+    # B je ztrátový (cena 1 000 < variabilní náklad 5 000); {A, B} je největší kombinace,
+    # ale ekonomicky nejlepší je samotné A (20 000 > 12 000 > 8 000)
+    m = model(var_rental=5000)
+    p = pl.plan(m, new_requests=[rent("A", 1, 2, price=15000), rent("B", 3, 4, price=1000),
+                                 rent("C", 1, 4, price=7000)])
+    g = p.groups[0]
+    assert sorted(g["options"]) == [("A", "B"), ("C",)]                 # provozní varianty beze změny
+    assert g["verdict"] == pl.RECOMMEND and g["choice"] == ("A",)
+    assert "ztrátový" in p.requests["B"]["economic_note"]
+    # samostatný ztrátový požadavek je provozně proveditelný, ale označený
+    p = pl.plan(m, new_requests=[rent("L", 10, 11, price=1000)])
+    assert p.requests["L"]["operational"] == pl.OK_ALONE and "ztrátový" in p.requests["L"]["economic_note"]
+
+
+def test_audit_late_job_includes_penalty():
+    m = model(var_job=0, includes="ano")
+    late = Request("J", "job", pl.NEW, ((BAGR, 1),), 1, 5, deadline=3, revenue=50000, direct_cost=20000,
+                   penalty_per_day=4000)
+    assert pl.contribution(m, late).lo == 50000 - 20000 - 2 * 4000
+    on_time = Request("K", "job", pl.NEW, ((BAGR, 1),), 1, 3, deadline=3, revenue=50000, direct_cost=20000,
+                      penalty_per_day=4000)
+    assert pl.contribution(m, on_time).lo == 30000
+    # zakázka z dat: penále podle termínu v datech
+    t = {n: getattr(BASE, n).copy() for n in dm.SCHEMA}
+    t["jobs"].loc[t["jobs"]["job_id"] == "J001", "status"] = "tentative"
+    md = dm.DataModel(**t)
+    req = [r for r in pl.tentative_requests(md, {"J001": 9}) if r.ref == "J001"][0]   # 9–13, termín 10
+    assert (req.start, req.end, req.deadline) == (9, 13, 10)
+    assert pl.contribution(md, req).result.parts.get("penále") == -3 * 8000            # 3 dny po termínu
+
+
+def test_audit_duplicate_request_refs_are_rejected():
+    import pytest
+    with pytest.raises(ValueError, match="jedinečn"):
+        pl.plan(model(), new_requests=[rent("X", 1, 2), rent("X", 3, 4)])
+    with pytest.raises(ValueError, match="FIKT-P06"):
+        pl.plan(BASE, {}, [Request("FIKT-P06", "rental", pl.NEW, (("PASOVY_DUMPER", 1),), 21, 22)])
+
+
+def test_audit_overlapping_service_records_are_conservative_and_flagged():
+    # dva servisní záznamy téhož kusu se překrývají: kapacitní model (E2.3A) počítá 2 kusy v servisu
+    m = model(units=2, maintenance=[(f"{BAGR}-01", 1, 3), (f"{BAGR}-01", 2, 3)])
+    p = pl.plan(m, new_requests=[rent("N", 2, 3)])
+    assert p.requests["N"]["operational"] == pl.NOT_FEASIBLE          # opatrně – nikdy nad kapacitu
+    assert any("servis" in x["text"] for x in p.manual)               # překryv servisů k ručnímu řešení
+    assert any("podhodnocená" in n for n in p.notes)
+    assert "překrývající se servis" in p.requests["N"]["decision"]
+
+
+def test_audit_shift_alternatives_stay_inside_window_without_penalty():
+    rnd = random.Random(3)
+    for _ in range(40):
+        s = rnd.randint(1, 8)
+        m = model(bookings=[("R1", s, s + rnd.randint(0, 4), 1, "confirmed")])
+        st = rnd.randint(1, 10); dur = rnd.randint(1, 4); earliest = rnd.randint(1, st); deadline = st + dur - 1 + rnd.randint(0, 5)
+        p = pl.plan(m, new_requests=[job("J", st, st + dur - 1, earliest=earliest, deadline=deadline)])
+        for a in p.requests["J"]["alternatives"]:
+            s0, e0 = a["shift"]
+            assert earliest <= s0 and e0 <= deadline and e0 - s0 + 1 == dur
+
+
+def test_audit_independent_capacity_check_both_directions():
+    """Nezávisle (prostá aritmetika z dat, bez capacity.py): každá varianta i doporučení se vejdou
+    a každý požadavek, který se sám vejde, je označený jako proveditelný – a naopak."""
+    rnd = random.Random(21)
+    for _ in range(80):
+        n = rnd.randint(1, 3)
+        maint = [(f"{BAGR}-{rnd.randint(1, n):02d}", rnd.randint(1, 10), rnd.randint(1, 3))] if rnd.random() < .6 else []
+        book = []
+        for k in range(rnd.randint(0, 3)):
+            s = rnd.randint(1, 10)
+            book.append((f"R{k}", s, s + rnd.randint(0, 3), 1, rnd.choice(["confirmed", "confirmed", "tentative"])))
+        m = model(units=n, maintenance=maint, bookings=book, var_rental=rnd.choice([0, 300, None]))
+        reqs = [rent(f"N{k}", s, s + rnd.randint(0, 3), q=rnd.randint(1, 2), price=rnd.choice([4000, 6500, 9000]))
+                for k, s in enumerate(rnd.randint(1, 10) for _ in range(rnd.randint(1, 5)))]
+        try:
+            p = pl.plan(m, new_requests=reqs)
+        except ValueError:
+            continue
+        free = {d: n for d in range(1, 20)}
+        for u, s, days in maint:
+            for d in range(s, s + days):
+                free[d] -= 1
+        for _, s, e, q, st in book:
+            if st == "confirmed":
+                for d in range(s, e + 1):
+                    free[d] -= q
+        allreq = {r.ref: r for r in reqs}
+        allreq.update({b[0]: rent(b[0], b[1], b[2], q=b[3], status=pl.TENTATIVE) for b in book if b[4] == "tentative"})
+
+        def fits(refs):
+            use = {}
+            for ref in refs:
+                r = allreq[ref]
+                for d in range(r.start, r.end + 1):
+                    use[d] = use.get(d, 0) + r.needs[0][1]
+            return all(free[d] - u >= 0 for d, u in use.items())
+        for ref, e in p.requests.items():
+            assert (e["operational"] == pl.OK_ALONE) == fits([ref]), (ref, e["operational"])
+        for g in p.groups:
+            for option in g["options"]:
+                assert fits(option), option
+            if g["choice"]:
+                assert fits(g["choice"])
+
+
+def test_audit_twelve_concurrent_requests_stay_fast():
+    import time
+    t = time.time()
+    p = pl.plan(model(units=3, var_rental=0), new_requests=[rent(f"R{i}", 1, 5, price=5000 + i) for i in range(12)])
+    assert time.time() - t < 10
+    g = p.groups[0]
+    assert g["verdict"] == pl.RECOMMEND and sorted(g["choice"]) == ["R10", "R11", "R9"]   # 3 nejdražší
+    p = pl.plan(model(units=3), new_requests=[rent(f"R{i}", 1, 5) for i in range(13)])
+    assert p.groups[0]["verdict"] == pl.NO_DECISION
+
+
 def test_app_does_not_use_planner_yet():
     src = (ROOT / "app.py").read_text(encoding="utf-8")
     assert "planner" not in src
