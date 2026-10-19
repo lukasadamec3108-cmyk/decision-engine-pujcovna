@@ -1,1 +1,8 @@
 booking_id,type_id,start_day,end_day,units,price_day,with_operator,status
+FIKT-P01,MINI_BAGR,13,16,1,6500,,confirmed
+FIKT-P02,NAKLADNI_AUTO,17,24,1,9000,,confirmed
+FIKT-P03,KOLOVY_BAGR,14,20,1,12000,,confirmed
+FIKT-P04,VIBRACNI_DESKA,5,9,1,2500,,confirmed
+FIKT-P05,SILNICNI_VALEC,15,19,1,9500,,confirmed
+FIKT-P06,PASOVY_DUMPER,21,25,1,8000,,tentative
+FIKT-P07,SMYKOVY_NAKLADAC,19,23,1,7500,,tentative

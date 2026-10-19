@@ -378,8 +378,13 @@ def model_with(**edits):
     return model
 
 
-def test_from_demo_model():
-    model = dm.load_model()
+def jobs_only_model():
+    """Ukázková data bez fiktivních pronájmů a servisu (E2.3B) – testy logiky zakázek."""
+    return model_with(rental_bookings=lambda df: df.iloc[0:0], maintenance=lambda df: df.iloc[0:0])
+
+
+def test_from_model_jobs_without_schedule():
+    model = jobs_only_model()
     cal = cp.from_model(model)
     assert not cal.issues
     assert len(cal.units) == len(model.fleet_units)
@@ -402,7 +407,7 @@ def test_from_demo_model():
 def test_from_model_with_schedule_from_tab6():
     """Termíny z optimálního plánu záložky 6: zpožděná zakázka obsadí stroj i po termínu."""
     import scheduling as sch
-    model = dm.load_model()
+    model = jobs_only_model()
     jobs, capacity = dm.legacy_jobs(model), dm.fleet_capacity(model)
     plan = sch.evaluate(jobs, sch.optimize_schedule(jobs, capacity)["starts"])
     ids = model.jobs["job_id"].tolist()
@@ -425,10 +430,10 @@ def test_from_model_with_dates_and_bookings():
                      price_day="6500", with_operator="", status="confirmed"),
                 dict(booking_id="B2", type_id=BAGR, start_day="31", end_day="31", units="1",
                      price_day="6500", with_operator="", status="tentative")]
-        return pd.concat([df, pd.DataFrame(rows)], ignore_index=True)
+        return pd.concat([df.iloc[0:0], pd.DataFrame(rows)], ignore_index=True)
 
     def service_rows(df):
-        return pd.concat([df, pd.DataFrame([dict(unit_id="MINI_BAGR-01", start_day="40", days="2", note="")])],
+        return pd.concat([df.iloc[0:0], pd.DataFrame([dict(unit_id="MINI_BAGR-01", start_day="40", days="2", note="")])],
                          ignore_index=True)
 
     model = model_with(rental_bookings=bookings, maintenance=service_rows)
@@ -453,10 +458,15 @@ def test_from_model_invalid_booking_is_flagged():
     assert cp.evaluate_request(cal, BAGR, 50, 51)["status"] == cp.UNKNOWN
 
 
-def test_app_does_not_use_capacity_module_yet():
-    import re
+def test_app_uses_capacity_only_in_capacity_tab():
+    # Záložky 1–6 kapacitní modul nepoužívají; kalendář (záložka 7) je na konci app.py.
     src = (ROOT / "app.py").read_text(encoding="utf-8")
-    assert not re.search(r"^\s*(import capacity|from capacity |.*reload\(capacity)", src, re.M)
+    tab7 = src.index("# ZÁLOŽKA 7 – KAPACITA STROJŮ")
+    before = src[:tab7]
+    for line in before.splitlines():
+        if line.startswith(("import capacity", "cp = importlib", "cv = importlib")):
+            continue
+        assert "cp." not in line and "cv." not in line, line
 
 
 if __name__ == "__main__":

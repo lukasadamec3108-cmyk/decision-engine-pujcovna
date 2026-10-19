@@ -14,8 +14,8 @@ i zakázky na jednom místě. Načtení a kontrolu zajišťuje `datamodel.py`.
 |---|---|---|---|
 | `machine_types.csv` | `type_id` | typ stroje: název, cena pronájmu/den, pořizovací cena, náklady, poruchovost | – |
 | `fleet_units.csv` | `unit_id` | jednotlivé kusy flotily, stav (`owned` / `leased` / `ordered`), dostupnost od–do (den) | `type_id` → typ stroje |
-| `maintenance.csv` | – | plánované odstávky kusu (začátek, počet dní) – zatím prázdné | `unit_id` → kus flotily |
-| `rental_bookings.csv` | `booking_id` | konkrétní rezervace pronájmu (od–do, počet kusů, cena, s obsluhou, `confirmed` / `tentative`) – zatím prázdné | `type_id` → typ stroje |
+| `maintenance.csv` | – | plánované odstávky kusu (začátek, počet dní) – 3 fiktivní ukázkové odstávky | `unit_id` → kus flotily |
+| `rental_bookings.csv` | `booking_id` | konkrétní rezervace pronájmu (od–do, počet kusů, cena, s obsluhou, `confirmed` / `tentative`) – 7 fiktivních ukázkových rezervací `FIKT-…` | `type_id` → typ stroje |
 | `rental_demand.csv` | `type_id` + `period` | očekávaná poptávka po pronájmu (dny za období, rozptyl, zdroj) – **odhad, ne závazek** | `type_id` → typ stroje |
 | `jobs.csv` | `job_id` | vlastní zakázky: stav (`confirmed` / `tentative` / `opportunity`), pravděpodobnost získání, tržba, přímé náklady, délka, nejdřívější začátek, termín, penále | – |
 | `job_requirements.csv` | `job_id` + druh + zdroj | co zakázka potřebuje: typ stroje nebo roli obsluhy, počet, pořadí | `job_id` → zakázka, `resource_id` → typ stroje / role |
@@ -98,8 +98,13 @@ náklady zakázek už obsahují vlastní stroje. Dokud není zadané, je přísp
 
 ## Kapacitní modul (`capacity.py`, E2.3A)
 
-Modul počítá nad `fleet_units`, `maintenance`, `rental_bookings`, `jobs` a `job_requirements`;
-aplikace ho zatím nepoužívá.
+Modul počítá nad `fleet_units`, `maintenance`, `rental_bookings`, `jobs` a `job_requirements`.
+V aplikaci ho zobrazuje záložka **Kapacita strojů** (E2.3B) – termíny zakázek bere z plánu záložky 6.
+
+**Fiktivní ukázková data (E2.3B):** pronájmy `FIKT-P01` až `FIKT-P07` (5 potvrzených, 2 předběžné)
+a tři servisní odstávky. Dva konflikty jsou záměrné, aby kalendář ukázal, jak je hlásí:
+`FIKT-P05` (silniční válec, dny 15–19) proti zakázce J006 a servis kolového bagru (dny 11–12)
+proti zakázce J005. Záložky 1–6 tabulky pronájmů a servisu nepoužívají, jejich výsledky se nemění.
 
 - **Dny:** celé dny, začátek i konec **včetně** (pronájem `start_day`–`end_day`, servis
   `start_day` + `days` − 1, zakázka začátek + `duration_days` − 1). Navazující termín (den po
@@ -121,7 +126,7 @@ aplikace ho zatím nepoužívá.
   leasingu), se nezahodí: ubírá kapacitu typu a vypíše se jako konflikt.
 
 Pro spolehlivý kalendář chybí: datum prvního dne plánu, skutečné rezervace pronájmů, plánovaný
-servis, pevné termíny zakázek, stav `cancelled`, dny na převoz / předání mezi nasazeními
+servis, plán zakázek, který bere ohled na pronájmy a servis, stav `cancelled`, dny na převoz / předání mezi nasazeními
 a případně přiřazení rezervací ke konkrétním kusům.
 
 ## Budoucí využití
