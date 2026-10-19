@@ -1,1 +1,4 @@
 unit_id,start_day,days,note
+REZACKA_ASFALTU-01,10,3,fiktivní ukázka – pravidelná kontrola
+VIBRACNI_DESKA-02,11,4,fiktivní ukázka – výměna dílu
+KOLOVY_BAGR-01,11,2,fiktivní ukázka – záměrný konflikt se zakázkou (servis × zakázka)

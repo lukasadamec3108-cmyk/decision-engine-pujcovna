@@ -52,7 +52,7 @@ Vstupy se nastavují v postranním panelu:
 
 Výchozí hodnoty tvoří **ukázkový scénář** s fiktivními čísly (realistický trh, fixní náklad 100 000 Kč).
 
-Výsledky jsou rozděleny do šesti záložek:
+Výsledky jsou rozděleny do sedmi záložek:
 
 | Záložka | Obsah |
 |---|---|
@@ -62,6 +62,7 @@ Výsledky jsou rozděleny do šesti záložek:
 | 🎯 **Co ovlivňuje zisk** | Tornádo graf citlivosti na změnu vstupů o ±10 %, minimální denní cena pronájmu, zisk podle počtu dní (bod zvratu) a mapa ziskovosti (cena × počet dní). |
 | 🛒 **Nákup strojů** | Optimální nákup strojů v rámci rozpočtu, křivka rozpočet vs. maximální zisk; v detailu kontrola lineární (LP) a diskrétní (DP) optimalizací. |
 | 🗓️ **Plán zakázek** | Harmonogram (Ganttův diagram) se smluvními termíny, zakázky po termínu a penále za zpoždění, detail zakázek, vytížení strojů, úzké hrdlo a prioritní zakázka. |
+| 📅 **Kapacita strojů** | Kalendář dostupnosti strojů po dnech: volné kusy, pronájmy, zakázky z plánu (i po termínu), servis, konflikty a stav „nelze určit“; filtr typů a období, detail dne a ověření nového požadavku. |
 
 Čísla jsou zobrazena v českém formátu, grafy jsou interaktivní (Plotly) a vzhled je přizpůsoben i menším obrazovkám.
 
@@ -121,7 +122,9 @@ Provozovatel zvažuje, zda dokoupit **mini bagr**, nebo **pásový dumper**.
    Pokud se nákup nevyplatí, doporučí nic nekupovat.
 6. **Plán zakázek:** uvidí rozvrh zakázek s nejnižším penále, srovnání s původním plánem
    a zakázku s největším čistým přínosem pro plán.
-7. **Report:** stáhne investiční report ve formátu DOCX jako podklad pro další diskusi.
+7. **Kapacita strojů:** v kalendáři zjistí, kolik kusů je který den volných, kde se pronájem
+   nebo servis střetává se zakázkou a zda lze přijmout nový požadavek na stroj.
+8. **Report:** stáhne investiční report ve formátu DOCX jako podklad pro další diskusi.
 
 Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investiční doporučení.
 
@@ -148,6 +151,7 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 ├── datamodel.py                     # společná datová vrstva: načtení, kontrola, převod pro výpočty
 ├── economics.py                     # ekonomický modul (E2.1): náklady flotily, příspěvky, celkový výsledek
 ├── capacity.py                      # kapacitní plánování strojů (E2.3A): dostupnost, konflikty, požadavky
+├── capacity_view.py                 # kapacitní kalendář (E2.3B): převod výsledků capacity.py na mřížku
 ├── portfolio.py                     # výběr nákupní sestavy strojů v rámci rozpočtu
 ├── scheduling.py                    # plán zakázek (celočíselná optimalizace)
 ├── tools/hash_password.py           # vytvoření hashe hesla pro secrets (heslo se zadává skrytě)
@@ -187,7 +191,10 @@ v jednotlivých dnech k dispozici a čím jsou obsazené (pronájem, vlastní za
 konflikty (překryv rezervací, pronájem × zakázka, konflikt se servisem, překročení kapacity typu)
 a vyhodnotí nový požadavek na typ stroje v termínu: **realizovatelné / nerealizovatelné / nelze
 určit**, s problémovými dny a příčinami. Nic nepřesouvá ani neurčuje přednost. Chybějící údaje se
-nikdy nepovažují za volno. Aplikace modul zatím nepoužívá.
+nikdy nepovažují za volno. Zobrazuje ho záložka **Kapacita strojů** (E2.3B, `capacity_view.py`),
+která přebírá termíny zakázek z plánu záložky 6 a sama nic nepočítá. Pronájmy (`FIKT-…`)
+a servisní odstávky v ukázkových datech jsou fiktivní a obsahují dva záměrné konflikty;
+ostatní záložky tyto tabulky nepoužívají.
 
 ### Spuštění lokálně
 
