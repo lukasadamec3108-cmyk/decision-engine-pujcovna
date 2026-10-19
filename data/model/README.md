@@ -148,6 +148,31 @@ data, filtry a plán zakázek jako kalendář):
   rozpětí do dvou kategorií, „nelze určit“.
 - **Obsazenost** v kalendáři zahrnuje servis; **využití** v přehledu servis nezahrnuje.
 
+## Plánovací a rozhodovací model (`planner.py`, E2.5a)
+
+Samostatná logika (aplikace ji zatím nepoužívá) nad `capacity.py` a `economics.py`:
+
+- **Potvrzené závazky** (potvrzené pronájmy, servis, potvrzené zakázky v aktuálním plánu záložky 6)
+  blokují kapacitu. Jejich vzájemný konflikt jde **k ručnímu řešení**; u zakázky se jen ověří,
+  zda ji okno dovoluje posunout bez penále.
+- **Předběžné rezervace a nové požadavky** jsou rovnocenné a posuzují se na zbylé kapacitě.
+  Předběžná rezervace zůstává vždy viditelná a nikdy se automaticky neruší.
+- **Provozně**: proveditelný / neproveditelný (co ho blokuje) / nelze určit (chybí údaje).
+  Soupeřící požadavky → kombinace, které se vejdou (ověřené kapacitním modelem).
+- **Ekonomicky**: příspěvky z `economics.py` (bez fixních nákladů a bez ušlého zisku navíc).
+  Chybí-li náklad, známá částka je jen horní mez; doporučení jen při jasné převaze, shodný
+  přínos → rozhodne uživatel, jinak „nelze rozhodnout“ s výčtem chybějících údajů.
+- Ekonomicky se porovnávají **všechny** proveditelné kombinace (i menší) – ztrátový požadavek
+  (příspěvek < 0) se tak nedoporučí jen proto, že se „vejde“; u zakázky po termínu se odečte penále.
+- Označení požadavků musí být jedinečná (i vůči předběžným rezervacím v datech).
+- Překrývající se servisní záznamy téhož kusu počítá kapacitní model (E2.3A) dvakrát – výsledek je
+  opatrný (kapacita podhodnocená, nikdy překročená), plánovač na to upozorní a překryv jde k ručnímu řešení.
+- **Alternativy**: jen posun zakázky v okně bez penále. Jiný stroj ani externí zapůjčení se
+  nenabízí – chybí údaje o zaměnitelnosti strojů a o externích cenách a dostupnosti.
+
+Pro ekonomická doporučení zatím chybí: variabilní náklady za den pronájmu a zakázky, nastavení
+`direct_cost_includes_machines`, případně ceny a pružnost termínů nových požadavků.
+
 ## Obnovení dat v běžící aplikaci
 
 Aplikace drží načtená data v mezipaměti. Klíčem je otisk obsahu všech CSV souborů v této složce
