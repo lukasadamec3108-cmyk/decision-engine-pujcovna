@@ -111,8 +111,14 @@ aplikace ho zatím nepoužívá.
   riziko; `cancelled` (zatím není v datech) se ignoruje.
 - **Rezervace pronájmu** jsou jen na úrovni typu – konkrétní kus se jim nepřiřazuje.
 - **Potvrzené zakázky** nemají v datech pevný termín: bez plánu se berou jako možné obsazení
-  v okně nejdřívější začátek – termín, a výsledek tam je „nelze určit“, pokud by na tom záleželo.
-- **Neplatné nebo neúplné záznamy** se vypíšou a dotčený typ je „nelze určit“, nikdy „volno“.
+  kdykoli od nejdřívějšího začátku – i po termínu dokončení, protože plán v záložce 6 dovoluje
+  zpoždění s penále. Výsledek tam je „nelze určit“, pokud by na tom záleželo. Omezení do termínu
+  jen na výslovné vyžádání (`assume_deadlines_met=True`, předpoklad). Spolehlivé termíny dodá
+  plán zakázek (`job_starts`).
+- **Neplatné nebo neúplné záznamy** (i s neznámým stavem, např. překlepem) se vypíšou a dotčený
+  typ je „nelze určit“, nikdy „volno“. Neplatný předběžný záznam kapacitu neblokuje.
+- **Pronájem nebo zakázka konkrétního kusu** v den, kdy kus není ve flotile (např. po vrácení
+  leasingu), se nezahodí: ubírá kapacitu typu a vypíše se jako konflikt.
 
 Pro spolehlivý kalendář chybí: datum prvního dne plánu, skutečné rezervace pronájmů, plánovaný
 servis, pevné termíny zakázek, stav `cancelled`, dny na převoz / předání mezi nasazeními

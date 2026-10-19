@@ -76,7 +76,11 @@ class Assignment:
 
 @dataclass(frozen=True)
 class OpenJob:
-    """Potvrzená zakázka bez pevného termínu: proběhne někdy v okně [earliest, latest]."""
+    """Potvrzená zakázka bez pevného termínu: proběhne někdy od `earliest` do `latest`.
+
+    latest = None … konec není zaručen (termín dokončení je jen smluvní, zakázka může
+    se zpožděním a penále skončit později) → může obsadit stroj kdykoli od `earliest`.
+    """
     ref: str
     type_id: str
     earliest: object
@@ -84,9 +88,16 @@ class OpenJob:
     duration: int
     quantity: int = 1
 
+    def may_occupy(self, day) -> bool:
+        return self.earliest <= day and (self.latest is None or day <= self.latest)
+
+    def may_overlap(self, start, end) -> bool:
+        return self.earliest <= end and (self.latest is None or start <= self.latest)
+
     @property
     def label(self) -> str:
-        return f"vlastní zakázka {self.ref} (bez pevného termínu, okno {self.earliest} – {self.latest})"
+        end = self.latest if self.latest is not None else "neznámý konec – může skončit po termínu"
+        return f"vlastní zakázka {self.ref} (bez pevného termínu, možné obsazení {self.earliest} – {end})"
 
 
 @dataclass
@@ -97,6 +108,7 @@ class Calendar:
     issues: list = field(default_factory=list)             # [(type_id, popis)] neplatné / neúplné údaje
     unknown_capacity: set = field(default_factory=set)     # typy, u nichž nevíme počet kusů
     unknown_occupancy: set = field(default_factory=set)    # typy s potvrzeným využitím bez platných údajů
+    day_kind: Optional[type] = None                        # date nebo int podle vstupů (None = žádné dny)
 
     def type_ids(self) -> list:
         return sorted({u.type_id for u in self.units} | self.unknown_capacity)
@@ -132,6 +144,17 @@ def days(start, end) -> list:
     if isinstance(start, date):
         return [start + timedelta(d) for d in range((end - start).days + 1)]
     return list(range(int(start), int(end) + 1))
+
+
+def _kind(value):
+    return date if isinstance(value, date) else int
+
+
+def _check_request_kind(cal, start, end):
+    """Požadovaný termín musí používat stejný druh dnů jako kalendář (čísla, nebo data)."""
+    kinds = {_kind(start), _kind(end)} | ({cal.day_kind} if cal.day_kind else set())
+    if len(kinds) > 1:
+        raise TypeError("Nelze míchat čísla dní a kalendářní data.")
 
 
 def _shift(day, n):
@@ -193,17 +216,29 @@ def build_calendar(units, assignments=(), open_jobs=()) -> Calendar:
             problem = f"{a.label}: typ stroje {a.type_id} není ve flotile"
         if problem:
             cal.issues.append((a.type_id, problem))
-            if a.status == BLOCKING:
-                cal.unknown_occupancy.add(a.type_id)   # obsazenost typu nelze spolehlivě určit
+            if a.status not in NON_BLOCKING:
+                # potvrzený záznam nebo záznam s neznámým stavem (např. překlep) může kapacitu
+                # blokovat → obsazenost typu nelze spolehlivě určit
+                cal.unknown_occupancy.add(a.type_id)
             continue
         cal.assignments.append(a)
 
     for j in open_jobs:
-        if not (_valid_interval(j.earliest, j.latest) and _is_count(j.duration) and _is_count(j.quantity)):
+        window_ok = _is_day(j.earliest) and (
+            j.latest is None or _valid_interval(j.earliest, j.latest))
+        if not (window_ok and _is_count(j.duration) and _is_count(j.quantity)):
             cal.issues.append((j.type_id, f"zakázka {j.ref}: chybí platné časové okno, délka nebo počet"))
             cal.unknown_occupancy.add(j.type_id)
             continue
         cal.open_jobs.append(j)
+
+    values = [v for u in cal.units for v in (u.available_from, u.available_to) if v is not None]
+    values += [v for a in cal.assignments for v in (a.start, a.end)]
+    values += [v for j in cal.open_jobs for v in (j.earliest, j.latest) if v is not None]
+    kinds = {_kind(v) for v in values}
+    if len(kinds) > 1:
+        raise TypeError("Nelze míchat čísla dní a kalendářní data.")
+    cal.day_kind = kinds.pop() if kinds else None
     return cal
 
 
@@ -217,14 +252,21 @@ def _unit_available(u: Unit, day) -> bool:
     return True
 
 
+def _unit(cal: Calendar, unit_id: str) -> Unit:
+    return next(u for u in cal.units if u.unit_id == unit_id)
+
+
 def _counts(cal: Calendar, a: Assignment, day) -> bool:
-    """Ubírá využití v daný den kapacitu typu? Servis kusu, který ten den není ve flotile,
-    ji podruhé neubírá – kus už v počtu není."""
+    """Ubírá využití v daný den kapacitu typu?
+
+    Servis kusu, který ten den není ve flotile, ji podruhé neubírá – kus už v počtu není.
+    Pronájem nebo zakázka konkrétního kusu mimo jeho dostupnost se ale NEZAHAZUJE: počítá se
+    (stroj je slíbený) a find_conflicts ho vypíše jako konflikt.
+    """
     if not (a.start <= day <= a.end):
         return False
-    if a.unit_id is not None:
-        unit = next(u for u in cal.units if u.unit_id == a.unit_id)
-        return _unit_available(unit, day)
+    if a.unit_id is not None and a.kind == "maintenance":
+        return _unit_available(_unit(cal, a.unit_id), day)
     return True
 
 
@@ -244,6 +286,7 @@ def daily_capacity(cal: Calendar, start, end, type_ids=None) -> pd.DataFrame:
     nároky), open_job_risk (kusy, které může zabrat zakázka bez pevného termínu),
     status: volno | plno | překročeno | nelze určit.
     """
+    _check_request_kind(cal, start, end)
     types = sorted(type_ids) if type_ids else cal.type_ids()
     rows = []
     for day in days(start, end):
@@ -257,8 +300,7 @@ def daily_capacity(cal: Calendar, start, end, type_ids=None) -> pd.DataFrame:
                         use[a.kind] += a.quantity
                     else:
                         tentative += a.quantity
-            risk = sum(j.quantity for j in cal.open_jobs
-                       if j.type_id == t and j.earliest <= day <= j.latest)
+            risk = sum(j.quantity for j in cal.open_jobs if j.type_id == t and j.may_occupy(day))
             free = units - sum(use.values())
             if free < 0 and t not in cal.unknown_capacity:
                 status = OVER                      # přetížení je jisté i bez chybějících údajů
@@ -266,10 +308,10 @@ def daily_capacity(cal: Calendar, start, end, type_ids=None) -> pd.DataFrame:
                 status = UNKNOWN
             elif free == 0:
                 status = FULL
-            elif risk > 0:
-                status = UNKNOWN                   # záleží na tom, kdy proběhne zakázka bez termínu
+            elif free - risk < 1:
+                status = UNKNOWN                   # volný kus může zabrat zakázka bez pevného termínu
             else:
-                status = FREE
+                status = FREE                      # aspoň jeden kus je volný i v nejhorším případě
             rows.append(dict(day=day, type_id=t, units=units, **use, free=free,
                              tentative=tentative, open_job_risk=risk, status=status))
     return pd.DataFrame(rows, columns=COLUMNS)
@@ -279,15 +321,18 @@ def unit_occupancy(cal: Calendar, start, end) -> pd.DataFrame:
     """Stav jednotlivých fyzických kusů po dnech: mimo flotilu / servis / pronájem / zakázka /
     bez přiřazení. „bez přiřazení“ NEZNAMENÁ volno: rezervace známé jen po typech se konkrétním
     kusům nepřiřazují (počty kusů viz daily_capacity)."""
+    _check_request_kind(cal, start, end)
     rows = []
     for day in days(start, end):
         for u in cal.units:
+            hits = [a for a in cal.assignments if a.unit_id == u.unit_id and a.status == BLOCKING
+                    and a.start <= day <= a.end]
+            used = " + ".join(KIND_LABEL[a.kind] for a in hits)
             if not _unit_available(u, day):
-                state = "mimo flotilu"
+                planned = " + ".join(KIND_LABEL[a.kind] for a in hits if a.kind != "maintenance")
+                state = "mimo flotilu" + (f" (přesto naplánováno: {planned})" if planned else "")
             else:
-                hits = [a for a in cal.assignments if a.unit_id == u.unit_id and a.status == BLOCKING
-                        and a.start <= day <= a.end]
-                state = " + ".join(KIND_LABEL[a.kind] for a in hits) if hits else "bez přiřazení"
+                state = used or "bez přiřazení"
             rows.append(dict(day=day, unit_id=u.unit_id, type_id=u.type_id, state=state))
     return pd.DataFrame(rows, columns=["day", "unit_id", "type_id", "state"])
 
@@ -311,17 +356,28 @@ def _conflict_kind(kinds: set) -> str:
 def find_conflicts(cal: Calendar, start=None, end=None) -> list:
     """Konflikty POTVRZENÝCH využití. Nic se neřeší ani nepřesouvá – jen se vypíší.
 
-    Každý konflikt: {kind, scope ('kus' | 'typ'), id, days, sources[, max_over]}.
-      - scope 'kus': stejný konkrétní kus využitý dvakrát ve stejný den,
+    Každý konflikt: {kind, scope ('kus' | 'typ'), id, days, sources, certain[, max_over]}.
+      - scope 'kus': stejný konkrétní kus využitý dvakrát ve stejný den, nebo naplánovaný
+        na den, kdy není ve flotile,
       - scope 'typ': v daný den je potřeba víc kusů typu, než kolik jich je k dispozici;
-        max_over = o kolik kusů je kapacita nejvíce překročena.
+        max_over = o kolik kusů je kapacita nejvíce překročena,
+      - certain = False: počet kusů typu není kvůli neplatným údajům jistý.
     """
     firm = [a for a in cal.assignments if a.status == BLOCKING]
     if not firm:
         return []
     start = start if start is not None else min(a.start for a in firm)
     end = end if end is not None else max(a.end for a in firm)
+    _check_request_kind(cal, start, end)
     out = []
+    for a in firm:
+        if a.unit_id is None or a.kind == "maintenance":
+            continue
+        unit = _unit(cal, a.unit_id)
+        outside = [d for d in days(max(a.start, start), min(a.end, end)) if not _unit_available(unit, d)]
+        if outside:
+            out.append(dict(kind="využití kusu mimo dobu, kdy je ve flotile", scope="kus", id=a.unit_id,
+                            days=outside, sources=[a.label], certain=True))
     by_unit = {}
     for a in firm:
         if a.unit_id:
@@ -332,7 +388,8 @@ def find_conflicts(cal: Calendar, start=None, end=None) -> list:
                 s, e = max(a.start, b.start, start), min(a.end, b.end, end)
                 if s <= e:
                     out.append(dict(kind=_conflict_kind({a.kind, b.kind}), scope="kus",
-                                    id=unit_id, days=days(s, e), sources=[a.label, b.label]))
+                                    id=unit_id, days=days(s, e), sources=[a.label, b.label],
+                                    certain=True))
     cap = daily_capacity(cal, start, end)
     over = cap[cap["free"] < 0]
     for t, grp in over.groupby("type_id", sort=True):
@@ -345,7 +402,8 @@ def find_conflicts(cal: Calendar, start=None, end=None) -> list:
                 current["max_over"] = max(current["max_over"], int(-r.free))
             else:
                 current = dict(kind="překročení kapacity typu – " + _conflict_kind({a.kind for a in active}),
-                               scope="typ", id=t, days=[r.day], sources=src, max_over=int(-r.free))
+                               scope="typ", id=t, days=[r.day], sources=src, max_over=int(-r.free),
+                               certain=t not in cal.unknown_capacity)
                 out.append(current)
     return out
 
@@ -365,12 +423,14 @@ def evaluate_request(cal: Calendar, type_id: str, start, end, quantity: int = 1,
       problem_days … [(den, volné kusy, požadováno, příčiny – rezervace / zakázky / servis)]
       warnings     … předběžné nároky, které by konflikt způsobily, kdyby se potvrdily
       reasons      … proč „nelze určit“ (neúplná data, zakázky bez pevného termínu)
+      data_issues  … všechny neplatné / neúplné záznamy v kalendáři (i u jiných typů)
     include_tentative=True započte předběžné nároky jako blokující (opatrnější pohled).
     """
     def result(status, reasons, cap=None, problems=(), warnings=()):
         free = {} if cap is None else {d: int(v) for d, v in cap["free"].items()}
         return dict(status=status, min_free=min(free.values()) if free else None, free_by_day=free,
-                    problem_days=list(problems), warnings=list(warnings), reasons=list(reasons))
+                    problem_days=list(problems), warnings=list(warnings), reasons=list(reasons),
+                    data_issues=[text for _, text in cal.issues])
 
     if not _valid_interval(start, end):
         return result(UNKNOWN, ["neplatný požadovaný termín"])
@@ -403,8 +463,7 @@ def evaluate_request(cal: Calendar, type_id: str, start, end, quantity: int = 1,
         reasons.append("neplatné nebo neúplné údaje pro tento typ stroje: "
                        + "; ".join(cal.issues_for(type_id)))
     if worst_short:
-        reasons += [j.label for j in cal.open_jobs if j.type_id == type_id
-                    and overlap(j.earliest, j.latest, start, end)]
+        reasons += [j.label for j in cal.open_jobs if j.type_id == type_id and j.may_overlap(start, end)]
 
     if problems and type_id not in cal.unknown_capacity:
         status = INFEASIBLE          # kusy chybí už podle jistých údajů; další nejistota to nezlepší
@@ -446,14 +505,18 @@ def _end(start, length):
     return _shift(start, length - 1) if _is_day(start) and _is_count(length) else None
 
 
-def from_model(model, plan_start: Optional[date] = None, job_starts: Optional[dict] = None) -> Calendar:
+def from_model(model, plan_start: Optional[date] = None, job_starts: Optional[dict] = None,
+               assume_deadlines_met: bool = False) -> Calendar:
     """Kalendář z datového modelu E1 (datamodel.DataModel). Model se nijak nemění.
 
     - kusy z fleet_units, servis z maintenance (konkrétní kus), rezervace z rental_bookings
       (jen typ stroje – konkrétní kus se nevymýšlí),
     - potvrzené zakázky: s termínem z `job_starts` {job_id: první den} jako pevné využití,
-      bez něj jako zakázka bez pevného termínu (okno: nejdřívější začátek – termín dokončení,
-      nejméně však celá délka zakázky),
+      bez něj jako zakázka bez pevného termínu, která může stroj obsadit kdykoli od
+      nejdřívějšího začátku. Termín dokončení je jen smluvní (zakázka může skončit později
+      s penále, jak to dovoluje i plán v záložce 6), proto se konec neomezuje. Jen při
+      `assume_deadlines_met=True` se možné obsazení omezí do termínu (nejméně na celou délku
+      zakázky) – je to předpoklad, ne jistota,
     - nepotvrzené zakázky (tentative, opportunity) se vykazují jako předběžné, jen mají-li termín.
     `plan_start` převede čísla dní na kalendářní data.
     """
@@ -484,7 +547,9 @@ def from_model(model, plan_start: Optional[date] = None, job_starts: Optional[di
                                               _end(s, dur), q, str(j.status)))
             elif j.status == BLOCKING:
                 es, dl = _day(j.earliest_start_day, plan_start), _day(j.deadline_day, plan_start)
-                min_end = _end(es, dur)
-                latest = max(dl, min_end) if _is_day(dl) and _is_day(min_end) else min_end
+                latest = None
+                if assume_deadlines_met:
+                    min_end = _end(es, dur)
+                    latest = max(dl, min_end) if _is_day(dl) and _is_day(min_end) else min_end
                 open_jobs.append(OpenJob(str(j.job_id), str(r.resource_id), es, latest, dur, q))
     return build_calendar(units, assignments, open_jobs)

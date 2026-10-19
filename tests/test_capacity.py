@@ -82,7 +82,7 @@ def test_one_machine_two_overlapping_rentals():
                                         rental("R2", 5, 6, unit="MINI_BAGR-01")])
     unit_conf = [c for c in cp.find_conflicts(cal2) if c["scope"] == "kus"]
     assert unit_conf == [dict(kind="překryv rezervací", scope="kus", id="MINI_BAGR-01", days=[5],
-                              sources=["pronájem R1", "pronájem R2"])]
+                              sources=["pronájem R1", "pronájem R2"], certain=True)]
     # celkově jsou ale volné 2 kusy → typ přetížen není
     assert not [c for c in cp.find_conflicts(cal2) if c["scope"] == "typ"]
 
@@ -178,16 +178,26 @@ def test_over_capacity_by_one():
 
 # 10) Neúplná / neplatná data → nikdy „volno“
 def test_incomplete_or_invalid_data_is_never_reported_as_free():
-    bad = [rental("R1", 1, None), rental("R2", 8, 3), rental("R3", 1, 2, q=0),
-           rental("R4", 1, 2, t="NEZNAMY"), Assignment("rental", "R5", BAGR, 1, 2, 1, "potvrzeno")]
+    # každý neplatný záznam, který může blokovat MINI_BAGR (i s neznámým stavem / druhem) → nelze určit
+    bad = [rental("R1", 1, None), rental("R2", 8, 3), rental("R3", 1, 2, q=0), rental("R3b", 1, 2, q=True),
+           Assignment("rental", "R5", BAGR, 1, 2, 1, "potvrzeno"),
+           Assignment("rental", "R6", BAGR, 1, 2, 1, "Confirmed"),
+           Assignment("pujcka", "R7", BAGR, 1, 2, 1, "confirmed"),
+           rental("R8", 1, 2, unit="NEEXISTUJE-01"), rental("R9", 1, 2, q=2, unit="MINI_BAGR-01"),
+           Assignment("rental", "R10", BAGR, "1", "2")]
     for record in bad:
         cal = cp.build_calendar(fleet(3), [record])
-        assert cal.issues, record
+        assert cal.issues_for(BAGR), record
         r = cp.evaluate_request(cal, BAGR, 1, 2)
-        if record.type_id == BAGR and record.status == "confirmed":
-            assert r["status"] == cp.UNKNOWN and r["reasons"], record
-            assert set(cp.daily_capacity(cal, 1, 2)["status"]) == {cp.UNKNOWN}
-        assert r["status"] != "volno"
+        assert r["status"] == cp.UNKNOWN and r["reasons"] and r["data_issues"], record
+        assert set(cp.daily_capacity(cal, 1, 2)["status"]) == {cp.UNKNOWN}, record
+    # neplatná PŘEDBĚŽNÁ rezervace kapacitu neblokuje, jen se vypíše
+    cal = cp.build_calendar(fleet(3), [rental("T1", 1, None, status="tentative")])
+    r = cp.evaluate_request(cal, BAGR, 1, 2)
+    assert r["status"] == cp.FEASIBLE and r["data_issues"]
+    # rezervace neznámého typu se vypíše u každého vyhodnocení (může jít o překlep v typu)
+    cal = cp.build_calendar(fleet(3), [rental("R4", 1, 2, t="NEZNAMY")])
+    assert any("NEZNAMY" in x for x in cp.evaluate_request(cal, BAGR, 1, 2)["data_issues"])
     # neplatný kus flotily: neznámý počet kusů → nelze určit, ani když je kapacita „jinak“ málo
     cal = cp.build_calendar([Unit("MINI_BAGR-01", BAGR), Unit("MINI_BAGR-02", BAGR, "owned", "x")],
                             [rental("R1", 1, 3)])
@@ -217,6 +227,100 @@ def test_open_job_without_date_makes_result_uncertain():
 
 
 # 11) Zrušená a předběžná rezervace
+def test_open_job_may_finish_after_deadline():
+    # plán v záložce 6 dovoluje zakázce skončit po termínu s penále → konec není zaručen
+    cal = cp.build_calendar(fleet(1), open_jobs=[OpenJob("J1", BAGR, 5, None, 3)])
+    assert cp.evaluate_request(cal, BAGR, 1, 4)["status"] == cp.FEASIBLE       # před nejdřívějším začátkem
+    r = cp.evaluate_request(cal, BAGR, 100, 101)
+    assert r["status"] == cp.UNKNOWN and "může skončit po termínu" in r["reasons"][0]
+    assert day_row(cal, 365)["status"] == cp.UNKNOWN
+
+
+def test_day_status_free_when_spare_unit_is_certain():
+    cal = cp.build_calendar(fleet(3), open_jobs=[OpenJob("J1", BAGR, 1, 10, 2, 1)])
+    assert day_row(cal, 3)["status"] == "volno"                 # i v nejhorším případě 2 volné
+    cal2 = cp.build_calendar(fleet(1), open_jobs=[OpenJob("J1", BAGR, 1, 10, 2, 1)])
+    assert day_row(cal2, 3)["status"] == cp.UNKNOWN
+
+
+def test_unit_booked_outside_its_availability_is_not_dropped():
+    units = [Unit("MINI_BAGR-01", BAGR, "leased", None, 5), Unit("MINI_BAGR-02", BAGR)]
+    cal = cp.build_calendar(units, [rental("R1", 4, 8, unit="MINI_BAGR-01")])
+    row = day_row(cal, 6)
+    assert row["units"] == 1 and row["rental"] == 1 and row["free"] == 0   # slíbený stroj nezmizí
+    conf = cp.find_conflicts(cal)
+    assert [(c["kind"], c["days"]) for c in conf] == [("využití kusu mimo dobu, kdy je ve flotile", [6, 7, 8])]
+    occ = cp.unit_occupancy(cal, 6, 6).set_index("unit_id")["state"]
+    assert occ["MINI_BAGR-01"] == "mimo flotilu (přesto naplánováno: pronájem)"
+    # servis kusu mimo flotilu kapacitu podruhé neubírá a konflikt není
+    cal2 = cp.build_calendar(units, [service("MINI_BAGR-01", 4, 8)])
+    assert day_row(cal2, 6)["free"] == 1 and cp.find_conflicts(cal2) == []
+
+
+def test_type_conflict_with_uncertain_fleet_is_marked():
+    cal = cp.build_calendar([Unit("MINI_BAGR-01", BAGR), Unit("MINI_BAGR-02", BAGR, "owned", "x")],
+                            [rental("R1", 1, 1, q=2)])
+    conf = cp.find_conflicts(cal)
+    assert len(conf) == 1 and conf[0]["certain"] is False
+    assert day_row(cal, 1)["status"] == cp.UNKNOWN
+    assert cp.find_conflicts(cp.build_calendar(fleet(1), [rental("R1", 1, 1, q=2)]))[0]["certain"] is True
+
+
+def test_mixing_days_and_dates_is_rejected_everywhere():
+    for call in (lambda: cp.build_calendar(fleet(1), [rental("R1", 1, 2), rental("R2", date(2026, 1, 1), date(2026, 1, 2))]),
+                 lambda: cp.evaluate_request(cp.build_calendar(fleet(1), [rental("R1", 1, 2)]), BAGR,
+                                             date(2026, 1, 1), date(2026, 1, 2)),
+                 lambda: cp.daily_capacity(cp.build_calendar(fleet(1), [rental("R1", 1, 2)]),
+                                           date(2026, 1, 1), date(2026, 1, 2))):
+        try:
+            call()
+            assert False, "míchání čísel a dat musí selhat"
+        except TypeError:
+            pass
+
+
+def test_random_cases_match_simple_reference():
+    """Nezávislá kontrola: volné kusy po dnech spočítané přímočaře (bez kódu modulu)."""
+    import random
+    rnd = random.Random(7)
+    for _ in range(300):
+        units = []
+        for i in range(rnd.randint(1, 4)):
+            status = rnd.choice(["owned", "leased", "ordered"])
+            frm = rnd.choice([None, rnd.randint(1, 15)])
+            to = rnd.choice([None, rnd.randint(frm or 1, 20)])
+            units.append(Unit(f"U{i}", BAGR, status, frm, to))
+        items = []
+        for k in range(rnd.randint(0, 6)):
+            s = rnd.randint(1, 18)
+            e = s + rnd.randint(0, 5)
+            kind = rnd.choice(["rental", "job", "maintenance"])
+            unit = rnd.choice([u.unit_id for u in units]) if kind == "maintenance" or rnd.random() < .3 else None
+            items.append(Assignment(kind, f"A{k}", BAGR, s, e, 1 if unit else rnd.randint(1, 2),
+                                    rnd.choice(["confirmed", "confirmed", "tentative", "cancelled"]), unit))
+        cal = cp.build_calendar(units, items)
+        cap = cp.daily_capacity(cal, 1, 25).set_index("day")
+
+        def available(u, d):
+            if u.status == "ordered" and u.available_from is None:
+                return False
+            return (u.available_from is None or d >= u.available_from) and (u.available_to is None or d <= u.available_to)
+
+        by_id = {u.unit_id: u for u in units}
+        for d in range(1, 26):
+            n = sum(available(u, d) for u in units)
+            used = 0
+            for a in items:
+                if a.status != "confirmed" or not (a.start <= d <= a.end):
+                    continue
+                if a.kind == "maintenance" and not available(by_id[a.unit_id], d):
+                    continue
+                used += a.quantity
+            assert cap.loc[d, "units"] == n and cap.loc[d, "free"] == n - used, (units, items, d)
+            r = cp.evaluate_request(cal, BAGR, d, d)
+            assert r["status"] == (cp.FEASIBLE if n - used >= 1 else cp.INFEASIBLE), (units, items, d)
+
+
 def test_cancelled_and_tentative_bookings():
     cal = cp.build_calendar(fleet(1), [rental("R1", 1, 5, status="cancelled")])
     assert cal.assignments == [] and not cal.issues
@@ -281,13 +385,38 @@ def test_from_demo_model():
     assert len(cal.units) == len(model.fleet_units)
     confirmed = model.jobs[model.jobs["status"] == "confirmed"]
     assert {j.ref for j in cal.open_jobs} == set(confirmed["job_id"])     # zakázky nemají pevný termín
-    # zakázky bez termínu → jistota nikde, kde mohou proběhnout
-    r = cp.evaluate_request(cal, BAGR, 1, 3)
-    assert r["status"] == cp.UNKNOWN
+    # zakázky bez termínu → jistota nikde, kde mohou proběhnout – ani po termínu dokončení
+    assert all(j.latest is None for j in cal.open_jobs)
+    assert cp.evaluate_request(cal, BAGR, 1, 3)["status"] == cp.UNKNOWN
+    assert cp.evaluate_request(cal, BAGR, 17, 20)["status"] == cp.UNKNOWN
+    # předpoklad „termíny se dodrží“ jen na výslovné vyžádání
+    cal_dl = cp.from_model(model, assume_deadlines_met=True)
+    last = max(j.latest for j in cal_dl.open_jobs if j.type_id == BAGR)
+    assert cp.evaluate_request(cal_dl, BAGR, last + 1, last + 2)["status"] == cp.FEASIBLE
     # s termíny z plánu (např. výstup tab 6) se stanou pevným využitím
     starts = {j: 1 for j in confirmed["job_id"]}
     cal2 = cp.from_model(model, job_starts=starts)
     assert cal2.open_jobs == [] and any(a.kind == "job" for a in cal2.assignments)
+
+
+def test_from_model_with_schedule_from_tab6():
+    """Termíny z optimálního plánu záložky 6: zpožděná zakázka obsadí stroj i po termínu."""
+    import scheduling as sch
+    model = dm.load_model()
+    jobs, capacity = dm.legacy_jobs(model), dm.fleet_capacity(model)
+    plan = sch.evaluate(jobs, sch.optimize_schedule(jobs, capacity)["starts"])
+    ids = model.jobs["job_id"].tolist()
+    starts = {ids[i]: int(r.start_day) for i, r in plan.iterrows() if r.scheduled}
+    cal = cp.from_model(model, job_starts=starts)
+    assert not cal.issues and cal.open_jobs == []
+    assert cp.find_conflicts(cal) == []                          # plán záložky 6 kapacitu nepřekračuje
+    late = plan[plan["days_late"] > 0]
+    assert len(late)
+    for i, r in late.iterrows():
+        job_types = model.job_requirements.query("job_id == @ids[@i] and resource_kind == 'machine'")
+        for t in job_types["resource_id"]:
+            used = cp.daily_capacity(cal, int(r.end_day), int(r.end_day), [t]).iloc[0]["job"]
+            assert used >= 1                                     # obsazeno i po termínu dokončení
 
 
 def test_from_model_with_dates_and_bookings():
