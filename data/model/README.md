@@ -138,13 +138,15 @@ data, filtry a plán zakázek jako kalendář):
 - Každý den a typ stroje patří do jedné skupiny: běžný den → pronájem, vlastní zakázky, servis
   a volno (při neúplných údajích „nelze určit“ místo volna); konfliktní den (víc nároků než kusů)
   → celá kapacita jako **konflikt** – bez rozhodnutí o přednosti nelze určit, kdo stroj má.
+  Je-li počet kusů nejistý, přetížení není jistý konflikt – den je „nelze určit“ (stejně jako v kalendáři).
   Nároky nad počet kusů = **poptávka nad kapacitu**, do kapacity se nepočítají.
 - **Využití** = (pronájmy + vlastní zakázky) ÷ kapacita; servis se nepočítá. V konfliktním dni je
   jistě produktivních nejméně kusy − servis, nejvýše min(kusy, pronájmy + zakázky) → případné
   rozpětí. Nikdy nepřesáhne 100 %.
 - **Předběžné rezervace** kapacitu neblokují a do využití se nepočítají.
-- Hodnocení (orientační): vysoké ≥ 80 %, nízké < 40 %; zasahuje-li rozpětí do dvou kategorií,
-  „nelze určit“.
+- Hodnocení (orientační, nepodložené firemními daty): vysoké ≥ 80 %, nízké < 40 %; zasahuje-li
+  rozpětí do dvou kategorií, „nelze určit“.
+- **Obsazenost** v kalendáři zahrnuje servis; **využití** v přehledu servis nezahrnuje.
 
 ## Obnovení dat v běžící aplikaci
 

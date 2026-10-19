@@ -2367,7 +2367,7 @@ with tab7:
                 dict(label="Nelze určit", value=str(cap_sum["unknown_cells"]),
                      sub="dní × strojů s neúplnými údaji" if cap_sum["unknown_cells"] else "údaje jsou úplné"),
                 dict(label="Nejvytíženější stroj", value=html.escape(cap_sum["busiest"] or "–"),
-                     sub=(f"obsazeno {fmt_pct(cap_sum['busiest_share'], 0)} kusodnů v období"
+                     sub=(f"obsazenost vč. servisu {fmt_pct(cap_sum['busiest_share'], 0)} kusodnů v období"
                           if cap_sum["busiest"] else "")),
             ]
         )
@@ -2581,8 +2581,16 @@ with tab7:
                      "(pronájmy + vlastní zakázky) ÷ kapacita. Servis se nepočítá. V konfliktním dni je "
                      "jisté jen to, co servis nemůže zabrat; proto může vyjít rozpětí. Nikdy nepřesáhne "
                      "100 %."),
+                    ("Obsazenost × využití",
+                     "Obsazenost v kalendáři („Nejvytíženější stroj“) zahrnuje i servis – stroj je "
+                     "nedostupný. Využití v tomto přehledu servis nezahrnuje – jen produktivní obsazení "
+                     "pronájmy a vlastními zakázkami."),
                     ("Předběžné rezervace",
                      "Kapacitu neblokují a do využití se nepočítají – jsou uvedené jen pro informaci."),
+                    ("Hodnocení",
+                     f"Vysoké využití od {fmt_num(cv.HIGH_USE)} %, nízké pod {fmt_num(cv.LOW_USE)} %. Hranice jsou "
+                     "orientační – nejsou podložené skutečnými firemními daty. Zasahuje-li rozpětí využití "
+                     "do dvou kategorií, je hodnocení „nelze určit“."),
                     ("Nelze určit",
                      "Kde chybí údaje (např. zakázka bez termínu v plánu), zbylá kapacita není volno, "
                      "ale „nelze určit“."),

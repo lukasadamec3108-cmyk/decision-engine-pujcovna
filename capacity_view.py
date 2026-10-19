@@ -416,7 +416,7 @@ def check_request(cal: cp.Calendar, type_id: str, start: int, end: int, quantity
 #   - běžný den (bez konfliktu): pronájem, vlastní zakázky, servis a volno přesně podle
 #     potvrzených nároků; při stavu „nelze určit“ (např. zakázka bez termínu) je zbytek místo
 #     volna „nelze určit“,
-#   - konfliktní den (nároky > kusy): všechny kusy jsou obsazené, ale bez rozhodnutí o prioritě
+#   - konfliktní den (stav „překročeno“: nároky > jistý počet kusů): všechny kusy jsou obsazené, ale bez rozhodnutí o prioritě
 #     nelze určit, zda pronájmem, zakázkou, nebo servisem → skupina „konflikt“. Nároky nad
 #     počet kusů se vykazují zvlášť jako „poptávka nad kapacitu“ (není součástí kapacity).
 # Využití = produktivní obsazení (pronájem + vlastní zakázky; servis ne) ÷ kapacita.
@@ -448,12 +448,17 @@ def utilization_table(df: pd.DataFrame, names: dict, uncertain_types=()) -> pd.D
         p_min = p_max = excess = conflict_days = 0
         for r in part.itertuples():
             units, m, rent, job, free = int(r.units), int(r.maintenance), int(r.rental), int(r.job), int(r.free)
-            if free < 0:                                  # konfliktní den – rozdělení nelze určit
+            if r.status == cp.OVER:                       # konfliktní den – rozdělení nelze určit
                 acc["conflict"] += units
                 p_min += max(0, units - m)
                 p_max += min(units, rent + job)
                 excess += -free
                 conflict_days += 1
+            elif free < 0:
+                # Nároky převyšují známé kusy, ale počet kusů není jistý (kalendář: „nelze určit“)
+                # → nejde o jistý konflikt; celý den je „nelze určit“.
+                acc["unknown"] += units
+                p_max += min(units, rent + job)
             else:
                 acc["rental"] += rent
                 acc["job"] += job

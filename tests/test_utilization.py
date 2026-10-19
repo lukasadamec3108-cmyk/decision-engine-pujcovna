@@ -137,6 +137,19 @@ def test_zero_capacity_type_next_to_others_shows_cannot_determine_not_nan():
     assert f["capacity"] == 10 and f["conflict_days"] == [1, 2]
 
 
+def test_audit_uncertain_fleet_overbooking_is_not_reported_as_certain_conflict():
+    # Kalendář ukazuje „nelze určit“ (počet kusů není jistý) – přehled nesmí tvrdit jistý konflikt.
+    t, f, grid = table([Unit("A-1", A), Unit("A-2", A, "owned", "x")], [rental(1, 2, q=2)], end=3)
+    assert set(grid["status"]) == {cp.UNKNOWN}
+    r = row(t)
+    assert r.conflict == 0 and r.conflict_days == 0 and r.excess_demand == 0
+    assert r.unknown == r.capacity == 3 and r.rating == "nelze určit"
+    assert (t[cv.UTIL_GROUPS].sum(axis=1) == t["capacity"]).all()
+    # přetížení při jistém počtu kusů zůstává konfliktem i u typu s jinými neúplnými údaji
+    t, f, grid = table(units(1), [rental(1, 2, q=2), rental(5, None)], end=3)
+    assert row(t).conflict_days == 2 and f["conflict_days"] == [1, 2]
+
+
 def test_groups_sum_to_capacity_and_fleet_is_sum_of_types():
     rnd = random.Random(11)
     for _ in range(200):
@@ -155,6 +168,12 @@ def test_groups_sum_to_capacity_and_fleet_is_sum_of_types():
         t = cv.utilization_table(grid, {x: x for x in types}, cal.unknown_capacity)
         f = cv.fleet_utilization(t, grid)
         assert (t[cv.UTIL_GROUPS].sum(axis=1) == t["capacity"]).all()
+        # konfliktní dny přehledu = dny „překročeno“ v kalendáři (stejný kapacitní model)
+        over = grid[grid["status"] == cp.OVER]
+        assert t.set_index("type_id")["conflict_days"].to_dict() == {
+            x: int((over["type_id"] == x).sum()) for x in types}
+        assert f["conflict_days"] == sorted(int(d) for d in over.loc[
+            over["type_id"].isin(t.loc[t["capacity_known"], "type_id"]), "day"].unique())
         for g in ["capacity"] + cv.UTIL_GROUPS:
             assert f[g] == int(t[g].sum())
         for r in t.itertuples():
@@ -221,6 +240,17 @@ def test_overview_in_app_follows_period_and_type_filters():
     shown = [d.value for d in at.tabs[6].dataframe][0]
     assert shown["Stroj"].tolist() == ["Silniční válec"]
     assert not at.exception
+
+
+def test_audit_occupancy_vs_productive_use_and_orientation_thresholds_are_explicit():
+    at = overview_app()
+    texts = " ".join(m.value for m in at.tabs[6].markdown)
+    assert "servis se nepočítá" in texts and "orientační" in texts
+    expl = " ".join(m.value for m in at.tabs[6].expander[0].markdown) if at.tabs[6].expander else ""
+    assert "Hodnocení" in expl and "orientační" in expl and "obsazenost" in expl.lower()
+    at.radio(key="cap_view").set_value("Kalendář dostupnosti").run()
+    kal = [m.value for m in at.tabs[6].markdown if "Nejvytíženější stroj" in m.value][0]
+    assert "vč. servisu" in kal                                      # obsazenost ≠ využití
 
 
 def test_overview_button_opens_type_in_calendar():
