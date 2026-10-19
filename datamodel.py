@@ -17,6 +17,7 @@ Pokud rozdělení fixních nákladů zatím není známé, je celá částka ve 
 fixed_cost_month_unsplit a sloupce vlastnických a provozních fixních nákladů jsou prázdné.
 """
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -110,6 +111,18 @@ class Issue:
 # ---------------------------------------------------------------------------
 # Načtení
 # ---------------------------------------------------------------------------
+
+def data_fingerprint(directory=DEFAULT_DIR) -> str:
+    """Otisk obsahu všech CSV souborů dat (SHA-256). Změní se při jakékoli změně dat.
+
+    Aplikace ho používá jako klíč mezipaměti: po nasazení nových dat se načtou znovu i bez
+    restartu běžícího procesu. Soubory jsou malé, výpočet trvá zlomky milisekundy.
+    """
+    digest = hashlib.sha256()
+    for path in sorted(Path(directory).glob("*.csv")):
+        digest.update(path.name.encode("utf-8") + b"\0" + path.read_bytes() + b"\0")
+    return digest.hexdigest()
+
 
 def load_model(directory=DEFAULT_DIR) -> DataModel:
     """Načte všechny tabulky jako text (typy kontroluje až validate)."""

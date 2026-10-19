@@ -79,6 +79,22 @@ def period_bounds(cal: cp.Calendar, minimum: int = 14, extra: int = 5) -> tuple:
     return min(last, DEFAULT_PERIOD_DAYS), max(last + extra, 30)
 
 
+def plural(n: int, one: str, few: str, many: str) -> str:
+    """České tvary: 1 pronájem, 2–4 pronájmy, 0 a 5+ pronájmů."""
+    return f"{n} " + (one if n == 1 else few if 2 <= n <= 4 else many)
+
+
+def data_info(model, data_version: str = "") -> str:
+    """Nenápadný řádek o načtených datech – pro ověření, že aplikace používá aktuální data."""
+    b = model.rental_bookings
+    confirmed = int((b["status"] == cp.BLOCKING).sum())
+    text = (f"Načtená data: {plural(len(b), 'pronájem', 'pronájmy', 'pronájmů')} "
+            f"({plural(confirmed, 'potvrzený', 'potvrzené', 'potvrzených')}, "
+            f"{plural(len(b) - confirmed, 'předběžný', 'předběžné', 'předběžných')}) · "
+            f"{plural(len(model.maintenance), 'servisní odstávka', 'servisní odstávky', 'servisních odstávek')}")
+    return text + (f" · verze dat {data_version[:8]}" if data_version else "")
+
+
 # ---------------------------------------------------------------------------
 # Popisky dnů a zdrojů
 # ---------------------------------------------------------------------------
