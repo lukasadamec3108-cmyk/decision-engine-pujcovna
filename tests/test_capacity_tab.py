@@ -84,6 +84,23 @@ def test_day_detail_and_request_check():
     assert not at.exception
 
 
+def test_audit_texts_follow_filters_and_never_show_negative_units():
+    at = logged_in_app()
+    at.selectbox(key="cap_detail_type").set_value("SILNICNI_VALEC")
+    at.number_input(key="cap_detail_day").set_value(15).run()
+    detail = [m.value for m in tab(at).markdown if m.value.startswith("**Silniční válec")][0]
+    assert "-1" not in detail and "o 1 ks víc" in detail                    # dříve „volné -1 z 1 ks“
+    kpis = [m.value for m in tab(at).markdown if "Nejvytíženější stroj" in m.value][0]
+    assert "200" not in kpis
+    at.multiselect(key="cap_types").set_value(["REZACKA_ASFALTU"]).run()
+    assert not any("po termínu" in m.value for m in tab(at).markdown)    # řezačku zpožděná zakázka nedrží
+    at.multiselect(key="cap_types").set_value([]).run()
+    at.date_input(key="cap_plan_start").set_value(date(2026, 12, 20)).run()
+    kpis = [m.value for m in tab(at).markdown if "Dny s konfliktem" in m.value][0]
+    assert "St 30. 12." in kpis                                            # dny konfliktů i s datem
+    assert not at.exception
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

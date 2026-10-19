@@ -2272,6 +2272,20 @@ with tab6:
 # Kalendář jen zobrazuje výsledky modulu capacity.py (capacity_view = převod na tabulky a mřížku).
 # Termíny zakázek přebírá z plánu záložky 6 (stejná funkce plan_jobs, výsledek z mezipaměti).
 
+@st.cache_data(show_spinner=False, max_entries=64)
+def capacity_grid(job_starts: tuple, start: int, end: int, types: tuple, plan_start):
+    """Mřížka, její HTML a konflikty za období. Streamlit spouští kód všech záložek při každém
+    kliknutí – mezipaměť zajistí, že se kalendář přepočítá jen při změně jeho vstupů.
+    Ukládají se jen obyčejné tabulky a text (viz load_data_model)."""
+    tables, _ = load_data_model()
+    model = dm.DataModel(**tables)
+    cal = cv.build(model, dict(job_starts))
+    names = cv.type_names(model)
+    grid = cv.grid(cal, start, end, list(types))
+    return (grid, cv.grid_html(grid, names, cv.fleet_units(cal), plan_start),
+            cv.conflicts_table(cal, start, end, list(types), names, cv.job_info(model), plan_start))
+
+
 with tab7:
     st.markdown("### Kapacita strojů po dnech")
     st.markdown(cv.TAB_CSS, unsafe_allow_html=True)
@@ -2286,8 +2300,8 @@ with tab7:
     _, cap_plan, _ = plan_jobs(jobs_df, machine_capacity)
     cap_jobs = cv.job_info(data_model)
     cap_names = cv.type_names(data_model)
-    cap_cal = cv.build(data_model, cv.job_starts_from_plan(jobs_df, cap_plan))
-    cap_units = cv.fleet_units(cap_cal)
+    cap_starts = cv.job_starts_from_plan(jobs_df, cap_plan)
+    cap_cal = cv.build(data_model, cap_starts)
     cap_default_end, cap_max_day = cv.period_bounds(cap_cal)
     cap_types_all = [t for t in cap_names if t in cap_cal.type_ids()]
 
@@ -2314,15 +2328,15 @@ with tab7:
         )
 
     if cap_types:
-        cap_grid = cv.grid(cap_cal, cap_from, cap_to, cap_types)
+        cap_grid, cap_html, cap_conf = capacity_grid(
+            tuple(sorted(cap_starts.items())), cap_from, cap_to, tuple(cap_types), cap_start)
         cap_sum = cv.summary(cap_grid, cap_names)
         n_conf = len(cap_sum["conflict_days"])
         ui.kpi_cards(
             [
                 dict(label="Dny s konfliktem", value=str(n_conf),
                      sub=("bez konfliktu v období" if not n_conf else
-                          "dny: " + ", ".join(str(d) for d in cap_sum["conflict_days"][:8])
-                          + (" …" if n_conf > 8 else "")),
+                          "dny: " + cv.days_text(cap_sum["conflict_days"], cap_start)),
                      negative=n_conf > 0),
                 dict(label="Nelze určit", value=str(cap_sum["unknown_cells"]),
                      sub="dní × strojů s neúplnými údaji" if cap_sum["unknown_cells"] else "údaje jsou úplné"),
@@ -2331,13 +2345,13 @@ with tab7:
                           if cap_sum["busiest"] else "")),
             ]
         )
-        st.markdown(cv.grid_html(cap_grid, cap_names, cap_units, cap_start), unsafe_allow_html=True)
+        st.markdown(cap_html, unsafe_allow_html=True)
         ui.hint(
             "Číslo v buňce = <b>volné kusy / kusy k dispozici</b> ten den; pruh ukazuje jednotlivé kusy. "
             "Konec rezervace i zakázky je včetně posledního dne. Na mobilu kalendář posuňte do strany; "
             "po podržení buňky (na počítači najetí myší) se zobrazí podrobnosti."
         )
-        cap_late = cv.late_jobs(cap_cal, cap_jobs)
+        cap_late = cv.late_jobs(cap_cal, cap_jobs, cap_types, cap_from, cap_to)
         if cap_late:
             ui.insight(
                 "Plán záložky 6 dokončí některé zakázky <b>po termínu</b> – kalendář je ukazuje až do "
@@ -2350,7 +2364,6 @@ with tab7:
             )
 
         st.markdown("### Konflikty v období")
-        cap_conf = cv.conflicts_table(cap_cal, cap_from, cap_to, cap_types, cap_names, cap_jobs, cap_start)
         if cap_conf.empty:
             st.markdown(ui.status_chip("Bez konfliktu", "good") + " Ve zvoleném období a u vybraných strojů "
                         "nepřesahuje obsazení počet kusů.", unsafe_allow_html=True)
@@ -2371,9 +2384,7 @@ with tab7:
         cap_row = cap_grid[(cap_grid["type_id"] == cap_dt) & (cap_grid["day"] == cap_dd)].iloc[0]
         st.markdown(
             f"**{html.escape(cap_names[cap_dt])}, {cv.day_label(int(cap_dd), cap_start)}:** "
-            + (f"volné {int(cap_row['free'])} z {int(cap_row['units'])} ks"
-               if cap_row["status"] != cp.UNKNOWN else "počet volných kusů nelze určit")
-            + f" · stav: {cap_row['status']}"
+            + cv.day_status_text(cap_row)
         )
         cap_detail = cv.day_detail(cap_cal, cap_dt, int(cap_dd), cap_jobs, cap_start)
         if cap_detail.empty:

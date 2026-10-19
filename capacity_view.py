@@ -65,11 +65,18 @@ def build(model, job_starts: dict) -> cp.Calendar:
     return cp.from_model(model, job_starts=job_starts)
 
 
+DEFAULT_PERIOD_DAYS = 42      # výchozí zobrazené období nejvýš 6 týdnů (delší lze zvolit posuvníkem)
+
+
 def period_bounds(cal: cp.Calendar, minimum: int = 14, extra: int = 5) -> tuple:
-    """(výchozí konec období, nejzazší volitelný den). Pokryje všechna známá využití."""
+    """(výchozí konec období, nejzazší volitelný den).
+
+    Posuvník pokryje všechna známá využití; výchozí zobrazení je kvůli rychlosti a čitelnosti
+    nejvýš DEFAULT_PERIOD_DAYS dní.
+    """
     ends = [a.end for a in cal.assignments] + [j.latest for j in cal.open_jobs if j.latest is not None]
     last = max(ends + [minimum])
-    return last, max(last + extra, 30)
+    return min(last, DEFAULT_PERIOD_DAYS), max(last + extra, 30)
 
 
 # ---------------------------------------------------------------------------
@@ -87,6 +94,12 @@ def day_label(day: int, plan_start: Optional[date] = None, short: bool = False) 
         return f"den {day}"
     text = f"{WEEKDAYS[d.weekday()]} {d.day}. {d.month}."
     return text if short else f"den {day} · {text} {d.year}"
+
+
+def days_text(day_list, plan_start: Optional[date] = None, limit: int = 8) -> str:
+    """Výčet dní pro souhrn: „11, 15, 16“, nebo s datem „St 30. 12., Ne 3. 1.“."""
+    shown = [day_label(d, plan_start, short=True) if plan_start else str(d) for d in day_list[:limit]]
+    return ", ".join(shown) + (" …" if len(day_list) > limit else "")
 
 
 def job_title(ref: str, jobs: dict) -> str:
@@ -246,6 +259,8 @@ def summary(df: pd.DataFrame, names: dict) -> dict:
     conflict_days = sorted(df.loc[df["status"] == cp.OVER, "day"].unique())
     unknown_cells = int((df["status"] == cp.UNKNOWN).sum())
     known = df[df["status"] != cp.UNKNOWN]
+    # Obsazenost nejvýš 100 % kusů – přetížení (konflikt) se vykazuje zvlášť v conflict_days.
+    known = known.assign(used=known[["used", "units"]].min(axis=1))
     by_type = known.groupby("type_id")[["used", "units"]].sum()
     by_type = by_type[by_type["units"] > 0]
     busiest, share = None, None
@@ -254,6 +269,19 @@ def summary(df: pd.DataFrame, names: dict) -> dict:
         busiest, share = names.get(ratio.index[0], ratio.index[0]), float(ratio.iloc[0]) * 100
     return dict(conflict_days=conflict_days, unknown_cells=unknown_cells, busiest=busiest,
                 busiest_share=share, tentative_cells=int((df["tentative"] > 0).sum()))
+
+
+def day_status_text(row) -> str:
+    """Stav jednoho dne a stroje slovy – nikdy záporný počet volných kusů."""
+    units, free = int(row["units"]), int(row["free"])
+    if row["status"] == cp.UNKNOWN:
+        text = "počet volných kusů nelze určit"
+    elif free < 0:
+        text = (f"volné 0 z {units} ks – obsazení je o {-free} ks víc, než je k dispozici "
+                "(konflikt)")
+    else:
+        text = f"volné {free} z {units} ks"
+    return f"{text} · stav: {row['status']}"
 
 
 def day_detail(cal: cp.Calendar, type_id: str, day: int, jobs: dict, plan_start=None) -> pd.DataFrame:
@@ -313,12 +341,21 @@ def conflicts_table(cal: cp.Calendar, start: int, end: int, type_ids, names: dic
     return pd.DataFrame(rows, columns=["Stroj", "Konflikt", "Dny", "Chybí kusů", "Příčina", "Jistota"])
 
 
-def late_jobs(cal: cp.Calendar, jobs: dict) -> list:
-    """[(job_id, název, konec, termín)] zakázek, které v plánu končí po termínu."""
+def late_jobs(cal: cp.Calendar, jobs: dict, type_ids=None, start=None, end=None) -> list:
+    """[(job_id, název, konec, termín)] zakázek, které v plánu končí po termínu.
+
+    Volitelně jen ty, které drží vybrané typy strojů ve dnech po termínu v zobrazeném období.
+    """
     out = {}
     for a in cal.assignments:
-        if a.kind == "job" and a.ref in jobs and a.end > jobs[a.ref][1]:
-            out[a.ref] = (a.ref, jobs[a.ref][0], a.end, jobs[a.ref][1])
+        if a.kind != "job" or a.ref not in jobs or a.end <= jobs[a.ref][1]:
+            continue
+        if type_ids is not None and a.type_id not in type_ids:
+            continue
+        late_from = max(a.start, jobs[a.ref][1] + 1)            # první den, kdy stroj drží po termínu
+        if (start is not None and a.end < start) or (end is not None and late_from > end):
+            continue
+        out[a.ref] = (a.ref, jobs[a.ref][0], a.end, jobs[a.ref][1])
     return sorted(out.values())
 
 

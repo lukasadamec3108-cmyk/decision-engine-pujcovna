@@ -233,6 +233,47 @@ def test_invalid_data_is_listed_and_never_free():
     assert all("seg free" not in c for c in cells(cv.grid_html(df, NAMES, cv.fleet_units(cal))))
 
 
+# ---------------------------------------------------------------------------
+# Regresní testy z auditu PR #22
+# ---------------------------------------------------------------------------
+
+def test_audit_summary_share_never_exceeds_100_percent():
+    # konflikt (2 nároky na 1 kus) nesmí vypadat jako „obsazeno 200 %“ – přetížení se hlásí zvlášť
+    s = cv.summary(cv.grid(CAL, 15, 18, ["SILNICNI_VALEC"]), NAMES)
+    assert s["busiest_share"] == 100 and s["conflict_days"] == [15, 16, 17, 18]
+
+
+def test_audit_day_status_text_never_shows_negative_free_units():
+    df = cv.grid(CAL, 15, 15, ["SILNICNI_VALEC", BAGR, "VIBRACNI_DESKA"]).set_index("type_id")
+    over = cv.day_status_text(df.loc["SILNICNI_VALEC"])
+    assert "-" not in over.split("·")[0] and "o 1 ks víc" in over and "konflikt" in over
+    assert cv.day_status_text(df.loc[BAGR]).startswith("volné 0 z 1 ks")
+    assert cv.day_status_text(df.loc["VIBRACNI_DESKA"]).startswith("volné 2 z 2 ks")
+    unknown = df.loc[BAGR].copy()
+    unknown["status"] = cp.UNKNOWN
+    assert cv.day_status_text(unknown).startswith("počet volných kusů nelze určit")
+
+
+def test_audit_late_jobs_follow_type_and_period_filter():
+    assert {x[0] for x in cv.late_jobs(CAL, INFO)} == {"J006", "J009", "J011"}
+    assert cv.late_jobs(CAL, INFO, ["REZACKA_ASFALTU"]) == []                 # řezačku žádná nedrží
+    assert [x[0] for x in cv.late_jobs(CAL, INFO, [BAGR])] == ["J011"]
+    assert [x[0] for x in cv.late_jobs(CAL, INFO, None, 1, 10)] == []          # zpoždění až po dni 10
+
+
+def test_audit_days_text_uses_dates_when_plan_start_is_set():
+    assert cv.days_text([11, 15, 16]) == "11, 15, 16"
+    assert cv.days_text([11, 15], date(2026, 12, 20)) == "St 30. 12., Ne 3. 1."
+    assert cv.days_text(list(range(1, 12))).endswith("…")
+
+
+def test_audit_default_period_is_limited_for_long_data():
+    cal = cp.build_calendar(cv.build(MODEL, {}).units, [Assignment("rental", "R", BAGR, 300, 360)])
+    end, last = cv.period_bounds(cal)
+    assert end == cv.DEFAULT_PERIOD_DAYS and last == 365          # celý rok jde zvolit posuvníkem
+    assert cv.period_bounds(CAL)[0] == 25                         # ukázková data: celé období
+
+
 def test_period_bounds_cover_all_known_use():
     end, last = cv.period_bounds(CAL)
     assert end == 25 and last >= 30
