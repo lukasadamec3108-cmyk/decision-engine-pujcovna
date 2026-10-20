@@ -18,6 +18,7 @@ import auth
 import capacity as cp
 import capacity_view as cv
 import datamodel as dm
+import econ_formula as ef
 import planner as pl
 import planner_view as pv
 import portfolio as pf
@@ -35,6 +36,7 @@ sch = importlib.reload(sch)
 cp = importlib.reload(cp)
 cv = importlib.reload(cv)
 pl = importlib.reload(pl)
+ef = importlib.reload(ef)
 pv = importlib.reload(pv)
 from ui_theme import fmt_czk, fmt_days, fmt_num, fmt_pct
 
@@ -255,7 +257,7 @@ with sb_user:
                     st.caption("Hash zkopírujte do password_hash v secrets. Heslo se nikam neukládá.")
 
 # Verze dat a kódu jako součást klíčů mezipaměti (≈ 1 ms na běh) – viz load_data_model.
-CODE_MODULES = (dm, sch, cp, cv, pl, pv)
+CODE_MODULES = (dm, sch, cp, cv, pl, ef, pv)
 data_version = dm.data_fingerprint()
 code_version = dm.files_fingerprint([m.__file__ for m in CODE_MODULES])
 _tables, _issues = load_data_model(data_version, code_version)

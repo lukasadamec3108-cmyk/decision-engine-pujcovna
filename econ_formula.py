@@ -285,7 +285,7 @@ def _num(x: float) -> str:
     return f"{x:,.2f}".replace(",", " ").rstrip("0").rstrip(".")
 
 
-def _compare_one(diff: Formula, unknowns: dict) -> dict:
+def _compare_one(diff: Formula, unknowns: dict, name: str = A) -> dict:
     """Znaménko rozdílu A − B pro všechny neznámé ≥ 0."""
     k, terms = diff.known, diff.terms
     if not terms:
@@ -301,32 +301,35 @@ def _compare_one(diff: Formula, unknowns: dict) -> dict:
     if data:
         return dict(status=UNDECIDABLE, winner=None, strict=False, diff=diff, condition="",
                     blocking=[unknowns[key].label if key in unknowns else str(key) for key in data])
-    return dict(status=CONDITIONAL, winner=None, strict=False, diff=diff, condition=condition(diff, unknowns))
+    return dict(status=CONDITIONAL, winner=None, strict=False, diff=diff,
+                condition=condition(diff, unknowns, name))
 
 
-def condition(diff: Formula, unknowns: dict) -> str:
-    """Kdy je A lepší než B (rozdíl > 0) – u jedné sazby jako hranice zlomu."""
+def condition(diff: Formula, unknowns: dict, name: str = A) -> str:
+    """Kdy je A (name) lepší než B (rozdíl > 0) – u jedné sazby jako hranice zlomu."""
     label = lambda key: f"[{unknowns[key].label}]" if key in unknowns else str(key)
     if len(diff.terms) == 1:
         key, c = diff.terms[0]
         t = -diff.known / c
-        return f"A je lepší, pokud {label(key)} {'<' if c < 0 else '>'} {_czk(t)} (hranice zlomu)"
+        return f"{name} je lepší, pokud {label(key)} {'<' if c < 0 else '>'} {_czk(t)} (hranice zlomu)"
     left = " + ".join(f"{_num(-c)} × {label(key)}" for key, c in diff.terms if c < 0)
     right = " + ".join(f"{_num(c)} × {label(key)}" for key, c in diff.terms if c > 0)
     rhs = _czk(diff.known) + (f" + {right}" if right else "")
-    return f"A je lepší, pokud {left or '0'} < {rhs}"
+    return f"{name} je lepší, pokud {left or '0'} < {rhs}"
 
 
-def compare(a: Contribution, b: Contribution) -> dict:
+def compare(a: Contribution, b: Contribution, names: tuple = (A, B)) -> dict:
     """Porovná varianty A a B. Vrací status (jistý/podmíněný/nelze rozhodnout), vítěze
-    (A/B/shoda, jen u jistého výsledku), rozdíl A − B po scénářích a srozumitelný text."""
+    (A/B/shoda, jen u jistého výsledku), rozdíl A − B po scénářích a srozumitelný text.
+    names … jak varianty v textu pojmenovat (výchozí „A“ a „B“)."""
     unknowns = {**a.unknowns, **b.unknowns}
+    shown = {A: names[0], B: names[1]}
     if not a.valid or not b.valid:
         reasons = tuple(dict.fromkeys(a.invalid + b.invalid))
         return dict(status=UNDECIDABLE, winner=None, scenarios={}, reasons=reasons,
                     text="Nelze rozhodnout – neplatné údaje: " + "; ".join(reasons))
     sa, sb = _expand(a.scenarios, b.scenarios)
-    per = {sc: _compare_one(sa[sc] - sb[sc], unknowns) for sc in sa}
+    per = {sc: _compare_one(sa[sc] - sb[sc], unknowns, names[0]) for sc in sa}
     statuses = {r["status"] for r in per.values()}
     winners = {r["winner"] for r in per.values()}
     if UNDECIDABLE in statuses:
@@ -339,14 +342,15 @@ def compare(a: Contribution, b: Contribution) -> dict:
         if w == EQUAL:
             text = "Jistě shodné – rozdíl je přesně 0 Kč."
         else:
-            text = (f"Jistě lepší je varianta {w}" + ("" if strict else
+            text = (f"Jistě lepší je varianta {shown[w]}" + ("" if strict else
                     " (nikdy horší; shoda jen při nulových neznámých sazbách)") + ".")
         return dict(status=CERTAIN, winner=w, strict=strict, scenarios=per, reasons=(), text=text)
     parts = []
     for sc, r in per.items():
         prefix = f"pokud {SCENARIO_LABEL[sc]}: " if sc != ONLY else ""
         if r["status"] == CERTAIN:
-            parts.append(prefix + ("shoda" if r["winner"] == EQUAL else f"lepší je {r['winner']}"))
+            parts.append(prefix + ("shoda" if r["winner"] == EQUAL else f"lepší je {shown[r['winner']]}"
+                                   + ("" if r["strict"] else " (při nulových neznámých sazbách shoda)")))
         else:
             parts.append(prefix + r["condition"])
     return dict(status=CONDITIONAL, winner=None, scenarios=per, reasons=(),
@@ -384,3 +388,87 @@ def bounds(c: Contribution) -> tuple:
     lo = None if any(x is None for x in los) else min(los)
     hi = None if any(x is None for x in his) else max(his)
     return lo, hi
+
+
+# ---------------------------------------------------------------------------
+# Pomůcky pro rozhodování plánovače (E2.5c krok 3)
+# ---------------------------------------------------------------------------
+
+def variant_label(variant: tuple) -> str:
+    """Název varianty v textu: „R1 + R2“, prázdná varianta = „nepřijmout nic“."""
+    return " + ".join(variant) if variant else "nepřijmout nic"
+
+
+def scenario_formula(c: Contribution, scenario: str) -> Formula:
+    """Vzorec varianty v daném scénáři (jediný scénář platí pro „ano“ i „ne“)."""
+    return c.scenarios.get(scenario, c.scenarios.get(ONLY))
+
+
+def restrict(c: Contribution, scenario: str) -> Contribution:
+    """Příspěvek omezený na jeden scénář nastavení (pro výklad podmínek po scénářích)."""
+    return Contribution({ONLY: scenario_formula(c, scenario)}, c.unknowns)
+
+
+def profile(lines: dict) -> Optional[dict]:
+    """Která varianta je nejlepší v závislosti na JEDNÉ neznámé sazbě x ≥ 0.
+
+    lines … {jméno: Formula}; všechny vzorce smějí obsahovat nejvýše jednu společnou neznámou.
+    Vrací {"key", "segments": [(od, do | None, (nejlepší…))], "at_zero": (nejlepší při x = 0)}
+    nebo None, když vzorce závisejí na více neznámých. Hranice úseků jsou hranice zlomu.
+    """
+    keys = {k for f in lines.values() for k, _ in f.terms}
+    if len(keys) > 1:
+        return None
+    key = next(iter(keys), None)
+    slope = {n: f.coefs().get(key, 0.0) for n, f in lines.items()}
+    known = {n: f.known for n, f in lines.items()}
+    names = list(lines)
+    points = {0.0}
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            if abs(slope[a] - slope[b]) > EPS:
+                x = (known[b] - known[a]) / (slope[a] - slope[b])
+                if x > EPS:
+                    points.add(_clean(x))
+    points = sorted(points)
+
+    def best(x):
+        vals = {n: known[n] + slope[n] * x for n in names}
+        top = max(vals.values())
+        return tuple(n for n in names if vals[n] >= top - EPS)
+
+    segments = []
+    for i, lo in enumerate(points):
+        hi = points[i + 1] if i + 1 < len(points) else None
+        probe = (lo + hi) / 2 if hi is not None else lo + max(1.0, lo)
+        w = best(probe)
+        if segments and segments[-1][2] == w:
+            segments[-1] = (segments[-1][0], hi, w)
+        else:
+            segments.append((lo, hi, w))
+    return dict(key=key, segments=segments, at_zero=best(0.0))
+
+
+def profile_text(prof: dict, unknowns: dict) -> str:
+    """Úseky profilu slovy, např. „do 2 250 Kč: J; 2 250–6 750 Kč: R1 + R2; nad 6 750 Kč: nepřijmout nic“."""
+    def who(w):
+        return " = ".join(w) + (" (shodně)" if len(w) > 1 else "")
+    if prof["key"] is None:
+        return "nejlépe vychází " + who(prof["segments"][0][2])
+    label = unknowns[prof["key"]].label if prof["key"] in unknowns else str(prof["key"])
+    parts = []
+    for lo, hi, w in prof["segments"]:
+        if hi is None and lo == 0:
+            span = "při jakékoli hodnotě"
+        elif hi is None:
+            span = f"nad {_czk(lo)}"
+        elif lo == 0:
+            span = f"do {_czk(hi)}"
+        else:
+            span = f"{_czk(lo)}–{_czk(hi)}"
+        parts.append(f"{span}: {who(w)}")
+    text = f"záleží na [{label}] – " + "; ".join(parts)
+    first = prof["segments"][0][2]
+    if set(prof["at_zero"]) - set(first):
+        text += f" (při nulové hodnotě shodně i {', '.join(n for n in prof['at_zero'] if n not in first)})"
+    return text

@@ -93,7 +93,10 @@ def test_equal_benefit_is_feasible_and_missing_economics_cannot_decide():
     res = pv.evaluate(model(var_rental=0), {}, reqs)
     assert {c["badge"] for c in res["cards"]} == {pv.FEASIBLE} and "shodný" in card(res, "NP-1")["why"]
     res = pv.evaluate(model(), {}, reqs)                                     # chybí variabilní náklad
-    assert {c["badge"] for c in res["cards"]} == {pv.UNDECIDED}
+    # E2.5c krok 3: podmíněný výsledek (hranice zlomu) – žádné „Doporučeno“
+    assert {c["badge"] for c in res["cards"]} == {pv.FEASIBLE}
+    assert "závisí na neznámých nákladech" in card(res, "NP-1")["why"]
+    assert res["groups"][0]["verdict"] == pl.CONDITIONAL
     econ = card(res, "NP-1")["economic"]
     assert "nejvýše" in econ and "chybí" in econ and "příspěvek 0" not in econ
     assert any("variabilní náklad" in m for m in res["missing"])
@@ -237,11 +240,13 @@ def test_tab_in_app_full_flow_without_changing_data():
     at.selectbox(key="dp_r_type").set_value("PASOVY_DUMPER")
     at.number_input(key="dp_r_from").set_value(22); at.number_input(key="dp_r_to").set_value(23)
     click(at, "Přidat k porovnání")
-    assert badges(at) == [pv.NOT_FEASIBLE, pv.UNDECIDED, pv.UNDECIDED]
+    # E2.5c krok 3: chybí variabilní náklad → podmíněně (hranice zlomu), žádné doporučení
+    assert badges(at) == [pv.NOT_FEASIBLE, pv.FEASIBLE, pv.FEASIBLE]
+    assert any("hranice zlomu" in m.value or "8 000 Kč" in m.value for m in at.tabs[7].markdown)
     assert any("předběžná rezervace z dat – neruší se" in m.value for m in at.tabs[7].markdown)
     # 4) odebrání a vymazání
     at.button(key="dp_rm_NP-1").click().run()
-    assert badges(at) == [pv.UNDECIDED, pv.UNDECIDED]
+    assert badges(at) == [pv.FEASIBLE, pv.FEASIBLE]
     at.button(key="dp_clear").click().run()
     assert badges(at) == []
     # 5) zakázka podle šablony, chybná data formuláře

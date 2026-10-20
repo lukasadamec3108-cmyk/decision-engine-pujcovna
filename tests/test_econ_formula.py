@@ -105,10 +105,15 @@ def test_same_unknown_rate_in_both_variants_cancels():
     r = ef.compare(a, b)
     assert r["status"] == ef.CERTAIN and r["winner"] == ef.B and r["strict"]
     assert r["scenarios"][ef.ONLY]["diff"] == ef.Formula(-500.0)               # x se vyrušilo
-    # dosavadní intervaly by tu daly falešné „nelze rozhodnout“ (obě jen horní mez)
+    # plánovač (E2.5c krok 3) využije vyrušení: A je vyloučená, zbývá jen B + C proti „nic“ (podmíněně)
     p = pl.plan(m, new_requests=[rent("A", 1, 5, price=6500), rent("B", 1, 3, price=7000),
                                  rent("C", 4, 5, price=6000)])
-    assert p.groups[0]["verdict"] == pl.NO_DECISION
+    g = p.groups[0]
+    assert g["verdict"] == pl.CONDITIONAL and ("A",) not in g["contenders"]
+    # B + C = 33 000 − 5x, B = 21 000 − 3x, C = 12 000 − 2x: nad 6 000 Kč je C ztrátový, nad 7 000 Kč i B
+    assert [(lo, hi, w) for lo, hi, w in g["profiles"][0]["profile"]["segments"]] == [
+        (0.0, 6000.0, ("B + C",)), (6000.0, 7000.0, ("B",)), (7000.0, None, ("nepřijmout nic",))]
+    assert "do 6 000 Kč: B + C; 6 000 Kč–7 000 Kč: B; nad 7 000 Kč: nepřijmout nic" in g["text"]
     # přesná shoda: stejné strojodny i tržba
     r = ef.compare(ef.variant_formula(m, [rent("A", 1, 4, price=5000)]),
                    ef.variant_formula(m, [rent("B", 1, 2, price=5000), rent("C", 3, 4, price=5000)]))

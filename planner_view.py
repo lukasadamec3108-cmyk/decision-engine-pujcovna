@@ -166,6 +166,10 @@ def badge(entry: dict, group: Optional[dict]) -> tuple:
         return FEASIBLE, ("Sám se vejde, ale se soupeřícími požadavky se vejde jen část a každá taková varianta "
                           "je ztrátová – ekonomicky nejlépe vychází nepřijmout žádný z nich. Nic se neruší – "
                           "rozhodne uživatel.")
+    if group["verdict"] == pl.CONDITIONAL:
+        return FEASIBLE, ("Sám se vejde, ale se soupeřícími požadavky se vejde jen část a která varianta je "
+                          "ekonomicky nejlepší, závisí na neznámých nákladech – hranice zlomu jsou uvedené u "
+                          "soupeřících požadavků. Nic se neruší – rozhodne uživatel.")
     if group["verdict"] == pl.EQUAL:
         return FEASIBLE, ("Sám se vejde; se soupeřícími požadavky mají varianty shodný ekonomický přínos – "
                           "rozhodne uživatel.")
