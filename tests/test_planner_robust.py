@@ -106,7 +106,8 @@ def test_decision_depends_on_unknown_rate_gives_break_even():
     segs = g["profiles"][0]["profile"]["segments"]
     assert [(lo, hi, w) for lo, hi, w in segs] == [(0.0, 2750.0, ("A",)), (2750.0, 9000.0, ("B",)),
                                                    (9000.0, None, ("nepřijmout nic",))]
-    assert "do 2 750 Kč: A; 2 750 Kč–9 000 Kč: B; nad 9 000 Kč: nepřijmout nic" in g["text"]
+    assert ("pod 2 750 Kč: A; přesně 2 750 Kč: A = B (shodně); mezi 2 750 Kč a 9 000 Kč: B; "
+            "přesně 9 000 Kč: B = nepřijmout nic (shodně); nad 9 000 Kč: nepřijmout nic") in g["text"]
     assert any("variabilní náklad pronájmu" in x for x in p.missing_data)
 
 
@@ -143,7 +144,7 @@ def test_both_scenarios_of_direct_cost_includes_machines():
     assert set(g["contenders"]) == {("J",), ("R1", "R2")}
     assert [(lo, hi, w) for lo, hi, w in by_sc["ne"]["segments"]] == [(0.0, 3750.0, ("J",)),
                                                                       (3750.0, None, ("R1 + R2",))]
-    assert "do 3 750 Kč: J; nad 3 750 Kč: R1 + R2" in g["text"]
+    assert "pod 3 750 Kč: J; přesně 3 750 Kč: J = R1 + R2 (shodně); nad 3 750 Kč: R1 + R2" in g["text"]
     assert "Pokud přímé náklady zakázek neobsahují stroje" in g["text"]
     # nastavení zadané: „ano“ + známá sazba stroje → náklad stroje se neodečte podruhé
     p = long_vs_short(model(var_rental=1500, var_job=2000, includes="ano"))

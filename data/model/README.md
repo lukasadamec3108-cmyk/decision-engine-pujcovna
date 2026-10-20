@@ -166,7 +166,7 @@ nula je výslovně označená.
 kartami u každé skupiny soupeřících požadavků a vychází jen z výsledku plánovače: výsledek jednou
 větou → „Proč?“ (rozdíly v Kč jen tehdy, když mají všechny varianty přesnou částku) → porovnávané
 varianty včetně „nepřijmout nic“ (prokazatelně horší sbalené) → „Kdy se co vyplatí“ (pásma hranic
-zlomu v Kč/den jako seznam; při více neznámých podmínky dvojic slovy s oběma variantami a jednotkami,
+zlomu v Kč/den jako seznam – úseky „pod / mezi / nad“, přesně v hranici se uvádí rovnost variant, nikoli vítězství; necelé hranice na dvě desetinná místa; při více neznámých podmínky dvojic slovy s oběma variantami a jednotkami,
 zjednodušené jen tam, kde je to přesné) → „Co doplnit“ (jen údaje, na kterých rozhodnutí závisí) →
 upozornění, že se nic nezamítá ani neruší. Karty mají jen krátkou větu s odkazem na panel. Nezadaný
 údaj bez vlivu na výsledek je označený „neuplatňuje se“ (např. penále u zakázky v termínu).

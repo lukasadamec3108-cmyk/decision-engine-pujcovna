@@ -76,8 +76,8 @@ def test_equal_with_nothing():
 def test_conditional_with_break_even_in_kc_per_day():
     cs = cards(model(), [rent("NP-1", 1, 5, 6500), rent("NP-2", 1, 3, 9000)])
     assert badges(cs) == {"NP-1": (pv.OP_FITS, pv.EC_COND), "NP-2": (pv.OP_FITS, pv.EC_COND)}
-    assert "do 2 750 Kč/den" in cs["NP-1"]["econ_why"]
-    assert "2 750–9 000 Kč/den" in cs["NP-2"]["econ_why"]
+    assert "pod 2 750 Kč/den" in cs["NP-1"]["econ_why"]
+    assert "mezi 2 750 a 9 000 Kč/den" in cs["NP-2"]["econ_why"]
     panel = pv.evaluate(model(), {}, [rent("NP-1", 1, 5, 6500), rent("NP-2", 1, 3, 9000)])["panels"][0]
     assert any("nepočítá jako 0 Kč" in x for x in panel["why"]) and "nepočítá jako 0 Kč" in panel["missing_note"]
 
@@ -87,7 +87,7 @@ def test_conditional_never_winner_is_not_shown_as_conditional():
     # NP-1 nevyhrává v žádném úseku → „Nevyplatí se“ (nanejvýš shodně na hranici)
     cs = cards(model(), [rent("NP-1", 2, 3, 8000), rent("NP-2", 1, 5, 8000)])
     assert badges(cs) == {"NP-1": (pv.OP_FITS, pv.EC_NO), "NP-2": (pv.OP_FITS, pv.EC_COND)}
-    assert "nanejvýš shodně" in cs["NP-1"]["econ_why"]
+    assert "stejně jako nejlepší jen přesně při 8 000 Kč/den" in cs["NP-1"]["econ_why"]
 
 
 def test_conditional_with_several_unknowns_does_not_invent_one_threshold():

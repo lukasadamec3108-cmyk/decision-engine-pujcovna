@@ -95,8 +95,11 @@ def test_conditional_single_unknown_panel():
     assert pn["badge"] == pv.EC_COND
     assert pn["headline"] == "Záleží na nezadaném nákladu: Pásový dumper: variabilní náklad pronájmu (Kč/den)."
     (block,) = pn["conditions"]
-    assert block["lines"][:2] == ["do 8 000 Kč/den: FIKT-P06", "nad 8 000 Kč/den: nepřijmout nic"]
-    assert "NP-1: nevychází nejlépe při žádné výši nákladu (nanejvýš shodně na hranici)" in block["lines"]
+    assert block["lines"][:3] == ["pod 8 000 Kč/den: FIKT-P06",
+                                  "přesně 8 000 Kč/den: FIKT-P06, NP-1 a nepřijmout nic vycházejí stejně (rovnocenné)",
+                                  "nad 8 000 Kč/den: nepřijmout nic"]
+    assert "NP-1: nevychází nejlépe při žádné výši nákladu (stejně jako nejlepší jen přesně při 8 000 Kč/den)" \
+        in block["lines"]
     assert block["break_even"] and "Hranice zlomu je výše nákladu" in text(pn)
     assert pn["missing"] == ["Pásový dumper: variabilní náklad pronájmu (Kč/den)"]      # ne smykový nakladač
     assert "nepočítá jako 0 Kč" in pn["missing_note"]
@@ -359,6 +362,82 @@ def test_audit_panel_claims_hold_for_any_value_of_unknown_costs():
                         elif pn["kind"] == "equal":
                             assert all(abs(vals[tuple(b)] - top) < 1e-6 for b in g["best"])
     assert checked > 10
+
+
+
+# ---------------------------------------------------------------------------
+# Hranice zlomu: v hranici rovnost, ne vítězství (kontrola po 4C)
+# ---------------------------------------------------------------------------
+
+def test_boundary_fikt_p07_vs_np3_states_equality_at_threshold():
+    # FIKT-P07 = 37 500 − 5x, NP-3 = 8 000 − 4x, nic = 0 → při x = 7 500 je FIKT-P07 přesně 0 Kč jako „nic“
+    from test_econ_formula import filled
+    res = run(DEMO, [rent("NP-3", 20, 23, 2000, "SMYKOVY_NAKLADAC")], STARTS)
+    pn = next(x for x in res["panels"] if "NP-3" in x["requests"])
+    lines = pn["conditions"][0]["lines"]
+    assert lines == ["pod 7 500 Kč/den: FIKT-P07",
+                     "přesně 7 500 Kč/den: FIKT-P07 a nepřijmout nic vycházejí stejně (rovnocenné)",
+                     "nad 7 500 Kč/den: nepřijmout nic",
+                     "NP-3: nevychází nejlépe při žádné výši nákladu"]       # NP-3 v hranici neremizuje
+    cards = {c["ref"]: c for c in res["cards"]}
+    assert "pod 7 500 Kč/den (přesně při 7 500 Kč/den stejně jako nepřijmout nic)" in cards["FIKT-P07"]["econ_why"]
+    assert "stejně jako nejlepší" not in cards["NP-3"]["econ_why"]
+    p = pl.plan(DEMO, STARTS, [pv.to_request(rent("NP-3", 20, 23, 2000, "SMYKOVY_NAKLADAC"))])
+    p07 = p.requests["FIKT-P07"]["request"]
+    for x, expected in ((7499, 5.0), (7500, 0.0), (7501, -5.0)):
+        assert pl.contribution(filled(DEMO, rental={"SMYKOVY_NAKLADAC": x}), p07).lo == expected
+
+
+def test_non_integer_threshold_is_not_rounded_across_the_boundary():
+    # NP-1 = 42 700 − 7x, NP-2 = 36 000 − 4x → hranice 6 700 / 3 = 2 233,33 Kč/den
+    pn = one_panel(run(model(), [rent("NP-1", 1, 7, 6100), rent("NP-2", 1, 4, 9000)]))
+    lines = pn["conditions"][0]["lines"]
+    assert lines[0] == "pod 2 233,33 Kč/den: NP-1"
+    assert "přesně 2 233,33 Kč/den: NP-1 a NP-2 vycházejí stejně (rovnocenné)" in lines
+    assert ef.rate_text(2233.3333) == "2 233,33 Kč" and ef.rate_text(7500.0) == "7 500 Kč"
+
+
+def test_boundaries_match_true_values_random():
+    from test_econ_formula import filled
+    rnd = random.Random(77)
+    checked = 0
+    for _ in range(40):
+        reqs = []
+        for i in range(rnd.randint(2, 4)):
+            s = rnd.randint(1, 6)
+            reqs.append(rent(f"NP-{i + 1}", s, s + rnd.randint(0, 4), rnd.choice([None, 2000, 4500, 6100, 9000])))
+        m = model(units=rnd.randint(1, 2))                                  # jediná neznámá: sazba pronájmu
+        res = run(m, reqs)
+        p = pl.plan(m, {}, [pv.to_request(r) for r in reqs])
+        by = {r["ref"]: pv.to_request(r) for r in reqs}
+        for x in res["groups"]:
+            ge = x["economy"]
+            if ge["kind"] != "conditional" or not ge["profiles"]:
+                continue
+            g = next(g for g in p.groups if set(g["requests"]) == set(ge["requests"]))
+            label = {pv._vlabel(v): v for v in g["candidates"]}
+
+            def best_at(rate):
+                vals = {v: sum(pl.contribution(filled(m, rental={BAGR: rate}), by[r]).lo for r in v)
+                        for v in g["candidates"]}
+                top = max(vals.values())
+                return {pv._vlabel(v) for v, val in vals.items() if abs(val - top) < 1e-6}
+            prof = ge["profiles"][0]
+            for b in prof["boundaries"]:                                     # přesně v hranici: rovnost
+                assert set(b["winners"]) == best_at(b["at"]) and len(b["winners"]) >= 2
+                checked += 1
+            for seg in prof["segments"]:                                     # uvnitř úseku: vítěz úseku
+                probe = seg["start"] + 0.5 if seg["end"] is None else (seg["start"] + seg["end"]) / 2
+                assert set(seg["winners"]) == best_at(probe)
+            for line in pn_lines(res, ge):
+                assert not line.startswith("do ")                            # žádné nejednoznačné „do“
+            assert all(w in label for seg in prof["segments"] for w in seg["winners"])
+    assert checked > 10
+
+
+def pn_lines(res, ge):
+    pn = next(x for x in res["panels"] if set(x["requests"]) == set(ge["requests"]))
+    return [line for block in pn["conditions"] for line in block["lines"]]
 
 
 if __name__ == "__main__":

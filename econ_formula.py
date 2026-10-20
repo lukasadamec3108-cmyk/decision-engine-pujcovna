@@ -311,7 +311,8 @@ def condition(diff: Formula, unknowns: dict, name: str = A, other: str = B) -> s
     if len(diff.terms) == 1:
         key, c = diff.terms[0]
         t = -diff.known / c
-        return f"{name} je lepší než {other}, pokud {label(key)} {'<' if c < 0 else '>'} {_czk(t)} (hranice zlomu)"
+        return (f"{name} je lepší než {other}, pokud {label(key)} {'<' if c < 0 else '>'} {rate_text(t)} "
+                "(hranice zlomu)")
     left = " + ".join(f"{_num(-c)} × {label(key)}" for key, c in diff.terms if c < 0)
     right = " + ".join(f"{_num(c)} × {label(key)}" for key, c in diff.terms if c > 0)
     rhs = _czk(diff.known) + (f" + {right}" if right else "")
@@ -413,8 +414,10 @@ def profile(lines: dict) -> Optional[dict]:
     """Která varianta je nejlepší v závislosti na JEDNÉ neznámé sazbě x ≥ 0.
 
     lines … {jméno: Formula}; všechny vzorce smějí obsahovat nejvýše jednu společnou neznámou.
-    Vrací {"key", "segments": [(od, do | None, (nejlepší…))], "at_zero": (nejlepší při x = 0)}
-    nebo None, když vzorce závisejí na více neznámých. Hranice úseků jsou hranice zlomu.
+    Vrací {"key", "segments": [(od, do | None, (nejlepší…))], "at_zero": (nejlepší při x = 0),
+           "boundaries": [(hranice, (nejlepší přesně v hranici…))]}
+    nebo None, když vzorce závisejí na více neznámých. Hranice úseků jsou hranice zlomu; úseky jsou
+    otevřené – přesně v hranici vycházejí varianty sousedních úseků stejně (viz „boundaries“).
     """
     keys = {k for f in lines.values() for k, _ in f.terms}
     if len(keys) > 1:
@@ -446,7 +449,15 @@ def profile(lines: dict) -> Optional[dict]:
             segments[-1] = (segments[-1][0], hi, w)
         else:
             segments.append((lo, hi, w))
-    return dict(key=key, segments=segments, at_zero=best(0.0))
+    boundaries = [(lo, best(lo)) for lo, _, _ in segments[1:]]
+    return dict(key=key, segments=segments, at_zero=best(0.0), boundaries=boundaries)
+
+
+def rate_text(x: float) -> str:
+    """Hranice zlomu přesně: celé Kč bez desetin, jinak na dvě desetinná místa (nezaokrouhlovat přes hranici)."""
+    if abs(x - round(x)) < 1e-6:
+        return _czk(round(x))
+    return f"{x:,.2f}".replace(",", " ").replace(".", ",") + " Kč"
 
 
 def profile_text(prof: dict, unknowns: dict) -> str:
@@ -459,15 +470,18 @@ def profile_text(prof: dict, unknowns: dict) -> str:
     if len(prof["segments"]) == 1:                    # vítěz nezávisí na hodnotě neznámé
         return f"nejlépe vychází {who(prof['segments'][0][2])} při jakékoli hodnotě [{label}]"
     parts = []
+    ties = dict(prof.get("boundaries", []))
     for lo, hi, w in prof["segments"]:
+        if lo in ties:                                # přesně v hranici: rovnost, ne vítězství
+            parts.append(f"přesně {rate_text(lo)}: {' = '.join(ties[lo])} (shodně)")
         if hi is None and lo == 0:
             span = "při jakékoli hodnotě"
         elif hi is None:
-            span = f"nad {_czk(lo)}"
+            span = f"nad {rate_text(lo)}"
         elif lo == 0:
-            span = f"do {_czk(hi)}"
+            span = f"pod {rate_text(hi)}"
         else:
-            span = f"{_czk(lo)}–{_czk(hi)}"
+            span = f"mezi {rate_text(lo)} a {rate_text(hi)}"
         parts.append(f"{span}: {who(w)}")
     text = f"záleží na [{label}] – " + "; ".join(parts)
     first = prof["segments"][0][2]
