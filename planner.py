@@ -401,7 +401,9 @@ def _decide(contrib: dict) -> dict:
                 r = ef.compare(ef.restrict(contrib[leader], sc), ef.restrict(contrib[v], sc),
                                (ef.variant_label(leader), ef.variant_label(v)))
                 one = r["scenarios"][ef.ONLY] if r["scenarios"] else None
-                conditions.append(dict(scenario=sc, profile=None, text=prefix + r["text"], pair=dict(
+                # jen podmínka bez úvodní věty a koncové tečky (věty se skládají níže)
+                cond = r["text"].removeprefix("Výsledek závisí na neznámých nákladech – ").rstrip(".")
+                conditions.append(dict(scenario=sc, profile=None, text=prefix + cond, pair=dict(
                     a=leader, b=v, status=r["status"], winner=r.get("winner"), strict=r.get("strict", False),
                     known=one["diff"].known if one else None, terms=one["diff"].terms if one else ())))
     missing = tuple(dict.fromkeys(unknowns[k].label for v in front for f in contrib[v].scenarios.values()

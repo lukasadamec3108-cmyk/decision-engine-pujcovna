@@ -146,9 +146,11 @@ def test_result_is_plain_and_inputs_unchanged():
 def test_card_html_escapes_text():
     c = dict(ref="NP-1", title="<b>x</b>", kind="rental", own=True, name="<script>", period=(1, 2),
              needs=[(BAGR, 1)], badge=pv.FEASIBLE, why="<i>", operational="a", economic="b",
-             blocking=[], alternatives=[], note="")
+             blocking=[], alternatives=[], note="", op_badge=pv.OP_FITS, econ_badge=pv.EC_COND,
+             econ_why="<u>[x](https://example.com)", economy_lines=["<svg onload=1>"])
     out = pv.card_html(c, {BAGR: "<img>"})
     assert "<script>" not in out and "<img>" not in out and "&lt;script&gt;" in out
+    assert "<u>" not in out and "<svg" not in out and "](https://example.com)" not in out
 
 
 # ---------------------------------------------------------------------------
@@ -216,8 +218,16 @@ def click(at, label):
 
 
 def badges(at):
+    """[(provozní štítek, ekonomický štítek nebo None)] pro každou kartu (E2.5c krok 4B)."""
     import re
-    return re.findall(r'dp-badge \w+">([^<]+)<', " ".join(m.value for m in at.tabs[7].markdown))
+    out = []
+    html_text = " ".join(m.value for m in at.tabs[7].markdown)
+    for kind, label in re.findall(r'dp-badge (op|ec)-[\w-]+"><small>[^<]*</small>([^<]+)<', html_text):
+        if kind == "op":
+            out.append([label, None])
+        else:
+            out[-1][1] = label
+    return [tuple(x) for x in out]
 
 
 def test_tab_in_app_full_flow_without_changing_data():
@@ -229,24 +239,27 @@ def test_tab_in_app_full_flow_without_changing_data():
     # 1) samostatný pronájem ve volném termínu
     at.number_input(key="dp_r_from").set_value(21); at.number_input(key="dp_r_to").set_value(24)
     click(at, "Vyhodnotit samostatně")
-    assert badges(at) == [pv.FEASIBLE]
+    assert badges(at) == [(pv.OP_FITS, pv.EC_NONE)]                       # bez soupeře → bez porovnání
     # 2) obsazený termín → neproveditelné s příčinou
     at.number_input(key="dp_r_from").set_value(13); at.number_input(key="dp_r_to").set_value(16)
     click(at, "Vyhodnotit samostatně")
-    assert badges(at) == [pv.NOT_FEASIBLE]
+    assert badges(at) == [(pv.OP_NO, None)]                               # nevejde se → ekonomika se nehodnotí
     blocking = [d.value for d in at.tabs[7].dataframe if "Co stroj drží" in d.value.columns][0]
     assert set(blocking["Co stroj drží"]) == {"pronájem FIKT-P01"}
     # 3) soupeření s předběžnou rezervací – nelze rozhodnout, rezervace zůstává
     at.selectbox(key="dp_r_type").set_value("PASOVY_DUMPER")
     at.number_input(key="dp_r_from").set_value(22); at.number_input(key="dp_r_to").set_value(23)
     click(at, "Přidat k porovnání")
-    # E2.5c krok 3: chybí variabilní náklad → podmíněně (hranice zlomu), žádné doporučení
-    assert badges(at) == [pv.NOT_FEASIBLE, pv.FEASIBLE, pv.FEASIBLE]
+    # E2.5c krok 3/4B: chybí variabilní náklad → podmíněně (hranice zlomu), žádné doporučení;
+    # NP-2 (2 dny á 8 000) nevychází nejlépe při žádné výši nákladu, FIKT-P06 (5 dní) do 8 000 Kč/den
+    assert badges(at) == [(pv.OP_NO, None), (pv.OP_FITS, pv.EC_NO), (pv.OP_FITS, pv.EC_COND)]
     assert any("hranice zlomu" in m.value or "8 000 Kč" in m.value for m in at.tabs[7].markdown)
     assert any("předběžná rezervace z dat – neruší se" in m.value for m in at.tabs[7].markdown)
     # 4) odebrání a vymazání
     at.button(key="dp_rm_NP-1").click().run()
-    assert badges(at) == [pv.FEASIBLE, pv.FEASIBLE]
+    assert badges(at) == [(pv.OP_FITS, pv.EC_NO), (pv.OP_FITS, pv.EC_COND)]
+    shown = " ".join(m.value for m in at.tabs[7].markdown).replace("\u00a0", " ")
+    assert "nezamítá" in shown and "do 8 000 Kč/den" in shown
     at.button(key="dp_clear").click().run()
     assert badges(at) == []
     # 5) zakázka podle šablony, chybná data formuláře
@@ -255,7 +268,7 @@ def test_tab_in_app_full_flow_without_changing_data():
     assert at.number_input(key="dp_j_revenue").value == 320000.0 and not at.warning
     at.number_input(key="dp_j_start").set_value(27)
     click(at, "Vyhodnotit samostatně")
-    assert badges(at) == [pv.FEASIBLE]
+    assert badges(at) == [(pv.OP_FITS, pv.EC_NONE)]
     at.selectbox(key="dp_j_type0").set_value("—"); at.selectbox(key="dp_j_type1").set_value("—")
     click(at, "Vyhodnotit samostatně")
     assert any("Vyberte aspoň jeden stroj" in e.value for e in at.error)

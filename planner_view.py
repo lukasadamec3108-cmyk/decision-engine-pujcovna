@@ -4,6 +4,9 @@ Modul NIC nerozhoduje ani nepočítá: vše počítá planner.py (nad capacity.p
 Tady se jen převádí formulář na požadavek a výsledek plánovače na obyčejné tabulky, štítky
 a srozumitelná vysvětlení (obyčejné typy → lze uložit do mezipaměti Streamlitu).
 
+Od E2.5c kroku 4B zobrazuje karta DVA oddělené štítky – Provoz (op_badge) a Ekonomika (econ_badge),
+viz níže „Štítky karty“. Dřívější jednotný štítek (badge/why) zůstává ve výsledku jen kvůli kompatibilitě:
+
 Štítek požadavku (schválená pravidla E2.5b):
   Doporučeno     … požadavek je ve variantě, kterou plánovač ekonomicky doporučil
                    (lepší i v nejhorším případě než každá jiná proveditelná varianta),
@@ -20,6 +23,7 @@ podmínky dvojic a chybějící údaje – jen obyčejné typy, bez nových výp
 """
 
 import html
+import re
 from typing import Optional
 
 import pandas as pd
@@ -301,9 +305,9 @@ def request_inputs(model: dm.DataModel, r: pl.Request) -> list:
         name = str(mt.loc[t, "name"]) if t in mt.index else t
         if r.kind == "rental":
             if r.price_day is not None:
-                out.append(_input(f"{name}: cena pronájmu/den (zadaná)", r.price_day, KC_DEN, "price_day"))
+                out.append(_input(f"{name}: cena pronájmu/den", r.price_day, KC_DEN, "price_day"))
             else:
-                out.append(_input(f"{name}: cena pronájmu/den (ceník)", mt.loc[t, "rental_price_day"]
+                out.append(_input(f"{name}: ceníková cena pronájmu/den", mt.loc[t, "rental_price_day"]
                                   if t in mt.index else "", KC_DEN, "rental_price_day"))
             out.append(_input(f"{name}: variabilní náklad pronájmu/den", mt.loc[t, "variable_cost_rental_day"]
                               if t in mt.index else "", KC_DEN, "variable_cost_rental_day"))
@@ -424,18 +428,220 @@ def group_economy(model: dm.DataModel, p: pl.Plan, g: dict) -> dict:
 
 
 
+# ---------------------------------------------------------------------------
+# Štítky karty a ekonomické řádky (E2.5c krok 4B) – odvozeno z výsledku plánovače
+# ---------------------------------------------------------------------------
+#
+# Karta má DVA oddělené štítky: Provoz (vejde se do kapacity?) a Ekonomika (vyplatí se?).
+# Zelená je vyhrazená jen pro ekonomické „Doporučeno“; „Vejde se“ je neutrální.
+
+OP_FITS, OP_NO, OP_UNKNOWN = "✓ Vejde se", "✕ Nevejde se", "? Provoz nelze určit"
+EC_REC, EC_NO, EC_EQ, EC_COND, EC_UND, EC_NONE = ("★ Doporučeno", "Nevyplatí se", "= Rovnocenné",
+                                                  "⇄ Podmíněné", "? Nelze rozhodnout", "Bez porovnání")
+OP_CLASS = {OP_FITS: "op-ok", OP_NO: "op-no", OP_UNKNOWN: "op-und"}
+EC_CLASS = {EC_REC: "ec-rec", EC_NO: "ec-no", EC_EQ: "ec-eq", EC_COND: "ec-cond", EC_UND: "ec-und",
+            EC_NONE: "ec-none"}
+NOT_A_REJECTION = ("Jde jen o ekonomické doporučení – požadavek se tím nezamítá a žádná rezervace se neruší; "
+                   "rozhodnutí je na vás.")
+
+
+def op_badge(entry: dict) -> str:
+    """Provozní štítek přímo z provozního stavu plánovače."""
+    return {pl.OK_ALONE: OP_FITS, pl.NOT_FEASIBLE: OP_NO}.get(entry["operational"], OP_UNKNOWN)
+
+
+def _in(ref: str, variants) -> bool:
+    return any(ref in v for v in variants)
+
+
+def _labels(variants) -> str:
+    return ", ".join(f"„{' + '.join(v) if v else 'nepřijmout nic'}“" for v in variants)
+
+
+def _span(seg: dict) -> str:
+    if seg["end"] is None:
+        return f"nad {_czk(seg['start'])}/den"
+    if seg["start"] == 0:
+        return f"do {_czk(seg['end'])}/den"
+    return f"{_czk(seg['start']).removesuffix(' Kč')}–{_czk(seg['end'])}/den"
+
+
+def _never_wins(ref: str, ge: dict) -> bool:
+    """Hranice zlomu existují pro každý scénář a varianta s požadavkem v žádném úseku nevyhrává."""
+    profiles = {p["scenario"]: p for p in ge["profiles"]}
+    scenarios = ge["scenarios"] or [""]
+    if any(sc not in profiles for sc in scenarios):
+        return False                                   # víc neznámých → nelze takto vyloučit
+    with_ref = {v["label"] for v in ge["variants"] if ref in v["refs"]}
+    return not any(set(seg["winners"]) & with_ref for sc in scenarios for seg in profiles[sc]["segments"])
+
+
+def _where_text(ref: str, ge: dict) -> str:
+    """Kdy vychází nejlépe varianta s požadavkem – z hranic zlomu plánovače, po scénářích nastavení."""
+    with_ref = {v["label"] for v in ge["variants"] if ref in v["refs"]}
+    profiles = {p["scenario"]: p for p in ge["profiles"]}
+    scenarios = ge["scenarios"] or [""]
+    out = []
+    for sc in scenarios:
+        prof = profiles.get(sc)
+        if prof is None:
+            text = "rozhoduje víc neznámých najednou – podmínky jsou uvedené u soupeřících požadavků"
+        else:
+            segs = [seg for seg in prof["segments"] if set(seg["winners"]) & with_ref]
+            what = _plain_label(prof["unknown"]["label"]) if prof["unknown"] else ""
+            if not segs:
+                text = "nevychází nejlépe při žádné výši neznámého nákladu"
+            elif len(prof["segments"]) == 1 or not what:
+                text = "vychází nejlépe při jakékoli výši neznámého nákladu"
+            else:
+                text = f"vychází nejlépe, pokud je {what} " + " nebo ".join(_span(x) for x in segs)
+        if sc:
+            label = SCENARIO_SHORT.get(sc, sc)
+            out.append(f"Pokud {label}: {text}.")
+        else:
+            out.append(text[0].upper() + text[1:] + ".")
+    return " ".join(out)
+
+
+SCENARIO_SHORT = {"ano": "přímé náklady zakázek obsahují stroje", "ne": "přímé náklady zakázek neobsahují stroje"}
+
+
+def econ_badge(ref: str, entry: dict, g: Optional[dict], ge: Optional[dict]) -> tuple:
+    """(štítek, vysvětlení) ekonomiky – výhradně z verdiktu plánovače a jeho variant.
+
+    g  … skupina z planner.plan (verdikt, choice, best, contenders), ge … její strukturovaná ekonomika (4A)
+    """
+    if entry["operational"] != pl.OK_ALONE:
+        return None, ("Ekonomicky se nehodnotí – požadavek se nevejde do kapacity." if entry["operational"]
+                      == pl.NOT_FEASIBLE else "Ekonomicky se nehodnotí – provozní proveditelnost nelze určit.")
+    if g is None or g["verdict"] == pl.ALL_FIT:
+        return EC_NONE, ("Nemá soupeřící požadavek – vejde se spolu s ostatními, proto se doporučení nevydává. "
+                         "Příspěvek je uvedený jen pro informaci.")
+    v = g["verdict"]
+    if v == pl.RECOMMEND:
+        if ref in (g["choice"] or ()):
+            return EC_REC, (f"Je součástí varianty {_labels([g['choice']])}, která je ze soupeřících požadavků "
+                            "prokazatelně ekonomicky nejlepší – i při jakékoli výši chybějících nákladů.")
+        return EC_NO, (f"Soupeří o stejné stroje s variantou {_labels([g['choice']])}, která je prokazatelně "
+                       "výhodnější. " + NOT_A_REJECTION)
+    if v == pl.NONE_PAYS:
+        return EC_NO, ("Každá varianta soupeřících požadavků, která se vejde, je prokazatelně ztrátová – "
+                       "ekonomicky nejlépe vychází nepřijmout žádný z nich. " + NOT_A_REJECTION)
+    if v == pl.EQUAL:
+        best = [tuple(b) for b in g.get("best", [])]
+        if _in(ref, best):
+            others = [b for b in best if ref not in b]
+            return EC_EQ, ("Varianta s tímto požadavkem vychází prokazatelně stejně jako "
+                           + (_labels(others) or "jiná varianta")
+                           + (" (0 Kč)" if () in others else "") + " – rozhodne uživatel.")
+        return EC_NO, (f"Prokazatelně lepší jsou shodně varianty {_labels(best)}. " + NOT_A_REJECTION)
+    if v == pl.CONDITIONAL:
+        contenders = [tuple(c) for c in g.get("contenders", [])]
+        if not _in(ref, contenders):
+            return EC_NO, ("Při jakékoli výši neznámých nákladů je výhodnější jiná varianta bez tohoto "
+                           "požadavku. " + NOT_A_REJECTION)
+        if ge and _never_wins(ref, ge):
+            return EC_NO, ("Podle hranic zlomu nevychází tato varianta nejlépe při žádné výši neznámého nákladu "
+                           "(nanejvýš shodně přesně na hranici). " + NOT_A_REJECTION)
+        missing = ", ".join(_plain_label(m["label"]) for m in (ge or {}).get("missing", [])) or "neznámé náklady"
+        where = _where_text(ref, ge) if ge else ""
+        return EC_COND, (f"Zda se vyplatí, závisí na nezadaných údajích: {missing}. " + (where + " " if where else "")
+                         + "Neznámý náklad se nepočítá jako 0 Kč.")
+    blocking = ", ".join((ge or {}).get("blocking", []))
+    if blocking:
+        return EC_UND, f"Ekonomicky nelze rozhodnout – chybí nebo je neplatné: {blocking}."
+    # bez chybějících údajů (pojistka plánovače, např. příliš mnoho variant) → důvod přímo z plánovače
+    return EC_UND, g["text"].rstrip(".") + "."
+
+
+def _czk(x: float) -> str:
+    text = f"{abs(x):,.0f}".replace(",", " ")
+    return ("−" if x < 0 else "") + text + " Kč"
+
+
+def _plain_label(label: str) -> str:
+    return label[:-4] if label.endswith("/den") else label
+
+
+def _count(n: float, unit: str) -> str:
+    forms = {"strojodnů": ("strojoden", "strojodny", "strojodnů"),
+             "dní po termínu": ("den po termínu", "dny po termínu", "dní po termínu")}
+    if unit not in forms:
+        return f"{n:g}"
+    if float(n).is_integer():
+        k = int(n)
+        word = forms[unit][0] if k == 1 else forms[unit][1] if 2 <= k <= 4 else forms[unit][2]
+        return f"{k} {word}"
+    return f"{n:g} {forms[unit][2]}"
+
+
+def formula_words(sc: dict) -> str:
+    """Vzorec slovy se správnými jednotkami; neznámá je vždy označená „nezadáno“, nikdy 0 Kč."""
+    text = _czk(sc["known"])
+    for t in sc["terms"]:
+        sign = "−" if t["coef"] < 0 else "+"
+        what = f"{_plain_label(t['label'])} ({t['unit']}, nezadáno)"
+        if t["unit"] == KC and abs(abs(t["coef"]) - 1) < 1e-9:
+            text += f" {sign} {what}"
+        else:
+            text += f" {sign} {_count(abs(t['coef']), t['coef_unit'])} × {what}"
+    return text
+
+
+def contribution_lines(economy: Optional[dict], late: str = "") -> list:
+    """Řádky „Příspěvek…“ na kartě: přesná částka / vzorec s neznámými / proč nelze spočítat."""
+    if economy is None:
+        return []
+    lines = []
+    st = economy["status"]
+    if st == EXACT:
+        v = economy["value"]
+        lines.append("Příspěvek: přesně 0 Kč (vychází ze zadaných údajů)." if v == 0 else
+                     f"Příspěvek: {_czk(v)} – ztráta." if v < 0 else f"Příspěvek: {_czk(v)}.")
+    elif st == WITH_UNKNOWN:
+        scen = economy["scenarios"]
+        hi, lo = economy["hi"], economy["lo"]
+        if any(x["terms"] for x in scen):
+            upper = f" Neznámé náklady příspěvek jen snižují – nejvýše {_czk(hi)}." if hi is not None else ""
+        else:                                         # neznámé je jen nastavení, žádný náklad
+            upper = (f" Podle nastavení tedy {_czk(lo).removesuffix(' Kč')} až {_czk(hi)}."
+                     if lo is not None and hi is not None else "")
+        if len(scen) == 1:
+            lines.append(f"Příspěvek: {formula_words(scen[0])}.{upper}")
+        else:
+            lines.append("Příspěvek závisí na tom, zda přímé náklady zakázek obsahují vlastní stroje (nezadáno):")
+            lines += [f"– pokud {s['scenario_label'].removeprefix('přímé náklady zakázek ')}: "
+                      f"{formula_words(s)}." for s in scen]
+            if upper:
+                lines.append(upper.strip())
+    else:
+        reasons = "; ".join(economy["invalid"]) or "neplatný údaj"
+        lines.append(f"Příspěvek nelze spočítat – neplatný údaj: {reasons}.")
+    zeros = [i for i in economy.get("inputs", []) if i["state"] == ZADANO and i["value"] == 0
+             and i["field"] != "direct_cost_includes_machines"]
+    if zeros:
+        lines.append("Zadaná nula (skutečná hodnota, ne chybějící údaj): "
+                     + ", ".join(f"{_plain_label(i['label'])} 0 {i['unit']}" for i in zeros) + ".")
+    if late and lines:
+        lines[-1] += late
+    return lines
+
+
 def evaluate(model: dm.DataModel, job_starts: dict, requests: list) -> dict:
     """Spustí planner.plan a vrátí výsledek jen z obyčejných typů (bez objektů plánovače)."""
     p = pl.plan(model, job_starts, [to_request(r) for r in requests])
     mine = [r["ref"] for r in requests]
     competing = {ref for g in p.groups if set(g["requests"]) & set(mine) for ref in g["requests"]}
+    economies = {id(g): group_economy(model, p, g) for g in p.groups if set(g["requests"]) & set(mine)}
     cards = []
     for ref, e in p.requests.items():
         if ref not in mine and ref not in competing:
             continue                                   # předběžné bez vztahu k požadavkům jen v přehledu
         g = _group_of(p, ref)
-        label, why = badge(dict(e, ref=ref), g)
+        label, why = badge(dict(e, ref=ref), g)               # dřívější jednotný štítek (kompatibilita)
         r = e["request"]
+        economy = request_economy(model, r) if e["operational"] == pl.OK_ALONE else None
+        ec_label, ec_why = econ_badge(ref, e, g, economies.get(id(g)) if g is not None else None)
         cards.append(dict(
             ref=ref, title=e["label"], kind=r.kind, own=ref in mine, name=r.name,
             period=(r.start, r.end), needs=[tuple(x) for x in r.needs], badge=label, why=why,
@@ -448,11 +654,14 @@ def evaluate(model: dm.DataModel, job_starts: dict, requests: list) -> dict:
             alternatives=[a["text"] for a in e["alternatives"]],
             note=e["note"],
             # E2.5c 4A: strukturovaná ekonomika požadavku (jen proveditelné; jinak None)
-            economy=request_economy(model, r) if e["operational"] == pl.OK_ALONE else None))
+            economy=economy,
+            # E2.5c 4B: dva oddělené štítky a ekonomické řádky karty
+            op_badge=op_badge(e), econ_badge=ec_label, econ_why=ec_why,
+            economy_lines=contribution_lines(economy, _late_text(model, r))))
     cards.sort(key=lambda c: (not c["own"], c["ref"]))      # nejdřív požadavky uživatele
     groups = [dict(requests=list(g["requests"]), verdict=g["verdict"], text=g["text"],
                    options=[list(o) for o in g["options"]], choice=list(g["choice"]) if g.get("choice") else None,
-                   economy=group_economy(model, p, g))
+                   economy=economies[id(g)])
               for g in p.groups if set(g["requests"]) & set(mine)]
     types = {t for r in requests for t, _ in r["needs"]}
     lo = min((r["start"] for r in requests), default=None)
@@ -485,6 +694,20 @@ CSS = """
 .dp-badge.ok{background:#E3F1E8;color:#14532D;border:1px solid #1E7B4A}
 .dp-badge.no{background:#FDECEA;color:#8A1C12;border:1px solid #B42318}
 .dp-badge.und{background:#FFF4DB;color:#7A4E00;border:1px solid #B7791F}
+.dp-badges{display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.3rem}
+.dp-badge small{font-weight:600;opacity:.8;margin-right:.25rem}
+.dp-badge.op-ok{background:#EEF2F7;color:#334155;border:1px solid #64748B}
+.dp-badge.op-no{background:#FDECEA;color:#8A1C12;border:1px solid #B42318}
+.dp-badge.op-und{background:#FFF4DB;color:#7A4E00;border:1px solid #B7791F}
+.dp-badge.ec-rec{background:#1E7B4A;color:#fff;border:1px solid #1E7B4A}
+.dp-badge.ec-no{background:#F3F4F6;color:#1F2933;border:1px solid #4B5563}
+.dp-badge.ec-eq{background:#E8F0FE;color:#1E3A8A;border:1px solid #2563EB}
+.dp-badge.ec-cond{background:#F3E8FF;color:#5B21B6;border:1px solid #7C3AED}
+.dp-badge.ec-und{background:#FFF4DB;color:#7A4E00;border:1px solid #B7791F}
+.dp-badge.ec-none{background:#fff;color:#4B5563;border:1px dashed #9CA3AF}
+.dp-sec{color:#1F2933;margin:.25rem 0 .1rem 0;font-size:.92rem;overflow-wrap:anywhere}
+.dp-title,.dp-sub{overflow-wrap:anywhere}
+.dp-econ{color:#374151;font-size:.9rem;margin:.1rem 0 .1rem .1rem;overflow-wrap:anywhere}
 .dp-why{color:#1F2933;margin:.2rem 0 .35rem 0}
 .dp-line{color:#374151;font-size:.9rem;margin:.1rem 0}
 .dp-tag{display:inline-block;font-size:.72rem;color:#4B5563;border:1px solid #D1D5DB;border-radius:4px;padding:0 .3rem}
@@ -497,16 +720,29 @@ def _h(text) -> str:
     return html.escape(str(text)).replace("[", "&#91;").replace("]", "&#93;").replace("(", "&#40;").replace(")", "&#41;")
 
 
+def _nowrap_amounts(text: str) -> str:
+    """Nezlomitelné mezery uvnitř částek („16 000 Kč“, „2 750–9 000 Kč/den“) – jen pro zobrazení."""
+    text = re.sub(r"(?<=\d) (?=\d{3}\b)", "\u00a0", text)
+    return re.sub(r"(?<=\d) (?=Kč)", "\u00a0", text)
+
+
 def card_html(card: dict, names: dict) -> str:
+    """Karta požadavku: dva oddělené štítky (Provoz, Ekonomika), provoz a ekonomika zvlášť."""
     machines = ", ".join(f"{names.get(t, t)} × {q}" for t, q in card["needs"])
     origin = "váš požadavek" if card["own"] else "předběžná rezervace z dat – neruší se"
-    lines = "".join(f'<div class="dp-line">{_h(x)}</div>' for x in (card["operational"], card["economic"]))
-    return (f'<div class="dp-card"><div class="dp-head"><span class="dp-badge {BADGE_CLASS[card["badge"]]}">'
-            f'{_h(card["badge"])}</span><span class="dp-title">{_h(card["title"])}</span>'
+    badges = (f'<span class="dp-badge {OP_CLASS[card["op_badge"]]}"><small>Provoz:</small>'
+              f'{_h(card["op_badge"])}</span>')
+    if card["econ_badge"]:
+        badges += (f'<span class="dp-badge {EC_CLASS[card["econ_badge"]]}"><small>Ekonomika:</small>'
+                   f'{_h(card["econ_badge"])}</span>')
+    econ = "".join(f'<div class="dp-econ">{_h(_nowrap_amounts(x))}</div>' for x in card["economy_lines"])
+    return (f'<div class="dp-card"><div class="dp-badges">{badges}</div>'
+            f'<div class="dp-head"><span class="dp-title">{_h(card["title"])}</span>'
             f'<span class="dp-tag">{_h(origin)}</span></div>'
             f'<div class="dp-sub">{_h(machines)} · dny {card["period"][0]}–{card["period"][1]}'
             + (f' · {_h(card["name"])}' if card["name"] else "") + "</div>"
-            f'<div class="dp-why"><b>Proč:</b> {_h(card["why"])}</div>{lines}</div>')
+            f'<div class="dp-sec"><b>Provoz:</b> {_h(card["operational"].removeprefix("Provozně: "))}</div>'
+            f'<div class="dp-sec"><b>Ekonomika:</b> {_h(_nowrap_amounts(card["econ_why"]))}</div>{econ}</div>')
 
 
 def blocking_table(card: dict, names: dict) -> pd.DataFrame:

@@ -152,10 +152,15 @@ data, filtry a plán zakázek jako kalendář):
 ## Plánovací a rozhodovací model (`planner.py`, E2.5a)
 
 Logika nad `capacity.py` a `economics.py`; v aplikaci ji zobrazuje záložka **Rozhodovací plánovač**
-(E2.5b, `planner_view.py`). Štítek požadavku: **Doporučeno** jen ve variantě, kterou plánovač
-ekonomicky doporučil při soupeření; samostatný požadavek bez soupeře je **Proveditelné** (ekonomika
-zvlášť); **Neproveditelné** – kapacitu drží závazky nebo servis; **Nelze rozhodnout** – chybí údaje,
-nebo se ze soupeřících požadavků vejde jen část a ekonomika chybí. Existující zakázka slouží jen jako
+(E2.5b, `planner_view.py`). Karta požadavku má od E2.5c kroku 4B **dva oddělené štítky** odvozené
+z výsledku plánovače: **Provoz** – ✓ Vejde se / ✕ Nevejde se / ? Provoz nelze určit; **Ekonomika** –
+★ Doporučeno (požadavek je ve variantě, kterou plánovač prokazatelně doporučil; jediná zelená),
+Nevyplatí se (prokazatelně výhodnější je jiná varianta nebo „nepřijmout nic“ – jen ekonomické
+doporučení, nic se nezamítá ani neruší), = Rovnocenné, ⇄ Podmíněné (závisí na nezadaném nákladu;
+u jedné neznámé s hranicí zlomu v Kč/den), ? Nelze rozhodnout, Bez porovnání (požadavek nemá soupeře).
+Nevejde-li se požadavek, ekonomika se nehodnotí. Příspěvek na kartě: přesná částka v Kč, nebo vzorec
+s nezadanými sazbami (Kč/den, nikdy jako 0 Kč), nebo důvod, proč ho nelze spočítat; skutečně zadaná
+nula je výslovně označená. Existující zakázka slouží jen jako
 šablona nového požadavku. Nové požadavky nesmějí nést označení zakázek ani rezervací z dat.
 
 - **Potvrzené závazky** (potvrzené pronájmy, servis, potvrzené zakázky v aktuálním plánu záložky 6)

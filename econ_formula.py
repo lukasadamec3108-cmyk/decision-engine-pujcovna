@@ -456,6 +456,8 @@ def profile_text(prof: dict, unknowns: dict) -> str:
     if prof["key"] is None:
         return "nejlépe vychází " + who(prof["segments"][0][2])
     label = unknowns[prof["key"]].label if prof["key"] in unknowns else str(prof["key"])
+    if len(prof["segments"]) == 1:                    # vítěz nezávisí na hodnotě neznámé
+        return f"nejlépe vychází {who(prof['segments'][0][2])} při jakékoli hodnotě [{label}]"
     parts = []
     for lo, hi, w in prof["segments"]:
         if hi is None and lo == 0:
