@@ -850,7 +850,9 @@ def group_panel(ge: dict) -> Optional[dict]:
     row = lambda v: dict(label=v["label"], amount=_amount_text(v["contribution"]), tag=ROLE_TAG[v["role"]],
                          role=v["role"], nothing=v["nothing"])
     intro = (f"Požadavky {_and(ge['requests'])} soupeří o stejné stroje a současně se nevejdou – porovnávají "
-             "se jen varianty, které se vejdou do kapacity, a vždy i „nepřijmout nic“.")
+             "se jen varianty, které se vejdou do kapacity, a vždy i „nepřijmout nic“." if ge["variants"] else
+             f"Požadavky {_and(ge['requests'])} soupeří o stejné stroje a současně se nevejdou – varianty se "
+             "tentokrát ekonomicky neporovnávaly.")
     return dict(requests=list(ge["requests"]), kind=kind, badge=PANEL_BADGE[kind], headline=headline, why=why,
                 intro=intro,
                 variants=[row(v) for v in shown], hidden=[row(v) for v in hidden],
@@ -877,6 +879,8 @@ def _relevant_missing(p: pl.Plan, cards: list, economies: dict) -> list:
     econ_labels.add("zda přímé náklady zakázek obsahují vlastní stroje (direct_cost_includes_machines)")
     out = [x for x in p.missing_data if x not in econ_labels]
     for c in cards:
+        if c["economy"] and c["economy"]["status"] == INVALID:   # neplatný údaj se nesmí ze seznamu ztratit
+            out += list(c["economy"]["invalid"])
         for sc in (c["economy"] or {}).get("scenarios", []):
             out += [_unknown_name(t) for t in sc["terms"]]
         if c["economy"] and len({(x["known"], len(x["terms"])) for x in c["economy"]["scenarios"]}) > 1:
@@ -1043,7 +1047,8 @@ def panel_html(panel: dict) -> str:
            f'<div class="dp-note">{_h(panel["intro"])}</div>']
     if panel["why"]:
         out.append('<div class="dp-h">Proč?</div><ul>' + "".join(f"<li>{t(x)}</li>" for x in panel["why"]) + "</ul>")
-    out.append('<div class="dp-h">Porovnávané varianty</div>' + var_rows(panel["variants"]))
+    if panel["variants"]:
+        out.append('<div class="dp-h">Porovnávané varianty</div>' + var_rows(panel["variants"]))
     if panel["hidden_total"]:
         out.append(f'<details><summary>Další varianty ({panel["hidden_total"]}) – prokazatelně horší</summary>'
                    + var_rows(panel["hidden"])

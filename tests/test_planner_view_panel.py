@@ -285,6 +285,82 @@ def test_data_unchanged():
     assert files_hash() == before
 
 
+
+# ---------------------------------------------------------------------------
+# Regresní testy z auditu PR #33
+# ---------------------------------------------------------------------------
+
+def test_audit_invalid_value_stays_in_missing_list():
+    # samostatný požadavek s neplatnou sazbou: „Chybějící údaje“ ji musí dál uvádět (jako před 4C)
+    m = model()
+    m.machine_types.loc[m.machine_types["type_id"] == BAGR, "variable_cost_rental_day"] = "abc"
+    res = run(m, [rent("NP-1", 1, 3, 6000)])
+    assert any("abc" in x for x in res["missing_relevant"])
+    assert res["cards"][0]["economy_lines"][0].startswith("Příspěvek nelze spočítat")
+
+
+def test_audit_group_over_planner_limit_has_no_empty_variant_list():
+    old = pl.MAX_GROUP
+    pl.MAX_GROUP = 2
+    try:
+        pn = one_panel(run(model(), [rent(f"NP-{i}", 1, 3, 5000 + i) for i in range(1, 4)]))
+    finally:
+        pl.MAX_GROUP = old
+    out = text(pn)
+    assert pn["kind"] == "undecided" and pn["variants"] == [] and "limit" in pn["headline"]
+    assert "Porovnávané varianty" not in out and "neporovnávaly" in out and "vždy i „nepřijmout nic“" not in out
+
+
+
+def test_audit_panel_claims_hold_for_any_value_of_unknown_costs():
+    # „Doporučeno“, „Rovnocenné“, „Nevyplatí se“ i rozdíly v Kč musí platit pro každé dosazení
+    # nezadaných sazeb (dosazuje se jen to, co v modelu chybí)
+    import re
+    from test_econ_formula import filled
+    num = lambda t: float(t.replace(" ", "").replace(NBSP, "").replace("−", "-"))
+    rnd = random.Random(91)
+    checked = 0
+    for _ in range(40):
+        reqs = []
+        for i in range(rnd.randint(2, 4)):
+            s = rnd.randint(1, 7)
+            if rnd.random() < 0.4:
+                reqs.append(job(f"NP-{i + 1}", s, rnd.randint(1, 4), rnd.choice([20000, 60000, 120000]),
+                                rnd.choice([0, 10000, 50000])))
+            else:
+                reqs.append(rent(f"NP-{i + 1}", s, s + rnd.randint(0, 3), rnd.choice([None, 0, 4000, 9000])))
+        vr, vj, inc0 = rnd.choice([None, 0, 1500]), rnd.choice([None, 0, 2500]), rnd.choice([None, "ano", "ne"])
+        m = model(units=rnd.randint(1, 2), var_rental=vr, var_job=vj, includes=inc0)
+        res = run(m, reqs)
+        p = pl.plan(m, {}, [pv.to_request(r) for r in reqs])
+        by = {r["ref"]: pv.to_request(r) for r in reqs}
+        for pn in res["panels"]:
+            g = next(g for g in p.groups if set(g["requests"]) == set(pn["requests"]))
+            for xr in ((0, 700, 15000) if vr is None else (None,)):
+                for xj in ((0, 3000, 20000) if vj is None else (None,)):
+                    for inc in (["ano", "ne"] if inc0 is None else [None]):
+                        mf = filled(m, rental=None if xr is None else {BAGR: xr},
+                                    job_rate=None if xj is None else {BAGR: xj}, includes=inc)
+                        vals = {v: sum(pl.contribution(mf, by[x]).lo for x in v) for v in g["candidates"]}
+                        top = max(vals.values())
+                        if pn["kind"] == "recommend":
+                            ch = tuple(g["choice"])
+                            assert all(vals[ch] > x for v, x in vals.items() if v != ch)
+                            for w in pn["why"]:
+                                mm = re.search(r"přinese (.+?) Kč, nejlepší jiná varianta \((.+)\) (.+?) Kč – o (.+?) Kč",
+                                               w)
+                                if mm:
+                                    second = max(x for v, x in vals.items() if v != ch and v)
+                                    assert abs(num(mm.group(1)) - vals[ch]) < 1 and abs(num(mm.group(3)) - second) < 1
+                                    assert abs(num(mm.group(4)) - (vals[ch] - second)) < 1
+                                    checked += 1
+                        elif pn["kind"] == "none_pays":
+                            assert all(x < 0 for v, x in vals.items() if v)
+                        elif pn["kind"] == "equal":
+                            assert all(abs(vals[tuple(b)] - top) < 1e-6 for b in g["best"])
+    assert checked > 10
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
