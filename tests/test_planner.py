@@ -388,6 +388,110 @@ def test_new_request_ref_must_not_collide_with_data_ids():
     pl.plan(BASE, {}, [req])                                             # jedinečné označení projde
 
 
+# ---------------------------------------------------------------------------
+# E2.5c krok 1: varianta „nepřijmout nic“ (přírůstkový příspěvek 0 Kč)
+# ---------------------------------------------------------------------------
+
+def _pair(m, a, b):
+    """Dva soupeřící požadavky na jediný bagr (dny 1–3 a 2–4 se překrývají)."""
+    p = pl.plan(m, new_requests=[a, b])
+    assert len(p.groups) == 1 and sorted(p.groups[0]["requests"]) == sorted([a.ref, b.ref])
+    return p, p.groups[0]
+
+
+def test_all_loss_making_variants_recommend_nothing_not_smallest_loss():
+    # variabilní náklad 7 000 Kč/den > cena → oba pronájmy přesně ztrátové (−3 000 a −1 500 Kč)
+    p, g = _pair(model(var_rental=7000), rent("A", 1, 3, price=6000), rent("B", 2, 4, price=6500))
+    assert g["values"][("A",)].lo == -3000 and g["values"][("B",)].lo == -1500
+    assert g["verdict"] == pl.NONE_PAYS and g["choice"] == ()
+    assert g["values"][pl.NOTHING].exact and g["values"][pl.NOTHING].lo == 0
+    assert "nevyplatí" in g["text"] and "Nic se neruší" in g["text"]
+    # provozní stav se nemění – oba se samy vejdou
+    assert all(p.requests[r]["operational"] == pl.OK_ALONE for r in ("A", "B"))
+    assert any("nepřijmout žádný" in line for line in pl.explain(p))
+
+
+def test_profitable_variant_is_still_recommended():
+    p, g = _pair(model(var_rental=0), rent("A", 1, 3, price=6000), rent("B", 2, 4, price=7000))
+    assert g["verdict"] == pl.RECOMMEND and g["choice"] == ("B",)
+    assert g["values"][pl.NOTHING].lo == 0                    # „nic“ je mezi porovnávanými variantami
+    # ziskový i ztrátový požadavek: doporučí se ziskový, ne „nic“
+    p, g = _pair(model(var_rental=6200), rent("A", 1, 3, price=6000), rent("B", 2, 4, price=7000))
+    assert g["values"][("A",)].lo < 0 < g["values"][("B",)].lo
+    assert g["verdict"] == pl.RECOMMEND and g["choice"] == ("B",)
+
+
+def test_zero_contribution_ties_with_nothing_and_is_not_recommended():
+    # skutečná nula (cena 0, náklad 0) – rovnocenné s „nepřijmout nic“, rozhodne uživatel
+    p, g = _pair(model(var_rental=0), rent("A", 1, 3, price=0), rent("B", 2, 4, price=0))
+    assert g["verdict"] == pl.EQUAL and g["choice"] is None
+    # nula proti ztrátě: nula je shodná s „nic“ → ne doporučení A, ne „žádný se nevyplatí“
+    p, g = _pair(model(var_rental=500), rent("A", 1, 3, price=500), rent("B", 2, 4, price=0))
+    assert g["values"][("A",)].exact and g["values"][("A",)].lo == 0
+    assert g["verdict"] == pl.EQUAL and "nepřijmout nic" in g["text"]
+
+
+def test_incomplete_data_never_recommend_nothing_automatically():
+    # chybí variabilní náklad: známá je jen horní mez (kladná) → nelze rozhodnout, ne „nic“
+    p, g = _pair(model(), rent("A", 1, 3, price=6000), rent("B", 2, 4, price=7000))
+    assert g["values"][("A",)].lo is None and g["values"][("A",)].hi > 0
+    assert g["verdict"] == pl.NO_DECISION and g["choice"] is None
+    assert g["verdict"] != pl.NONE_PAYS
+    # chybí tržba zakázky → horní mez neznámá → nelze rozhodnout
+    j = Request("J", "job", pl.NEW, ((BAGR, 1),), 1, 3, name="J", revenue=None, direct_cost=1000)
+    p, g = _pair(model(var_rental=7000), j, rent("B", 2, 4, price=6500))
+    assert g["verdict"] == pl.NO_DECISION and p.missing_data
+    # jedna varianta jistě ztrátová, druhá neúplná s kladnou horní mezí → nelze rozhodnout
+    loss = job("J2", 1, 3, revenue=10000, direct=20000)
+    p, g = _pair(model(), loss, rent("B", 2, 4, price=7000))
+    assert g["verdict"] == pl.NO_DECISION
+
+
+def test_nothing_only_when_loss_is_certain_even_with_missing_costs():
+    # chybí jen náklady (snižují příspěvek), ale už tržba − známé náklady < 0 → ztráta je jistá
+    a, b = job("J1", 1, 3, revenue=10000, direct=20000), job("J2", 2, 4, revenue=5000, direct=9000)
+    p, g = _pair(model(), a, b)
+    assert all(v.hi is not None and v.hi < 0 for k, v in g["values"].items() if k)
+    assert all(v.lo is None for k, v in g["values"].items() if k)          # údaje jsou neúplné
+    assert g["verdict"] == pl.NONE_PAYS
+
+
+def test_nothing_variant_keeps_tentative_bookings_and_data():
+    before = {n: getattr(BASE, n).copy() for n in dm.SCHEMA}
+    m = model(var_rental=7000, bookings=[("FIKT-T", 1, 3, 1, pl.TENTATIVE)])
+    p = pl.plan(m, new_requests=[rent("NP-1", 2, 4, price=6000)])
+    g = p.groups[0]
+    assert sorted(g["requests"]) == ["FIKT-T", "NP-1"] and g["verdict"] == pl.NONE_PAYS
+    assert "nic se automaticky neruší" in p.requests["FIKT-T"]["note"]
+    assert (m.rental_bookings["status"] == pl.TENTATIVE).all()             # model beze změny
+    assert all(before[n].equals(getattr(BASE, n)) for n in dm.SCHEMA)
+
+
+def test_nothing_variant_property_random():
+    rnd = random.Random(25)
+    seen = set()
+    for _ in range(40):
+        units = rnd.randint(1, 2)
+        reqs = []
+        for i in range(rnd.randint(2, 5)):
+            s = rnd.randint(1, 6)
+            reqs.append(rent(f"R{i}", s, s + rnd.randint(0, 3), q=1, price=rnd.choice([0, 1000, 2000, 4000])))
+        p = pl.plan(model(units=units, var_rental=2000), new_requests=reqs)
+        for g in p.groups:
+            if g["verdict"] == pl.ALL_FIT:
+                continue
+            seen.add(g["verdict"])
+            vals = {k: v for k, v in g["values"].items() if k}
+            if g["verdict"] == pl.NONE_PAYS:
+                assert all(v.lo < 0 for v in vals.values()) and g["choice"] == ()
+            elif g["verdict"] == pl.RECOMMEND:
+                assert g["values"][g["choice"]].lo > 0                      # nikdy nejmenší ztráta
+                assert all(v.lo < g["values"][g["choice"]].lo for k, v in vals.items() if k != g["choice"])
+            else:
+                assert g["verdict"] == pl.EQUAL                             # úplná data → vždy rozhodnutelné
+    assert {pl.NONE_PAYS, pl.RECOMMEND} <= seen
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

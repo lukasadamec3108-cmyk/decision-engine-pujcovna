@@ -170,6 +170,11 @@ nebo se ze soupeřících požadavků vejde jen část a ekonomika chybí. Exist
   přínos → rozhodne uživatel, jinak „nelze rozhodnout“ s výčtem chybějících údajů.
 - Ekonomicky se porovnávají **všechny** proveditelné kombinace (i menší) – ztrátový požadavek
   (příspěvek < 0) se tak nedoporučí jen proto, že se „vejde“; u zakázky po termínu se odečte penále.
+- Mezi variantami je vždy i **„nepřijmout nic“** (přírůstkový příspěvek přesně 0 Kč, E2.5c). Je-li každá
+  varianta, která se vejde, ztrátová i v nejlepším případě, výsledek je „žádný se nevyplatí“ – nikdy
+  doporučení nejmenší ztráty. Varianta s příspěvkem přesně 0 Kč je s „nic“ rovnocenná (rozhodne
+  uživatel). Při neúplných údajích se „nic“ vybere jen tehdy, když je ztráta jistá i bez chybějících
+  nákladů (horní mez < 0); jinak „nelze rozhodnout“. Nic se neruší – ani předběžné rezervace.
 - Označení požadavků musí být jedinečná (i vůči předběžným rezervacím v datech).
 - Překrývající se servisní záznamy téhož kusu: kus je v servisu nejvýše jednou za den (dva různé
   kusy zvlášť); překryv není konflikt využití, plánovač na něj upozorní jako na možnou duplicitu dat.

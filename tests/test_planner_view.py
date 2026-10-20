@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 import capacity as cp  # noqa: E402
 import datamodel as dm  # noqa: E402
+import planner as pl  # noqa: E402
 import planner_view as pv  # noqa: E402
 import scheduling as sch  # noqa: E402
 from test_planner import BAGR, model  # noqa: E402
@@ -271,6 +272,17 @@ def test_tab_limits_number_of_compared_requests():
     click(at, "Přidat k porovnání")
     assert any("nejvýš" in w.value for w in at.tabs[7].warning)
     assert len(at.session_state["dp_requests"]) == pv.MAX_REQUESTS
+
+
+def test_loss_making_competition_never_shows_recommended_badge():
+    # E2.5c krok 1: všechny varianty ztrátové → žádný štítek „Doporučeno“, vysvětlení „nepřijmout žádný“
+    m = model(var_rental=7000)
+    res = pv.evaluate(m, {}, [pv.rental_request("NP-1", BAGR, 1, 1, 3, 6000),
+                              pv.rental_request("NP-2", BAGR, 1, 2, 4, 6500)])
+    assert {c["badge"] for c in res["cards"]} == {pv.FEASIBLE}
+    assert all("nepřijmout žádný" in c["why"] for c in res["cards"])
+    g = res["groups"][0]
+    assert g["verdict"] == pl.NONE_PAYS and g["choice"] is None and "nevyplatí" in g["text"]
 
 
 if __name__ == "__main__":
