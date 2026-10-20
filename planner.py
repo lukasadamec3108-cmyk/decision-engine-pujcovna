@@ -20,6 +20,8 @@ ROZHODOVACÍ PRAVIDLA
 6. Provozní proveditelnost a ekonomická výhodnost jsou oddělené. Ekonomické doporučení vznikne
    jen tehdy, když je jedna kombinace lepší i v nejhorším případě (při chybějících nákladech je
    známá částka jen horní mez). Jinak „nelze rozhodnout“ s výčtem chybějících údajů.
+   Mezi variantami je vždy i „nepřijmout nic“ (přírůstkový příspěvek 0 Kč): jsou-li všechny varianty
+   jistě ztrátové, výsledek je „žádný se nevyplatí“, nikdy doporučení nejmenší ztráty.
 7. Alternativy jen podložené daty: posun zakázky uvnitř jejího okna bez penále. Jiný stroj ani
    externí zapůjčení se nenabízí – chybí údaje o zaměnitelnosti strojů a o externích cenách.
 """
@@ -42,6 +44,8 @@ OK_ALONE, NOT_FEASIBLE, UNDETERMINED = "proveditelný", "neproveditelný", "nelz
 # Ekonomický verdikt skupiny
 RECOMMEND, EQUAL, NO_DECISION, ALL_FIT = ("doporučení", "rovnocenné", "nelze rozhodnout",
                                           "vše proveditelné současně")
+NONE_PAYS = "žádný se nevyplatí"       # nejlepší je nepřijmout žádný ze soupeřících požadavků
+NOTHING = ()                           # varianta „nepřijmout nic“ – přírůstkový příspěvek přesně 0 Kč
 MAX_GROUP = 12                         # nejvíc požadavků v jedné skupině (2^12 kombinací)
 
 
@@ -309,7 +313,11 @@ def economic_note(v: Value) -> str:
 
 def _economic_verdict(options: list, values: dict) -> dict:
     """options = všechny proveditelné kombinace (i menší – ztrátový požadavek je lepší vynechat).
-    Doporučí jen kombinaci, která je lepší i v nejhorším případě než každá jiná."""
+    Vždy se přidá i varianta „nepřijmout nic“ s přírůstkovým příspěvkem přesně 0 Kč – když jsou všechny
+    ostatní varianty ztrátové, nesmí se doporučit „nejmenší ztráta“.
+    Doporučí jen kombinaci, která je lepší i v nejhorším případě než každá jiná (včetně „nic“);
+    „nic“ vyhraje jen tehdy, když je každá jiná varianta ztrátová i v nejlepším případě (horní mez < 0)."""
+    options = [NOTHING] + [o for o in options if o != NOTHING]
     sums = {o: _sum(values[r.ref] for r in o) for o in options}
     missing = tuple(dict.fromkeys(m for v in sums.values() for m in v.missing))
     known = [o for o in options if sums[o].lo is not None]
@@ -317,6 +325,11 @@ def _economic_verdict(options: list, values: dict) -> dict:
         best = max(known, key=lambda o: sums[o].lo)
         others = [o for o in options if o is not best]
         if all(sums[o].hi is not None and sums[best].lo > sums[o].hi for o in others):
+            if best == NOTHING:
+                return dict(verdict=NONE_PAYS, choice=NOTHING, values=sums, missing=missing,
+                            text="Ekonomicky se nevyplatí přijmout žádný ze soupeřících požadavků – každá "
+                                 "varianta, která se vejde, je ztrátová i v nejlepším případě. Nic se neruší "
+                                 "– rozhodne uživatel.")
             return dict(verdict=RECOMMEND, choice=best, values=sums, missing=missing,
                         text="Kombinace je ekonomicky lepší i v nejhorším případě.")
     if all(v.exact for v in sums.values()) and len({v.lo for v in sums.values()}) == 1:
@@ -325,8 +338,9 @@ def _economic_verdict(options: list, values: dict) -> dict:
     if all(v.exact for v in sums.values()):
         best = max(v.lo for v in sums.values())
         tied = [o for o in options if sums[o].lo == best]
+        nothing = " (včetně varianty nepřijmout nic)" if NOTHING in tied else ""
         return dict(verdict=EQUAL, choice=None, values=sums, missing=missing,
-                    text=f"Nejvyšší přínos má shodně {len(tied)} variant – rozhodne uživatel.")
+                    text=f"Nejvyšší přínos má shodně {len(tied)} variant{nothing} – rozhodne uživatel.")
     return dict(verdict=NO_DECISION, choice=None, values=sums, missing=missing,
                 text="Ekonomicky nelze rozhodnout – chybí údaje: " + ("; ".join(missing) or "neznámé"))
 
@@ -469,9 +483,10 @@ def plan(model: dm.DataModel, job_starts: Optional[dict] = None, new_requests=()
             out.missing_data += list(verdict["missing"])
         out.groups.append(dict(requests=refs, verdict=verdict["verdict"],
                                options=[tuple(r.ref for r in o) for o in maximal],
-                               choice=tuple(r.ref for r in verdict["choice"]) if verdict["choice"] else None,
+                               choice=(tuple(r.ref for r in verdict["choice"])
+                                       if verdict["choice"] is not None else None),
                                values={tuple(r.ref for r in o): v for o, v in verdict["values"].items()
-                                       if o in maximal or o == verdict["choice"]},
+                                       if o in maximal or o == verdict["choice"] or o == NOTHING},
                                text=verdict["text"]))
 
     for ref, v in values.items():
@@ -504,5 +519,8 @@ def explain(p: Plan) -> list:
                          + " | ".join(" + ".join(o) for o in g["options"]))
         if g.get("choice") and g["verdict"] == RECOMMEND:
             lines.append(f"  Doporučeno (jen doporučení, nic se nemění): {', '.join(g['choice'])}")
+        if g["verdict"] == NONE_PAYS:
+            lines.append("  Ekonomicky nejlépe vychází nepřijmout žádný z nich (příspěvek 0 Kč); "
+                         "předběžné rezervace se tím neruší.")
     lines += [f"Poznámka: {n}" for n in p.notes]
     return lines

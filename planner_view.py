@@ -162,6 +162,10 @@ def badge(entry: dict, group: Optional[dict]) -> tuple:
                                  "ekonomicky lepší i v nejhorším případě.")
         return FEASIBLE, ("Sám se vejde, ale soupeří o stejné stroje; ekonomicky lepší je jiná varianta "
                           f"({', '.join(group['choice'])}). Nic se neruší – rozhodne uživatel.")
+    if group["verdict"] == pl.NONE_PAYS:
+        return FEASIBLE, ("Sám se vejde, ale se soupeřícími požadavky se vejde jen část a každá taková varianta "
+                          "je ztrátová – ekonomicky nejlépe vychází nepřijmout žádný z nich. Nic se neruší – "
+                          "rozhodne uživatel.")
     if group["verdict"] == pl.EQUAL:
         return FEASIBLE, ("Sám se vejde; se soupeřícími požadavky mají varianty shodný ekonomický přínos – "
                           "rozhodne uživatel.")
