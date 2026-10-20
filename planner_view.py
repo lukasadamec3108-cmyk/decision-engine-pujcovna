@@ -801,6 +801,7 @@ CHART_MULTI_NOTE = ("Graf se nezobrazuje: rozhoduje víc nezadaných nákladů n
 CHART_COLORS = 5                                  # počet barev variant (cyklicky); „nic“ má vlastní šrafování
 MAX_CHART_NEVER = 3                               # kolik „nikdy nejvýhodnějších“ variant se vypíše, zbytek se sbalí
 MAX_CHART_TIE = 4                                 # nad tolik shodných variant v hranici se jmenují jen sousední
+MAX_CHART_ROW = 3                                 # nad tolik úseků se pruh na střední šířce (do 900 px) skládá svisle
 
 
 def _variants(n: int) -> str:
@@ -1087,7 +1088,8 @@ CSS = """
 .dp-chart{margin:.35rem 0 .45rem 0;padding:.55rem .6rem;background:#fff;border:1px solid #E5E7EB;border-radius:8px}
 .dp-chart-t{font-size:.85rem;font-weight:700;color:#1F2933;margin-bottom:.4rem}
 .dp-bar{display:flex;align-items:stretch;gap:0}
-.dp-seg{flex:1 1 0;min-width:0;padding:.45rem .5rem;border:1px solid #94A3B8;border-radius:6px;overflow-wrap:anywhere}
+.dp-seg{flex:1 1 0;min-width:0;padding:.45rem .5rem;border:1px solid #94A3B8;border-radius:6px;
+  overflow-wrap:break-word;word-break:normal;hyphens:manual}
 .dp-seg-name{font-weight:700;font-size:.88rem;color:#111827;line-height:1.25}
 .dp-seg-range{font-size:.8rem;color:#374151;margin-top:.15rem}
 .dp-seg.c0{background:#DBEAFE;border-color:#3B82F6}.dp-seg.c1{background:#EDE9FE;border-color:#8B5CF6}
@@ -1107,6 +1109,12 @@ CSS = """
   .dp-bar{flex-direction:column}
   .dp-bnd{flex-direction:row;justify-content:flex-start;gap:.4rem;padding:.25rem 0 .25rem .6rem;min-width:0}
   .dp-bnd-v{margin-top:0}
+}
+@media (max-width: 900px){
+  .dp-chart.many .dp-bar{flex-direction:column}
+  .dp-chart.many .dp-bnd{flex-direction:row;justify-content:flex-start;gap:.4rem;padding:.25rem 0 .25rem .6rem;
+    min-width:0}
+  .dp-chart.many .dp-bnd-v{margin-top:0}
 }
 .dp-title,.dp-sub{overflow-wrap:anywhere}
 .dp-econ{color:#374151;font-size:.9rem;margin:.1rem 0 .1rem .1rem;overflow-wrap:anywhere}
@@ -1167,7 +1175,8 @@ def chart_html(chart: dict) -> str:
     more = chart.get("never_more", [])
     notes = [x for x in chart["never"] if x]
     tail = [x for x in [chart["zero_note"], CHART_SCALE_NOTE] if x]
-    return (f'<div class="dp-chart" role="img" aria-label="{_h(chart["summary"])}">'
+    many = " many" if len(chart["segments"]) > MAX_CHART_ROW else ""
+    return (f'<div class="dp-chart{many}" role="img" aria-label="{_h(chart["summary"])}">'
             f'<div class="dp-chart-t">Nejvýhodnější varianta podle: {t(chart["unknown"])}</div>'
             f'<div class="dp-bar">{"".join(parts)}</div>'
             f'<ul class="dp-bnd-list">{items}</ul>'

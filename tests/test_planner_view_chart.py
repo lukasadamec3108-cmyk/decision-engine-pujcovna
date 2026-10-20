@@ -230,7 +230,26 @@ def test_chart_css_mobile_and_no_recommend_green():
     assert "@media (max-width: 640px)" in css and ".dp-bar{flex-direction:column}" in css
     chart_css = "".join(line for line in css.splitlines() if line.startswith((".dp-seg", ".dp-bnd", ".dp-chart")))
     assert "#1E7B4A" not in chart_css                                     # zelená jen pro „Doporučeno“
-    assert ".dp-seg{flex:1 1 0;min-width:0" in css and "overflow-wrap:anywhere" in css.split(".dp-seg{")[1].split("}")[0]
+    seg_rule = css.split(".dp-seg{")[1].split("}")[0]
+    assert ".dp-seg{flex:1 1 0;min-width:0" in css
+    assert "overflow-wrap:break-word" in seg_rule and "anywhere" not in seg_rule    # slova se nelámou uprostřed
+
+
+def test_many_segments_stack_vertically_on_medium_width():
+    # víc než 3 úseky: na střední šířce (do 900 px) svisle; do 3 úseků zůstává vodorovně až do 640 px
+    css = pv.CSS
+    medium = css.split("@media (max-width: 900px){")[1].split("\n}")[0]
+    assert ".dp-chart.many .dp-bar{flex-direction:column}" in medium
+    five = panel_for(pv.evaluate(model(), {}, [rent("NP-1", 1, 6, 6000), rent("NP-2", 1, 4, 7500),
+                                               rent("NP-3", 1, 2, 11000), rent("NP-4", 1, 1, 15000)]), "NP-1")
+    ch = five["conditions"][0]["chart"]
+    assert len(ch["segments"]) == 5 and pv.chart_html(ch).startswith('<div class="dp-chart many"')
+    two = panel_for(pv.evaluate(DEMO, STARTS, [rent("NP-3", 20, 23, 2000, SMYK)]), "NP-3")["conditions"][0]["chart"]
+    assert len(two["segments"]) == 2 and pv.chart_html(two).startswith('<div class="dp-chart" ')
+    # obsah grafu se uspořádáním nemění (stejné úseky, hranice i texty)
+    assert [s["range"] for s in ch["segments"]] == ["pod 3 000 Kč/den", "mezi 3 000 a 4 000 Kč/den",
+                                                    "mezi 4 000 a 7 000 Kč/den", "mezi 7 000 a 15 000 Kč/den",
+                                                    "nad 15 000 Kč/den"]
 
 
 def test_chart_html_escapes_text():
