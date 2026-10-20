@@ -160,7 +160,17 @@ doporučení, nic se nezamítá ani neruší), = Rovnocenné, ⇄ Podmíněné (
 u jedné neznámé s hranicí zlomu v Kč/den), ? Nelze rozhodnout, Bez porovnání (požadavek nemá soupeře).
 Nevejde-li se požadavek, ekonomika se nehodnotí. Příspěvek na kartě: přesná částka v Kč, nebo vzorec
 s nezadanými sazbami (Kč/den, nikdy jako 0 Kč), nebo důvod, proč ho nelze spočítat; skutečně zadaná
-nula je výslovně označená. Existující zakázka slouží jen jako
+nula je výslovně označená.
+
+**Panel „Ekonomické porovnání“** (E2.5c krok 4C, `planner_view.group_panel` / `panel_html`) stojí nad
+kartami u každé skupiny soupeřících požadavků a vychází jen z výsledku plánovače: výsledek jednou
+větou → „Proč?“ (rozdíly v Kč jen tehdy, když mají všechny varianty přesnou částku) → porovnávané
+varianty včetně „nepřijmout nic“ (prokazatelně horší sbalené) → „Kdy se co vyplatí“ (pásma hranic
+zlomu v Kč/den jako seznam; při více neznámých podmínky dvojic slovy s oběma variantami a jednotkami,
+zjednodušené jen tam, kde je to přesné) → „Co doplnit“ (jen údaje, na kterých rozhodnutí závisí) →
+upozornění, že se nic nezamítá ani neruší. Karty mají jen krátkou větu s odkazem na panel. Nezadaný
+údaj bez vlivu na výsledek je označený „neuplatňuje se“ (např. penále u zakázky v termínu).
+Grafický pruh hranic zlomu přijde v kroku 4D. Existující zakázka slouží jen jako
 šablona nového požadavku. Nové požadavky nesmějí nést označení zakázek ani rezervací z dat.
 
 - **Potvrzené závazky** (potvrzené pronájmy, servis, potvrzené zakázky v aktuálním plánu záložky 6)

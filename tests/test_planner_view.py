@@ -222,12 +222,19 @@ def badges(at):
     import re
     out = []
     html_text = " ".join(m.value for m in at.tabs[7].markdown)
-    for kind, label in re.findall(r'dp-badge (op|ec)-[\w-]+"><small>[^<]*</small>([^<]+)<', html_text):
-        if kind == "op":
-            out.append([label, None])
-        else:
-            out[-1][1] = label
-    return [tuple(x) for x in out]
+    for chunk in html_text.split('<div class="dp-card">')[1:]:              # jen karty, ne panel
+        chunk = chunk.split('<div class="dp-panel')[0]
+        found = dict(re.findall(r'dp-badge (op|ec)-[\w-]+"><small>[^<]*</small>([^<]+)<', chunk))
+        out.append((found.get("op"), found.get("ec")))
+    return out
+
+
+def panels(at):
+    """Ekonomické štítky panelů „Ekonomické porovnání“ (E2.5c krok 4C)."""
+    import re
+    html_text = " ".join(m.value for m in at.tabs[7].markdown)
+    return [re.search(r'dp-badge ec-[\w-]+"><small>[^<]*</small>([^<]+)<', c).group(1)
+            for c in html_text.split('<div class="dp-panel')[1:]]
 
 
 def test_tab_in_app_full_flow_without_changing_data():
@@ -253,13 +260,19 @@ def test_tab_in_app_full_flow_without_changing_data():
     # E2.5c krok 3/4B: chybí variabilní náklad → podmíněně (hranice zlomu), žádné doporučení;
     # NP-2 (2 dny á 8 000) nevychází nejlépe při žádné výši nákladu, FIKT-P06 (5 dní) do 8 000 Kč/den
     assert badges(at) == [(pv.OP_NO, None), (pv.OP_FITS, pv.EC_NO), (pv.OP_FITS, pv.EC_COND)]
-    assert any("hranice zlomu" in m.value or "8 000 Kč" in m.value for m in at.tabs[7].markdown)
+    assert any("Hranice zlomu" in m.value and "8 000 Kč/den" in m.value.replace("\u00a0", " ")
+               for m in at.tabs[7].markdown)
     assert any("předběžná rezervace z dat – neruší se" in m.value for m in at.tabs[7].markdown)
     # 4) odebrání a vymazání
     at.button(key="dp_rm_NP-1").click().run()
     assert badges(at) == [(pv.OP_FITS, pv.EC_NO), (pv.OP_FITS, pv.EC_COND)]
     shown = " ".join(m.value for m in at.tabs[7].markdown).replace("\u00a0", " ")
     assert "nezamítá" in shown and "do 8 000 Kč/den" in shown
+    assert panels(at) == [pv.EC_COND] and "Ekonomické porovnání" in shown            # E2.5c 4C: panel nad kartami
+    assert shown.index("dp-panel") < shown.index('<div class="dp-card">')
+    # „Chybějící údaje“ i „Co doplnit“ jen s údaji, které rozhodují (ne náklad nesouvisející FIKT-P07)
+    assert "Co doplnit" in shown and "Smykový nakladač: variabilní náklad" not in shown
+    assert "Pásový dumper: variabilní náklad pronájmu" in shown
     at.button(key="dp_clear").click().run()
     assert badges(at) == []
     # 5) zakázka podle šablony, chybná data formuláře

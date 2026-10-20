@@ -285,7 +285,7 @@ def _num(x: float) -> str:
     return f"{x:,.2f}".replace(",", " ").rstrip("0").rstrip(".")
 
 
-def _compare_one(diff: Formula, unknowns: dict, name: str = A) -> dict:
+def _compare_one(diff: Formula, unknowns: dict, name: str = A, other: str = B) -> dict:
     """Znaménko rozdílu A − B pro všechny neznámé ≥ 0."""
     k, terms = diff.known, diff.terms
     if not terms:
@@ -302,20 +302,20 @@ def _compare_one(diff: Formula, unknowns: dict, name: str = A) -> dict:
         return dict(status=UNDECIDABLE, winner=None, strict=False, diff=diff, condition="",
                     blocking=[unknowns[key].label if key in unknowns else str(key) for key in data])
     return dict(status=CONDITIONAL, winner=None, strict=False, diff=diff,
-                condition=condition(diff, unknowns, name))
+                condition=condition(diff, unknowns, name, other))
 
 
-def condition(diff: Formula, unknowns: dict, name: str = A) -> str:
-    """Kdy je A (name) lepší než B (rozdíl > 0) – u jedné sazby jako hranice zlomu."""
+def condition(diff: Formula, unknowns: dict, name: str = A, other: str = B) -> str:
+    """Kdy je A (name) lepší než B (other) (rozdíl > 0) – u jedné sazby jako hranice zlomu."""
     label = lambda key: f"[{unknowns[key].label}]" if key in unknowns else str(key)
     if len(diff.terms) == 1:
         key, c = diff.terms[0]
         t = -diff.known / c
-        return f"{name} je lepší, pokud {label(key)} {'<' if c < 0 else '>'} {_czk(t)} (hranice zlomu)"
+        return f"{name} je lepší než {other}, pokud {label(key)} {'<' if c < 0 else '>'} {_czk(t)} (hranice zlomu)"
     left = " + ".join(f"{_num(-c)} × {label(key)}" for key, c in diff.terms if c < 0)
     right = " + ".join(f"{_num(c)} × {label(key)}" for key, c in diff.terms if c > 0)
     rhs = _czk(diff.known) + (f" + {right}" if right else "")
-    return f"{name} je lepší, pokud {left or '0'} < {rhs}"
+    return f"{name} je lepší než {other}, pokud {left or '0'} < {rhs}"
 
 
 def compare(a: Contribution, b: Contribution, names: tuple = (A, B)) -> dict:
@@ -329,7 +329,7 @@ def compare(a: Contribution, b: Contribution, names: tuple = (A, B)) -> dict:
         return dict(status=UNDECIDABLE, winner=None, scenarios={}, reasons=reasons,
                     text="Nelze rozhodnout – neplatné údaje: " + "; ".join(reasons))
     sa, sb = _expand(a.scenarios, b.scenarios)
-    per = {sc: _compare_one(sa[sc] - sb[sc], unknowns, names[0]) for sc in sa}
+    per = {sc: _compare_one(sa[sc] - sb[sc], unknowns, names[0], names[1]) for sc in sa}
     statuses = {r["status"] for r in per.values()}
     winners = {r["winner"] for r in per.values()}
     if UNDECIDABLE in statuses:
