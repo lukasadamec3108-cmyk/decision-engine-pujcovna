@@ -52,7 +52,7 @@ Vstupy se nastavují v postranním panelu:
 
 Výchozí hodnoty tvoří **ukázkový scénář** s fiktivními čísly (realistický trh, fixní náklad 100 000 Kč).
 
-Výsledky jsou rozděleny do sedmi záložek:
+Výsledky jsou rozděleny do osmi záložek:
 
 | Záložka | Obsah |
 |---|---|
@@ -63,6 +63,7 @@ Výsledky jsou rozděleny do sedmi záložek:
 | 🛒 **Nákup strojů** | Optimální nákup strojů v rámci rozpočtu, křivka rozpočet vs. maximální zisk; v detailu kontrola lineární (LP) a diskrétní (DP) optimalizací. |
 | 🗓️ **Plán zakázek** | Harmonogram (Ganttův diagram) se smluvními termíny, zakázky po termínu a penále za zpoždění, detail zakázek, vytížení strojů, úzké hrdlo a prioritní zakázka. |
 | 📅 **Kapacita strojů** | Kalendář dostupnosti strojů po dnech: volné kusy, pronájmy, zakázky z plánu (i po termínu), servis, konflikty a stav „nelze určit“; filtr typů a období, detail dne a ověření nového požadavku. Přepínač **Přehled využití**: kapacita flotily v kusodnech, pronájmy, vlastní zakázky, servis, volno, využití a konfliktní dny – celkem i podle typu stroje. |
+| 🧭 **Rozhodovací plánovač** | Zadání nového pronájmu nebo zakázky (i podle šablony existující zakázky) a vyhodnocení: provozní proveditelnost na zbývající kapacitě, co požadavek blokuje, posun zakázky v okně bez penále, soupeření s předběžnými rezervacemi a odděleně ekonomika. Štítky Doporučeno / Proveditelné / Neproveditelné / Nelze rozhodnout se zdůvodněním. Nic se neukládá ani nemění. |
 
 Čísla jsou zobrazena v českém formátu, grafy jsou interaktivní (Plotly) a vzhled je přizpůsoben i menším obrazovkám.
 
@@ -151,7 +152,8 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 ├── datamodel.py                     # společná datová vrstva: načtení, kontrola, převod pro výpočty
 ├── economics.py                     # ekonomický modul (E2.1): náklady flotily, příspěvky, celkový výsledek
 ├── capacity.py                      # kapacitní plánování strojů (E2.3A): dostupnost, konflikty, požadavky
-├── planner.py                       # plánovací a rozhodovací model (E2.5a) – zatím bez napojení na aplikaci
+├── planner.py                       # plánovací a rozhodovací model (E2.5a)
+├── planner_view.py                  # záložka Rozhodovací plánovač (E2.5b): formulář → požadavek, výsledek → karty
 ├── capacity_view.py                 # kapacitní kalendář (E2.3B): převod výsledků capacity.py na mřížku
 ├── portfolio.py                     # výběr nákupní sestavy strojů v rámci rozpočtu
 ├── scheduling.py                    # plán zakázek (celočíselná optimalizace)

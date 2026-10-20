@@ -246,7 +246,10 @@ def _with_new_job(model: dm.DataModel, req: Request) -> dm.DataModel:
                direct_cost="" if req.direct_cost is None else req.direct_cost,
                duration_days=req.end - req.start + 1, earliest_start_day=req.start,
                deadline_day=req.deadline if req.deadline is not None else req.end,
-               penalty_per_day="" if req.penalty_per_day is None else req.penalty_per_day)
+               # sazba penále se násobí dny po termínu: u zakázky dokončené v termínu je penále 0
+               # bez ohledu na sazbu – nevyplněná sazba je chybějící údaj jen u zakázky po termínu
+               penalty_per_day=(req.penalty_per_day if req.penalty_per_day is not None
+                                else ("" if req.deadline is not None and req.end > req.deadline else "0")))
     jobs = pd.concat([jobs, pd.DataFrame([row])], ignore_index=True).astype(str)
     reqs = pd.concat([model.job_requirements, pd.DataFrame(
         [dict(job_id=req.ref, resource_kind="machine", resource_id=t, quantity=str(q), position=str(i + 1))
@@ -398,6 +401,13 @@ def plan(model: dm.DataModel, job_starts: Optional[dict] = None, new_requests=()
     if dups:
         raise ValueError("Označení požadavků musí být jedinečná (i vůči předběžným rezervacím v datech): "
                          + ", ".join(dups))
+    # Nový požadavek nesmí nést označení existující zakázky ani rezervace – ekonomika by jinak
+    # převzala údaje původního záznamu (economics hledá zakázku podle job_id).
+    data_ids = set(model.jobs["job_id"].astype(str)) | set(model.rental_bookings["booking_id"].astype(str))
+    clash = sorted(r.ref for r in new_requests if not r.in_data and r.ref in data_ids)
+    if clash:
+        raise ValueError("Označení nového požadavku koliduje s existující zakázkou nebo rezervací: "
+                         + ", ".join(clash))
     economics_needed = []
     for r in requests:
         entry = dict(request=r, label=r.label, operational=None, problems=[], reasons=[], alternatives=[],

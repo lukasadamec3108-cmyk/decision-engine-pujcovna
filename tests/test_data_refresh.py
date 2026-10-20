@@ -32,7 +32,7 @@ at.secrets["password"] = password
 at.run(); at.text_input[0].set_value(password).run()
 
 def snapshot():
-    md = [m.value for m in at.tabs[6].markdown] if len(at.tabs) == 7 else []
+    md = [m.value for m in at.tabs[6].markdown] if len(at.tabs) >= 7 else []
     return dict(kpi=[m for m in md if "Dny s konfliktem" in m],
                 new_code=any("NOVÁ VERZE KÓDU" in m for m in md if "cc-table" in m),
                 info=[m for m in md if "Načtená data" in m],
@@ -145,7 +145,7 @@ def test_code_fingerprint_changes_with_module_source():
         shutil.rmtree(tmp, ignore_errors=True)
     # aplikace do klíče mezipaměti zahrnuje všechny moduly, které uložené funkce volají
     src = (ROOT / "app.py").read_text(encoding="utf-8")
-    assert "CODE_MODULES = (dm, sch, cp, cv)" in src
+    assert "CODE_MODULES = (dm, sch, cp, cv, pl, pv)" in src
     for call in ("load_data_model(data_version, code_version)",
                  "plan_jobs(jobs_df, machine_capacity, code_version)",
                  "data_version, code_version, tuple(sorted(cap_starts.items()))"):
