@@ -151,7 +151,12 @@ data, filtry a plán zakázek jako kalendář):
 
 ## Plánovací a rozhodovací model (`planner.py`, E2.5a)
 
-Samostatná logika (aplikace ji zatím nepoužívá) nad `capacity.py` a `economics.py`:
+Logika nad `capacity.py` a `economics.py`; v aplikaci ji zobrazuje záložka **Rozhodovací plánovač**
+(E2.5b, `planner_view.py`). Štítek požadavku: **Doporučeno** jen ve variantě, kterou plánovač
+ekonomicky doporučil při soupeření; samostatný požadavek bez soupeře je **Proveditelné** (ekonomika
+zvlášť); **Neproveditelné** – kapacitu drží závazky nebo servis; **Nelze rozhodnout** – chybí údaje,
+nebo se ze soupeřících požadavků vejde jen část a ekonomika chybí. Existující zakázka slouží jen jako
+šablona nového požadavku. Nové požadavky nesmějí nést označení zakázek ani rezervací z dat.
 
 - **Potvrzené závazky** (potvrzené pronájmy, servis, potvrzené zakázky v aktuálním plánu záložky 6)
   blokují kapacitu. Jejich vzájemný konflikt jde **k ručnímu řešení**; u zakázky se jen ověří,

@@ -269,9 +269,17 @@ def test_module_does_not_modify_data():
         pd.testing.assert_frame_equal(before[t], getattr(m, t))
 
 
-def test_app_does_not_use_economics_yet():
-    # E2.1: modul je připravený, ale žádná záložka ho zatím nepoužívá (změna až v E2.2).
-    assert "economics" not in (ROOT / "app.py").read_text(encoding="utf-8")
+def test_app_uses_economics_only_through_planner_tab():
+    # E2.1: výpočty záložek 1–7 ekonomický modul nepoužívají. Od E2.5b ho využívá jen záložka 8
+    # (Rozhodovací plánovač) nepřímo přes planner.py – app.py ho přímo neimportuje.
+    import re
+    src = (ROOT / "app.py").read_text(encoding="utf-8")
+    assert not re.search(r"^\s*(import economics|from economics)", src, re.M)
+    before_tab8 = src[:src.index("# ZÁLOŽKA 8 – ROZHODOVACÍ PLÁNOVAČ")]
+    for line in before_tab8.splitlines():
+        if line.startswith(("import planner", "pl = importlib", "pv = importlib", "CODE_MODULES")):
+            continue
+        assert "pl." not in line and "pv." not in line, line
 
 
 if __name__ == "__main__":

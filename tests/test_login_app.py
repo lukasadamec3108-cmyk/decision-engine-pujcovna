@@ -49,7 +49,7 @@ def login(at, user, password):
 
 
 def logged_in(at) -> bool:
-    return len(at.tabs) == 7 and not at.exception             # 6 původních záložek + Kapacita strojů
+    return len(at.tabs) == 8 and not at.exception             # 6 původních + Kapacita strojů + Plánovač
 
 
 def errors(at):

@@ -42,7 +42,7 @@ def test_capacity_tab_is_seventh_and_original_tabs_unchanged():
     at = logged_in_app()
     assert [t.label for t in at.tabs] == ["🏆 Doporučení", "📈 Možné výsledky", "⚠️ Riziko",
                                           "🎯 Co ovlivňuje zisk", "🛒 Nákup strojů", "🗓️ Plán zakázek",
-                                          "📅 Kapacita strojů"]
+                                          "📅 Kapacita strojů", "🧭 Rozhodovací plánovač"]
     html_text = grid_html(at)
     for name in ("Mini bagr", "Pásový dumper", "Silniční válec", "Nákladní auto"):
         assert name in html_text
