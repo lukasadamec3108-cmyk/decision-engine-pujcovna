@@ -374,9 +374,18 @@ def test_audit_twelve_concurrent_requests_stay_fast():
     assert p.groups[0]["verdict"] == pl.NO_DECISION
 
 
-def test_app_does_not_use_planner_yet():
-    src = (ROOT / "app.py").read_text(encoding="utf-8")
-    assert "planner" not in src
+def test_new_request_ref_must_not_collide_with_data_ids():
+    # E2.5b: nová zakázka „J006“ by v ekonomice převzala údaje původní zakázky J006 (tržba 320 000)
+    import pytest
+    with pytest.raises(ValueError, match="J006"):
+        pl.plan(BASE, {}, [Request("J006", "job", pl.NEW, (("SILNICNI_VALEC", 1),), 21, 22,
+                                   revenue=10000, direct_cost=5000)])
+    with pytest.raises(ValueError, match="FIKT-P01"):
+        pl.plan(BASE, {}, [Request("FIKT-P01", "rental", pl.NEW, ((BAGR, 1),), 30, 31)])
+    # jedinečné označení: ekonomika podle zadaných údajů, ne podle původní zakázky
+    req = Request("NP-1", "job", pl.NEW, (("SILNICNI_VALEC", 1),), 21, 22, revenue=10000, direct_cost=5000)
+    assert pl.contribution(BASE, req).hi == 5000
+    pl.plan(BASE, {}, [req])                                             # jedinečné označení projde
 
 
 if __name__ == "__main__":

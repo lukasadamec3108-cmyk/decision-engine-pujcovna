@@ -398,6 +398,13 @@ def plan(model: dm.DataModel, job_starts: Optional[dict] = None, new_requests=()
     if dups:
         raise ValueError("Označení požadavků musí být jedinečná (i vůči předběžným rezervacím v datech): "
                          + ", ".join(dups))
+    # Nový požadavek nesmí nést označení existující zakázky ani rezervace – ekonomika by jinak
+    # převzala údaje původního záznamu (economics hledá zakázku podle job_id).
+    data_ids = set(model.jobs["job_id"].astype(str)) | set(model.rental_bookings["booking_id"].astype(str))
+    clash = sorted(r.ref for r in new_requests if not r.in_data and r.ref in data_ids)
+    if clash:
+        raise ValueError("Označení nového požadavku koliduje s existující zakázkou nebo rezervací: "
+                         + ", ".join(clash))
     economics_needed = []
     for r in requests:
         entry = dict(request=r, label=r.label, operational=None, problems=[], reasons=[], alternatives=[],
