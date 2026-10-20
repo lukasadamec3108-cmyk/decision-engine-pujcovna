@@ -426,14 +426,14 @@ def profile(lines: dict) -> Optional[dict]:
     slope = {n: f.coefs().get(key, 0.0) for n, f in lines.items()}
     known = {n: f.known for n, f in lines.items()}
     names = list(lines)
-    points = {0.0}
+    exact = {0.0: 0.0}                                # zaokrouhlená hranice → přesná hodnota průsečíku
     for i, a in enumerate(names):
         for b in names[i + 1:]:
             if abs(slope[a] - slope[b]) > EPS:
                 x = (known[b] - known[a]) / (slope[a] - slope[b])
                 if x > EPS:
-                    points.add(_clean(x))
-    points = sorted(points)
+                    exact.setdefault(_clean(x), x)
+    points = sorted(exact)
 
     def best(x):
         vals = {n: known[n] + slope[n] * x for n in names}
@@ -449,7 +449,8 @@ def profile(lines: dict) -> Optional[dict]:
             segments[-1] = (segments[-1][0], hi, w)
         else:
             segments.append((lo, hi, w))
-    boundaries = [(lo, best(lo)) for lo, _, _ in segments[1:]]
+    # rovnost v hranici se posuzuje v přesném průsečíku (v zaokrouhlené hodnotě by se mohla ztratit)
+    boundaries = [(lo, best(exact[lo])) for lo, _, _ in segments[1:]]
     return dict(key=key, segments=segments, at_zero=best(0.0), boundaries=boundaries)
 
 
