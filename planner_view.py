@@ -547,8 +547,11 @@ def econ_badge(ref: str, entry: dict, g: Optional[dict], ge: Optional[dict]) -> 
         where = _where_text(ref, ge) if ge else ""
         return EC_COND, (f"Zda se vyplatí, závisí na nezadaných údajích: {missing}. " + (where + " " if where else "")
                          + "Neznámý náklad se nepočítá jako 0 Kč.")
-    blocking = ", ".join((ge or {}).get("blocking", [])) or "chybějící nebo neplatné údaje"
-    return EC_UND, f"Ekonomicky nelze rozhodnout – chybí nebo je neplatné: {blocking}."
+    blocking = ", ".join((ge or {}).get("blocking", []))
+    if blocking:
+        return EC_UND, f"Ekonomicky nelze rozhodnout – chybí nebo je neplatné: {blocking}."
+    # bez chybějících údajů (pojistka plánovače, např. příliš mnoho variant) → důvod přímo z plánovače
+    return EC_UND, g["text"].rstrip(".") + "."
 
 
 def _czk(x: float) -> str:
@@ -597,8 +600,12 @@ def contribution_lines(economy: Optional[dict], late: str = "") -> list:
                      f"Příspěvek: {_czk(v)} – ztráta." if v < 0 else f"Příspěvek: {_czk(v)}.")
     elif st == WITH_UNKNOWN:
         scen = economy["scenarios"]
-        hi = economy["hi"]
-        upper = f" Neznámé náklady příspěvek jen snižují – nejvýše {_czk(hi)}." if hi is not None else ""
+        hi, lo = economy["hi"], economy["lo"]
+        if any(x["terms"] for x in scen):
+            upper = f" Neznámé náklady příspěvek jen snižují – nejvýše {_czk(hi)}." if hi is not None else ""
+        else:                                         # neznámé je jen nastavení, žádný náklad
+            upper = (f" Podle nastavení tedy {_czk(lo).removesuffix(' Kč')} až {_czk(hi)}."
+                     if lo is not None and hi is not None else "")
         if len(scen) == 1:
             lines.append(f"Příspěvek: {formula_words(scen[0])}.{upper}")
         else:
@@ -698,7 +705,8 @@ CSS = """
 .dp-badge.ec-cond{background:#F3E8FF;color:#5B21B6;border:1px solid #7C3AED}
 .dp-badge.ec-und{background:#FFF4DB;color:#7A4E00;border:1px solid #B7791F}
 .dp-badge.ec-none{background:#fff;color:#4B5563;border:1px dashed #9CA3AF}
-.dp-sec{color:#1F2933;margin:.25rem 0 .1rem 0;font-size:.92rem}
+.dp-sec{color:#1F2933;margin:.25rem 0 .1rem 0;font-size:.92rem;overflow-wrap:anywhere}
+.dp-title,.dp-sub{overflow-wrap:anywhere}
 .dp-econ{color:#374151;font-size:.9rem;margin:.1rem 0 .1rem .1rem;overflow-wrap:anywhere}
 .dp-why{color:#1F2933;margin:.2rem 0 .35rem 0}
 .dp-line{color:#374151;font-size:.9rem;margin:.1rem 0}

@@ -244,6 +244,70 @@ def test_tentative_booking_card_gets_badges_and_keeps_note():
     assert files_hash() == before
 
 
+
+# ---------------------------------------------------------------------------
+# Regresní testy z auditu PR #32
+# ---------------------------------------------------------------------------
+
+def test_audit_undecided_without_missing_data_shows_planner_reason():
+    # pojistka plánovače (příliš mnoho variant) – karta nesmí tvrdit, že chybějí údaje
+    old = pl.MAX_FRONT
+    pl.MAX_FRONT = 1
+    try:
+        cs = cards(model(), [rent("NP-1", 1, 5, 6500), rent("NP-2", 1, 3, 9000)])
+    finally:
+        pl.MAX_FRONT = old
+    why = cs["NP-1"]["econ_why"]
+    assert cs["NP-1"]["econ_badge"] == pv.EC_UND
+    assert "příliš mnoho variant" in why and "chybí nebo je neplatné" not in why
+
+
+def test_audit_setting_only_unknown_does_not_claim_unknown_costs():
+    # sazba stroje na zakázce zadaná, chybí jen nastavení → dvě přesné částky, žádný neznámý náklad
+    lines = cards(model(var_job=2000), [job("NP-1", 1, 10)])["NP-1"]["economy_lines"]
+    assert "– pokud obsahují stroje: 90 000 Kč." in lines and "– pokud neobsahují stroje: 70 000 Kč." in lines
+    assert "Podle nastavení tedy 70 000 až 90 000 Kč." in lines
+    assert not any("Neznámé náklady" in x for x in lines)
+
+
+def test_audit_user_job_name_in_new_texts_is_escaped():
+    req = pv.job_request("NP-1", "[Klik](https://example.com)<b>x</b>", [(BAGR, 1)], 1, 3, None, None, None, 1000,
+                         None)
+    cs = cards(model(var_rental=0, includes="ano"), [req, rent("NP-2", 2, 4, 6500)])
+    assert "[Klik](https://example.com)" in cs["NP-1"]["econ_why"]                  # text je v datech
+    out = pv.card_html(cs["NP-1"], {BAGR: "Mini bagr"})
+    assert "<b>x" not in out and "](https://example.com)" not in out and "&lt;b&gt;" in out
+
+
+def test_audit_green_badge_always_means_certain_positive_contribution():
+    rnd = random.Random(7)
+    green = 0
+    for _ in range(80):
+        reqs = []
+        for i in range(rnd.randint(2, 5)):
+            s = rnd.randint(1, 8)
+            if rnd.random() < 0.35:
+                reqs.append(job(f"NP-{i + 1}", s, rnd.randint(1, 5), rnd.choice([5000, 40000, 90000]),
+                                rnd.choice([0, 20000, 60000])))
+            else:
+                reqs.append(rent(f"NP-{i + 1}", s, s + rnd.randint(0, 4), rnd.choice([None, 0, 3000, 9000])))
+        m = model(units=rnd.randint(1, 2), var_rental=rnd.choice([None, 0, 1500, 8000]),
+                  var_job=rnd.choice([None, 0, 2000]), includes=rnd.choice([None, "ano", "ne"]))
+        for c in cards(m, reqs).values():
+            if c["econ_badge"] == pv.EC_REC:
+                green += 1
+                assert c["op_badge"] == pv.OP_FITS
+                assert c["economy"]["lo"] is not None and c["economy"]["lo"] > 0      # jistě kladný přínos
+            if c["op_badge"] != pv.OP_FITS:
+                assert c["econ_badge"] is None
+    assert green > 10
+
+
+def test_audit_long_text_wraps_inside_card():
+    for cls in (".dp-sec", ".dp-econ"):
+        assert re.search(re.escape(cls) + r"\{[^}]*overflow-wrap:anywhere", pv.CSS), cls
+    assert ".dp-title,.dp-sub{overflow-wrap:anywhere}" in pv.CSS
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
