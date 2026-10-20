@@ -246,7 +246,10 @@ def _with_new_job(model: dm.DataModel, req: Request) -> dm.DataModel:
                direct_cost="" if req.direct_cost is None else req.direct_cost,
                duration_days=req.end - req.start + 1, earliest_start_day=req.start,
                deadline_day=req.deadline if req.deadline is not None else req.end,
-               penalty_per_day="" if req.penalty_per_day is None else req.penalty_per_day)
+               # sazba penále se násobí dny po termínu: u zakázky dokončené v termínu je penále 0
+               # bez ohledu na sazbu – nevyplněná sazba je chybějící údaj jen u zakázky po termínu
+               penalty_per_day=(req.penalty_per_day if req.penalty_per_day is not None
+                                else ("" if req.deadline is not None and req.end > req.deadline else "0")))
     jobs = pd.concat([jobs, pd.DataFrame([row])], ignore_index=True).astype(str)
     reqs = pd.concat([model.job_requirements, pd.DataFrame(
         [dict(job_id=req.ref, resource_kind="machine", resource_id=t, quantity=str(q), position=str(i + 1))

@@ -33,6 +33,18 @@ REF_PREFIX = "NP-"
 # Vstupy z formuláře
 # ---------------------------------------------------------------------------
 
+def md_escape(text) -> str:
+    """Text (i od uživatele) bezpečně do st.markdown: bez HTML a bez markdownových odkazů či formátu."""
+    out = html.escape(str(text), quote=False).replace("\\", "\\\\")
+    for ch in "`*_{}[]()#+-.!|~":
+        out = out.replace(ch, "\\" + ch)
+    return out
+
+
+def _days(n: int) -> str:
+    return f"{n} " + ("den" if n == 1 else "dny" if 2 <= n <= 4 else "dní")
+
+
 def _num(v) -> Optional[float]:
     s = "" if v is None else str(v).strip()
     if s in ("", "nan", "None"):
@@ -107,6 +119,8 @@ def form_problems(req: dict) -> list:
     if req["kind"] == "job" and req["earliest"] is not None and req["deadline"] is not None \
             and req["deadline"] < req["earliest"]:
         out.append("Termín dokončení je před nejdřívějším začátkem.")
+    if req["kind"] == "job" and req["earliest"] is not None and req["start"] < req["earliest"]:
+        out.append("Začátek je před nejdřívějším začátkem okna zakázky.")
     return out
 
 
@@ -167,9 +181,24 @@ def _operational_text(e: dict) -> str:
     return "Provozně: nelze určit – " + "; ".join(e["reasons"] or [e["decision"]]) + "."
 
 
-def _economic_text(e: dict) -> str:
+def _late_text(model: dm.DataModel, r) -> str:
+    """U zakázky po termínu: kolik dní a jaké penále je v příspěvku (nebo že sazba chybí)."""
+    if r.kind != "job" or r.deadline is None or r.end <= r.deadline:
+        return ""
+    late = r.end - r.deadline
+    rate = r.penalty_per_day
+    if r.in_data:
+        row = model.jobs[model.jobs["job_id"] == r.ref]
+        rate = _num(row.iloc[0]["penalty_per_day"]) if not row.empty else None
+    if rate is None:
+        return f" Zakázka končí {_days(late)} po termínu – sazba penále chybí."
+    czk = f"{late * rate:,.0f}".replace(",", " ")
+    return f" Zakázka končí {_days(late)} po termínu – penále {czk} Kč je v příspěvku započtené."
+
+
+def _economic_text(e: dict, late: str = "") -> str:
     if e.get("economic_note"):
-        return "Ekonomicky (jen informace, odděleně od provozu): " + e["economic_note"] + "."
+        return "Ekonomicky (jen informace, odděleně od provozu): " + e["economic_note"] + "." + late
     if e["operational"] == pl.OK_ALONE:
         return "Ekonomicky: nehodnoceno."
     return "Ekonomicky: nehodnotí se – požadavek není provozně proveditelný."
@@ -190,9 +219,11 @@ def evaluate(model: dm.DataModel, job_starts: dict, requests: list) -> dict:
         cards.append(dict(
             ref=ref, title=e["label"], kind=r.kind, own=ref in mine, name=r.name,
             period=(r.start, r.end), needs=[tuple(x) for x in r.needs], badge=label, why=why,
-            operational=_operational_text(e), economic=_economic_text(e),
-            blocking=[dict(Stroj=t, Den=int(d), **{"Volné kusy": int(free), "Potřeba": int(need),
-                                                   "Co stroj drží": "; ".join(c) or "kus není k dispozici"})
+            operational=_operational_text(e), economic=_economic_text(e, _late_text(model, r)),
+            # záporné volno se nezobrazuje: den je už přetížený potvrzenými závazky
+            blocking=[dict(Stroj=t, Den=int(d), **{"Volné kusy": max(0, int(free)), "Potřeba": int(need),
+                                                   "Co stroj drží": ("; ".join(c) or "kus není k dispozici")
+                                                   + (f" – už přetíženo o {-int(free)} ks" if free < 0 else "")})
                       for t, d, free, need, c in e["problems"]],
             alternatives=[a["text"] for a in e["alternatives"]],
             note=e["note"]))
@@ -238,16 +269,21 @@ CSS = """
 """
 
 
+def _h(text) -> str:
+    """Text do HTML karty: escapování HTML a závorek (ani Markdown z něj neudělá odkaz)."""
+    return html.escape(str(text)).replace("[", "&#91;").replace("]", "&#93;").replace("(", "&#40;").replace(")", "&#41;")
+
+
 def card_html(card: dict, names: dict) -> str:
     machines = ", ".join(f"{names.get(t, t)} × {q}" for t, q in card["needs"])
     origin = "váš požadavek" if card["own"] else "předběžná rezervace z dat – neruší se"
-    lines = "".join(f'<div class="dp-line">{html.escape(x)}</div>' for x in (card["operational"], card["economic"]))
+    lines = "".join(f'<div class="dp-line">{_h(x)}</div>' for x in (card["operational"], card["economic"]))
     return (f'<div class="dp-card"><div class="dp-head"><span class="dp-badge {BADGE_CLASS[card["badge"]]}">'
-            f'{html.escape(card["badge"])}</span><span class="dp-title">{html.escape(card["title"])}</span>'
-            f'<span class="dp-tag">{html.escape(origin)}</span></div>'
-            f'<div class="dp-sub">{html.escape(machines)} · dny {card["period"][0]}–{card["period"][1]}'
-            + (f' · {html.escape(card["name"])}' if card["name"] else "") + "</div>"
-            f'<div class="dp-why"><b>Proč:</b> {html.escape(card["why"])}</div>{lines}</div>')
+            f'{_h(card["badge"])}</span><span class="dp-title">{_h(card["title"])}</span>'
+            f'<span class="dp-tag">{_h(origin)}</span></div>'
+            f'<div class="dp-sub">{_h(machines)} · dny {card["period"][0]}–{card["period"][1]}'
+            + (f' · {_h(card["name"])}' if card["name"] else "") + "</div>"
+            f'<div class="dp-why"><b>Proč:</b> {_h(card["why"])}</div>{lines}</div>')
 
 
 def blocking_table(card: dict, names: dict) -> pd.DataFrame:

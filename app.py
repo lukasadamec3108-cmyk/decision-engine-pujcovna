@@ -2700,7 +2700,7 @@ with tab8:
                     "Cena za den (Kč, nepovinné)", min_value=0.0, value=None, step=500.0, key="dp_r_price",
                     help="Nevyplněno = ceník typu stroje z ukázkových dat.")
         else:
-            dp_j_name = st.text_input("Název zakázky (nepovinné)", key="dp_j_name")
+            dp_j_name = st.text_input("Název zakázky (nepovinné)", key="dp_j_name", max_chars=80)
             st.caption("Stroje, které zakázka potřebuje současně po celou dobu:")
             dp_rows = []
             for i in range(DP_JOB_ROWS):
@@ -2766,7 +2766,8 @@ with tab8:
             what = "pronájem" if r["kind"] == "rental" else "zakázka"
             machines = ", ".join(f"{dp_names.get(t, t)} × {q}" for t, q in r["needs"])
             with c1:
-                st.markdown(f"**{r['ref']}** – {what}: {html.escape(machines)}, dny {r['start']}–{r['end']}")
+                st.markdown(f"**{pv.md_escape(r['ref'])}** – {what}: {pv.md_escape(machines)}, "
+                            f"dny {r['start']}–{r['end']}")
             with c2:
                 st.button("Odebrat", key=f"dp_rm_{r['ref']}", on_click=dp_remove, args=(r["ref"],), width="stretch")
         st.button("Vymazat vše", key="dp_clear", on_click=dp_clear)
@@ -2779,7 +2780,7 @@ with tab8:
                 with st.expander(f"Co blokuje {card['ref']} ({len(card['blocking'])} dní × stroj)"):
                     st.dataframe(pv.blocking_table(card, dp_names), width="stretch", hide_index=True)
             for alt in card["alternatives"]:
-                st.markdown(f"- Alternativa (jen návrh, nic se nemění): {html.escape(alt)}")
+                st.markdown(f"- Alternativa (jen návrh, nic se nemění): {pv.md_escape(alt)}")
             if card["note"]:
                 ui.hint(html.escape(card["note"].capitalize()))
         for g in res["groups"]:
@@ -2818,16 +2819,16 @@ with tab8:
         if len(res["manual"]) > len(related):
             with st.expander(f"Všechny konflikty potvrzených závazků ({len(res['manual'])})"):
                 for m in res["manual"]:
-                    st.markdown(f"- {html.escape(m['text'])}")
+                    st.markdown(f"- {pv.md_escape(m['text'])}")
 
         with st.expander("Chybějící údaje" + (f" ({len(res['missing'])})" if res["missing"] else "")):
             if res["missing"]:
                 for x in res["missing"]:
-                    st.markdown(f"- {html.escape(x)}")
+                    st.markdown(f"- {pv.md_escape(x)}")          # může obsahovat text od uživatele
             else:
                 st.markdown("Pro vyhodnocení zadaných požadavků žádné údaje nechybí.")
             for n in res["notes"]:
-                st.markdown(f"- {html.escape(n)}")
+                st.markdown(f"- {pv.md_escape(n)}")
 
     with st.expander("Jak plánovač rozhoduje"):
         ui.explain(

@@ -148,6 +148,48 @@ def test_card_html_escapes_text():
 
 
 # ---------------------------------------------------------------------------
+# Regresní testy z auditu PR #27
+# ---------------------------------------------------------------------------
+
+def test_audit_blocking_never_shows_negative_free_units():
+    # válec 15–18 je už přetížený potvrzenými závazky (FIKT-P05 × J006)
+    res = pv.evaluate(DEMO, STARTS, [pv.rental_request("NP-1", "SILNICNI_VALEC", 1, 16, 16)])
+    b = card(res, "NP-1")["blocking"][0]
+    assert b["Volné kusy"] == 0 and "přetíženo o 1 ks" in b["Co stroj drží"]
+
+
+def test_audit_job_cannot_start_before_its_earliest_start():
+    j = pv.job_request("NP-1", "x", [(BAGR, 1)], 2, 2, earliest=10, deadline=20)
+    assert "Začátek je před nejdřívějším začátkem okna zakázky." in pv.form_problems(j)
+    assert pv.form_problems(pv.job_request("NP-1", "x", [(BAGR, 1)], 10, 2, earliest=10, deadline=20)) == []
+
+
+def test_audit_user_text_is_neutralised_for_markdown():
+    assert pv.md_escape("[Ověřte účet](https://example.com)") == "\\[Ověřte účet\\]\\(https://example\\.com\\)"
+    assert pv.md_escape("**tučně** _x_ `k` <b>") == "\\*\\*tučně\\*\\* \\_x\\_ \\`k\\` &lt;b&gt;"
+
+
+def test_audit_late_job_card_explains_penalty():
+    j = pv.job_request("NP-1", "Pozdní", [(BAGR, 1)], 5, 4, earliest=1, deadline=6, revenue=50000,
+                       direct_cost=10000, penalty_per_day=2000)
+    c = pv.evaluate(model(includes="ano", var_job=0), {}, [j])["cards"][0]
+    assert "příspěvek 36 000 Kč" in c["economic"] and "2 dny po termínu" in c["economic"] and "4 000 Kč" in c["economic"]
+    j = pv.job_request("NP-2", "Pozdní bez penále", [(BAGR, 1)], 5, 4, deadline=6, revenue=50000, direct_cost=10000)
+    c = pv.evaluate(model(includes="ano", var_job=0), {}, [j])["cards"][0]
+    assert "penále/den" in c["economic"] and "nejvýše" in c["economic"]       # chybí a je potřeba
+
+
+def test_audit_missing_penalty_irrelevant_for_job_on_time():
+    # zakázka dokončená v termínu: penále se neuplatní → nevyplněná sazba není chybějící údaj
+    j = pv.job_request("NP-1", "Včas", [(BAGR, 1)], 5, 2, deadline=10, revenue=20000, direct_cost=5000)
+    res = pv.evaluate(model(includes="ano", var_job=0), {}, [j])
+    assert card(res, "NP-1")["economic"].endswith("příspěvek 15 000 Kč.")
+    assert not any("penále" in m for m in res["missing"])
+    j = pv.job_request("NP-2", "Bez termínu", [(BAGR, 1)], 5, 2, revenue=20000, direct_cost=5000)
+    assert "příspěvek 15 000 Kč" in card(pv.evaluate(model(includes="ano", var_job=0), {}, [j]), "NP-2")["economic"]
+
+
+# ---------------------------------------------------------------------------
 # Aplikace (AppTest)
 # ---------------------------------------------------------------------------
 
@@ -211,6 +253,13 @@ def test_tab_in_app_full_flow_without_changing_data():
     at.selectbox(key="dp_j_type0").set_value("—"); at.selectbox(key="dp_j_type1").set_value("—")
     click(at, "Vyhodnotit samostatně")
     assert any("Vyberte aspoň jeden stroj" in e.value for e in at.error)
+    # uživatelský název se v „Chybějících údajích“ nezobrazí jako odkaz
+    at.text_input(key="dp_j_name").set_value("[Ověřte účet](https://example.com)")
+    at.number_input(key="dp_j_revenue").set_value(None)
+    at.selectbox(key="dp_j_type0").set_value("MINI_BAGR")
+    click(at, "Vyhodnotit samostatně")
+    shown = " ".join(m.value for m in at.tabs[7].markdown)
+    assert "](https://example.com)" not in shown and "\\[Ověřte účet\\]" in shown
     assert files_hash() == before                                            # CSV beze změny
 
 
