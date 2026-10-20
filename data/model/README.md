@@ -184,6 +184,20 @@ nebo se ze soupeřících požadavků vejde jen část a ekonomika chybí. Exist
 Pro ekonomická doporučení zatím chybí: variabilní náklady za den pronájmu a zakázky, nastavení
 `direct_cost_includes_machines`, případně ceny a pružnost termínů nových požadavků.
 
+## Příspěvek jako vzorec s neznámými náklady (`econ_formula.py`, E2.5c krok 2)
+
+Výpočetní vrstva pro porovnání variant, zatím bez zobrazení v aplikaci. Příspěvek varianty je
+vzorec `známá částka − Σ (jednotky využití × neznámá sazba)`; chybějící údaj zůstává proměnnou,
+nikdy se nenahradí nulou. Koeficienty se zjišťují přímo z `economics.py` (žádný druhý výpočet).
+
+- skutečná nula („0“) není neznámá; prázdná buňka je neznámá; neplatný údaj → vzorec nelze sestavit,
+- chybí-li `direct_cost_includes_machines`, počítají se scénáře „ano“ a „ne“ a varianty se porovnávají
+  vždy ve stejném scénáři; náklad stroje na zakázce se odečte nejvýše jednou,
+- v rozdílu dvou variant se společné neznámé vyruší → **jistý** výsledek; jinak **podmíněný**
+  (podmínka, u jedné sazby hranice zlomu), nebo **nelze rozhodnout**, když rozhoduje chybějící základní
+  údaj požadavku (tržba, přímé náklady, cena, sazba penále) nebo neplatný údaj,
+- varianta „nepřijmout nic“ má vzorec přesně 0 Kč.
+
 ## Obnovení dat v běžící aplikaci
 
 Aplikace drží načtená data v mezipaměti. Klíčem je otisk obsahu všech CSV souborů v této složce
