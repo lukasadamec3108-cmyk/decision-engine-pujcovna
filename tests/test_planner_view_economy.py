@@ -200,7 +200,8 @@ def test_result_is_plain_and_pickle_safe_for_all_verdicts():
 
 def test_existing_keys_unchanged():
     res = pv.evaluate(model(), {}, [rent("NP-1", 1, 5, 6500), rent("NP-2", 1, 3, 9000)])
-    assert set(res) == {"cards", "groups", "manual", "missing", "notes", "explanation", "tentative"}
+    assert set(res) == {"cards", "groups", "manual", "missing", "notes", "explanation", "tentative",
+                        "panels", "missing_relevant"}                         # 4C: jen přidané klíče
     g = res["groups"][0]
     assert set(g) == {"requests", "verdict", "text", "options", "choice", "economy"}
     c = card(res, "NP-1")

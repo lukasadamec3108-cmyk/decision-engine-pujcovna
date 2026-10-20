@@ -45,17 +45,24 @@ def test_recommended_and_others():
                [job("NP-1", 1, 10), rent("NP-2", 1, 5, 6500), rent("NP-3", 6, 10, 7000)])
     assert badges(cs) == {"NP-1": (pv.OP_FITS, pv.EC_REC), "NP-2": (pv.OP_FITS, pv.EC_NO),
                           "NP-3": (pv.OP_FITS, pv.EC_NO)}
-    assert "prokazatelně ekonomicky nejlepší" in cs["NP-1"]["econ_why"]
-    assert "„NP-1“" in cs["NP-2"]["econ_why"] and "nezamítá" in cs["NP-2"]["econ_why"]
-    assert cs["NP-1"]["economy_lines"] == ["Příspěvek: 70 000 Kč."]
+    assert "doporučené varianty „NP-1“" in cs["NP-1"]["econ_why"] and "Ekonomické porovnání" in cs["NP-1"]["econ_why"]
+    assert "„NP-1“" in cs["NP-2"]["econ_why"]
+    # E2.5c 4C: upozornění „nic se nezamítá“ a zdůvodnění jsou jednou v panelu
+    panel = pv.evaluate(model(var_rental=1500, var_job=2000, includes="ne"), {},
+                        [job("NP-1", 1, 10), rent("NP-2", 1, 5, 6500), rent("NP-3", 6, 10, 7000)])["panels"][0]
+    assert "nezamítá" in panel["note"] and any("prokazatelně" in x or "lepší" in x for x in panel["why"])
+    assert cs["NP-1"]["economy_lines"][0] == "Příspěvek: 70 000 Kč."
+    assert "penále (zakázka končí v termínu)" in cs["NP-1"]["economy_lines"][1]     # neuplatňuje se
 
 
 def test_none_pays_explains_it_is_not_a_rejection():
     cs = cards(model(var_rental=7000), [rent("NP-1", 1, 3, 6000), rent("NP-2", 2, 4, 6500)])
     assert {b[1] for b in badges(cs).values()} == {pv.EC_NO}
     for c in cs.values():
-        assert "nepřijmout žádný" in c["econ_why"]
-        assert "nezamítá" in c["econ_why"] and "žádná rezervace se neruší" in c["econ_why"]
+        assert "prokazatelně ztrátová" in c["econ_why"] and "Ekonomické porovnání" in c["econ_why"]
+    panel = pv.evaluate(model(var_rental=7000), {}, [rent("NP-1", 1, 3, 6000), rent("NP-2", 2, 4, 6500)])["panels"][0]
+    assert panel["headline"].startswith("Nepřijmout žádný")
+    assert "nezamítá" in panel["note"] and "žádná rezervace se neruší" in panel["note"]
     assert cs["NP-1"]["economy_lines"] == ["Příspěvek: −3 000 Kč – ztráta."]
 
 
@@ -71,7 +78,8 @@ def test_conditional_with_break_even_in_kc_per_day():
     assert badges(cs) == {"NP-1": (pv.OP_FITS, pv.EC_COND), "NP-2": (pv.OP_FITS, pv.EC_COND)}
     assert "do 2 750 Kč/den" in cs["NP-1"]["econ_why"]
     assert "2 750–9 000 Kč/den" in cs["NP-2"]["econ_why"]
-    assert "nepočítá jako 0 Kč" in cs["NP-1"]["econ_why"]
+    panel = pv.evaluate(model(), {}, [rent("NP-1", 1, 5, 6500), rent("NP-2", 1, 3, 9000)])["panels"][0]
+    assert any("nepočítá jako 0 Kč" in x for x in panel["why"]) and "nepočítá jako 0 Kč" in panel["missing_note"]
 
 
 def test_conditional_never_winner_is_not_shown_as_conditional():
@@ -86,7 +94,7 @@ def test_conditional_with_several_unknowns_does_not_invent_one_threshold():
     cs = cards(model(), [job("NP-1", 1, 10), rent("NP-2", 1, 5, 6500), rent("NP-3", 6, 10, 7000)])
     assert cs["NP-1"]["econ_badge"] == pv.EC_COND
     why = cs["NP-1"]["econ_why"]
-    assert "rozhoduje víc neznámých najednou" in why and "hranice" not in why.split("neobsahují stroje")[1][:40]
+    assert "rozhoduje víc nezadaných nákladů najednou" in why and "hranice" not in why.split("neobsahují stroje")[1][:40]
 
 
 def test_undecided():
@@ -147,7 +155,8 @@ def test_exact_amount_never_says_at_most():
 
 def test_both_scenarios_of_direct_cost_includes_machines():
     lines = cards(model(), [job("NP-1", 1, 10)])["NP-1"]["economy_lines"]
-    assert lines[0].startswith("Příspěvek závisí na tom, zda přímé náklady zakázek obsahují vlastní stroje")
+    assert lines[0].startswith("Příspěvek podle nezadaného nastavení, zda přímé náklady zakázek obsahují vlastní stroje")
+    assert "(nejvýše 90 000 Kč)" in lines[0]
     assert "– pokud obsahují stroje: 90 000 Kč." in lines
     assert ("– pokud neobsahují stroje: 90 000 Kč − 10 strojodnů × Mini bagr: variabilní náklad na zakázce "
             "(Kč/den, nezadáno).") in lines
@@ -160,10 +169,10 @@ def test_both_scenarios_of_direct_cost_includes_machines():
 
 def test_late_job_penalty_explained_on_contribution_line():
     cs = cards(model(var_job=0, includes="ne"), [job("NP-1", 1, 6, earliest=1, deadline=4, penalty=1000)])
-    assert "2 dny po termínu – penále 2 000 Kč" in cs["NP-1"]["economy_lines"][-1]
+    assert "2 dny po termínu – penále 2 000 Kč" in cs["NP-1"]["economy_lines"][0]
     cs = cards(model(var_job=0, includes="ne"), [job("NP-1", 1, 6, earliest=1, deadline=4)])
     assert "2 dny po termínu × NP-1 (NP-1): penále (Kč/den, nezadáno)" in cs["NP-1"]["economy_lines"][0]
-    assert "sazba penále chybí" in cs["NP-1"]["economy_lines"][-1]
+    assert "sazba penále chybí" in cs["NP-1"]["economy_lines"][0]
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +275,7 @@ def test_audit_setting_only_unknown_does_not_claim_unknown_costs():
     # sazba stroje na zakázce zadaná, chybí jen nastavení → dvě přesné částky, žádný neznámý náklad
     lines = cards(model(var_job=2000), [job("NP-1", 1, 10)])["NP-1"]["economy_lines"]
     assert "– pokud obsahují stroje: 90 000 Kč." in lines and "– pokud neobsahují stroje: 70 000 Kč." in lines
-    assert "Podle nastavení tedy 70 000 až 90 000 Kč." in lines
+    assert "(podle nastavení 70 000 až 90 000 Kč)" in lines[0]
     assert not any("Neznámé náklady" in x for x in lines)
 
 

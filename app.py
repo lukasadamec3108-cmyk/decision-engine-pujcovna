@@ -2776,6 +2776,8 @@ with tab8:
 
         res = planner_result(data_version, code_version, tuple(sorted(dp_starts.items())), pv.freeze(dp_requests))
         st.markdown("#### Výsledek")
+        for panel in res["panels"]:                     # E2.5c 4C: ekonomické porovnání nad kartami
+            st.markdown(pv.panel_html(panel), unsafe_allow_html=True)
         for card in res["cards"]:
             st.markdown(pv.card_html(card, dp_names), unsafe_allow_html=True)
             if card["blocking"]:
@@ -2785,15 +2787,6 @@ with tab8:
                 st.markdown(f"- Alternativa (jen návrh, nic se nemění): {pv.md_escape(alt)}")
             if card["note"]:
                 ui.hint(html.escape(card["note"].capitalize()))
-        for g in res["groups"]:
-            if g["verdict"] == pl.ALL_FIT:
-                continue
-            ui.insight(
-                f"<b>Soupeřící požadavky {html.escape(', '.join(g['requests']))}</b> – současně se nevejdou. "
-                "Varianty, které se vejdou do kapacity: "
-                + html.escape(" | ".join(" + ".join(o) for o in g["options"]))
-                + f". {html.escape(g['text'])}"
-            )
         if res["tentative"]:
             ui.hint(
                 "Předběžné rezervace v datech (rovnocenné novým požadavkům, nikdy se automaticky neruší): "
@@ -2823,9 +2816,9 @@ with tab8:
                 for m in res["manual"]:
                     st.markdown(f"- {pv.md_escape(m['text'])}")
 
-        with st.expander("Chybějící údaje" + (f" ({len(res['missing'])})" if res["missing"] else "")):
-            if res["missing"]:
-                for x in res["missing"]:
+        with st.expander("Chybějící údaje" + (f" ({len(res['missing_relevant'])})" if res["missing_relevant"] else "")):
+            if res["missing_relevant"]:
+                for x in res["missing_relevant"]:
                     st.markdown(f"- {pv.md_escape(x)}")          # může obsahovat text od uživatele
             else:
                 st.markdown("Pro vyhodnocení zadaných požadavků žádné údaje nechybí.")
