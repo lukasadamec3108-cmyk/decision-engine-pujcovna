@@ -170,7 +170,13 @@ zlomu v Kč/den jako seznam – úseky „pod / mezi / nad“, přesně v hranic
 zjednodušené jen tam, kde je to přesné) → „Co doplnit“ (jen údaje, na kterých rozhodnutí závisí) →
 upozornění, že se nic nezamítá ani neruší. Karty mají jen krátkou větu s odkazem na panel. Nezadaný
 údaj bez vlivu na výsledek je označený „neuplatňuje se“ (např. penále u zakázky v termínu).
-Grafický pruh hranic zlomu přijde v kroku 4D. Existující zakázka slouží jen jako
+**Graf hranic zlomu** (E2.5c krok 4D-A, `planner_view.profile_chart` / `chart_html`): v „Kdy se co
+vyplatí“ vodorovný pruh – úseky s nejvýhodnější variantou v pořadí podle výše nezadaného nákladu
+(„pod / mezi / nad“, Kč/den), mezi nimi očíslované hranice; přesně v hranici je vypsaná rovnost variant,
+„nepřijmout nic“ má šrafovaný úsek a popisek „(0 Kč)“, varianty, které nejsou nejvýhodnější nikdy, jsou
+uvedené pod grafem. Úseky nejsou v měřítku (rozhodují uvedené hodnoty), barva nikdy nenese informaci
+sama. Graf vzniká jen z již vypočtených hranic a jen při jedné neznámé; při více neznámých se nezobrazí
+(s vysvětlením). Na úzkém displeji se pruh skládá svisle. Slovní pásma zůstávají pod grafem. Existující zakázka slouží jen jako
 šablona nového požadavku. Nové požadavky nesmějí nést označení zakázek ani rezervací z dat.
 
 - **Potvrzené závazky** (potvrzené pronájmy, servis, potvrzené zakázky v aktuálním plánu záložky 6)

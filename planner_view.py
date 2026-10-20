@@ -786,6 +786,72 @@ def _profile_lines(prof: dict, contenders: list) -> list:
     return out
 
 
+# ---------------------------------------------------------------------------
+# Graf hranic zlomu (E2.5c krok 4D-A) – jen z již vypočtených hranic, žádný nový výpočet
+# ---------------------------------------------------------------------------
+#
+# Vodorovný pruh: úseky v pořadí podle výše nezadaného nákladu, mezi nimi očíslované hranice.
+# Úseky mají stejnou šířku (nejsou v měřítku) – poslední úsek je otevřený a hranice mohou ležet
+# blízko sebe; rozhodují uvedené hodnoty. Graf se tvoří jen při JEDNÉ neznámé a aspoň jedné hranici.
+
+NOTHING_LABEL = "nepřijmout nic"
+CHART_SCALE_NOTE = "Úseky nejsou v měřítku – ukazují pořadí; rozhodují uvedené hodnoty v Kč/den."
+CHART_MULTI_NOTE = ("Graf se nezobrazuje: rozhoduje víc nezadaných nákladů najednou a jednoduchý pruh by výsledek "
+                    "zkreslil – platí podmínky uvedené níže.")
+CHART_COLORS = 5                                  # počet barev variant (cyklicky); „nic“ má vlastní šrafování
+MAX_CHART_NEVER = 3                               # kolik „nikdy nejvýhodnějších“ variant se vypíše, zbytek se sbalí
+MAX_CHART_TIE = 4                                 # nad tolik shodných variant v hranici se jmenují jen sousední
+MAX_CHART_ROW = 3                                 # nad tolik úseků se pruh na střední šířce (do 900 px) skládá svisle
+
+
+def _variants(n: int) -> str:
+    return f"další {n} varianta" if n == 1 else f"další {n} varianty" if 2 <= n <= 4 else f"dalších {n} variant"
+
+
+def profile_chart(prof: dict, contenders: list) -> Optional[dict]:
+    """Data grafu z profilu hranic zlomu; None, když hranici nelze vypočítat (nic se nevymýšlí)."""
+    if prof["unknown"] is None or len(prof["segments"]) < 2 or not prof.get("boundaries"):
+        return None
+    colors = {}
+    for seg in prof["segments"]:
+        for w in seg["winners"]:
+            if w != NOTHING_LABEL and w not in colors:
+                colors[w] = len(colors) % CHART_COLORS
+    segments = []
+    for seg in prof["segments"]:
+        w = list(seg["winners"])
+        only_nothing = w == [NOTHING_LABEL]
+        segments.append(dict(range=_span(seg), winners=w, tie=len(w) > 1, nothing=only_nothing,
+                             color=None if only_nothing else colors[next(x for x in w if x != NOTHING_LABEL)],
+                             label=_and(w) + (" (shodně)" if len(w) > 1 else "")
+                             + (" (0 Kč)" if only_nothing else "")))
+    boundaries = []
+    for i, b in enumerate(prof["boundaries"]):
+        # v grafu jmenovitě varianty sousedních úseků; další shodné jen počtem (úplný výčet se dá rozbalit)
+        near = set(prof["segments"][i]["winners"]) | set(prof["segments"][i + 1]["winners"])
+        many = len(b["winners"]) > MAX_CHART_TIE
+        main = [w for w in b["winners"] if w in near or not many]
+        others = [w for w in b["winners"] if w not in main]
+        boundaries.append(dict(n=i + 1, value=_rate(b["at"]), winners=list(b["winners"]), others=others,
+                               text=f"{_and(main)} vycházejí stejně (rovnocenné)"
+                               + (f" – stejně vychází i {_variants(len(others))}" if others else "")))
+    winners = {w for seg in prof["segments"] for w in seg["winners"]}
+    ties = _ties_at_boundaries(prof)
+    never = []
+    for label in [_vlabel(c) for c in contenders if _vlabel(c) not in winners]:
+        at = [x for x, w in ties.items() if label in w]
+        never.append(f"{label} není nejvýhodnější při žádné výši nákladu"
+                     + (f" (stejně jako nejlepší jen přesně při {' a '.join(_rate(x) for x in at)})" if at else "")
+                     + ".")
+    first = set(prof["segments"][0]["winners"])
+    zero = [w for w in prof["at_zero"] if w not in first]
+    summary = "; ".join(f"{s['range']}: {s['label']}" for s in segments)
+    return dict(unknown=_unknown_name(prof["unknown"]), segments=segments, boundaries=boundaries,
+                never=never[:MAX_CHART_NEVER], never_more=never[MAX_CHART_NEVER:],
+                zero_note=(f"Při nulovém nákladu vychází stejně i {_and(zero)}." if zero else ""),
+                summary=f"Nejvýhodnější varianta podle {_unknown_name(prof['unknown'])}: {summary}.")
+
+
 def group_panel(ge: dict) -> Optional[dict]:
     """Obsah panelu „Ekonomické porovnání“ pro skupinu soupeřících požadavků (jen obyčejné typy)."""
     kind = ge["kind"]
@@ -846,12 +912,13 @@ def group_panel(ge: dict) -> Optional[dict]:
                 prof = profiles[sc]
                 lead = (f"Rozhoduje {_unknown_name(prof['unknown'])}:" if prof["unknown"] else "")
                 conditions.append(dict(title=title, lead=lead, lines=_profile_lines(prof, contenders),
-                                       more=[], break_even=bool(prof["unknown"]) and len(prof["segments"]) > 1))
+                                       more=[], break_even=bool(prof["unknown"]) and len(prof["segments"]) > 1,
+                                       chart=profile_chart(prof, contenders), chart_note=""))
             else:
                 sent = [condition_sentence(c) for c in ge["conditions"] if c["scenario"] == sc]
                 conditions.append(dict(title=title, lead="Rozhoduje víc nezadaných nákladů najednou:",
                                        lines=sent[:MAX_PANEL_CONDITIONS], more=sent[MAX_PANEL_CONDITIONS:],
-                                       break_even=False))
+                                       break_even=False, chart=None, chart_note=CHART_MULTI_NOTE))
     else:
         blocking = ge["blocking"]
         headline = ("Nelze rozhodnout – chybí nebo je neplatné: " + ", ".join(blocking) + "." if blocking
@@ -1018,6 +1085,37 @@ CSS = """
 .dp-var.rec .tag{color:#fff;background:#1E7B4A;border-color:#1E7B4A}
 .dp-note{font-size:.85rem;color:#374151;margin-top:.5rem}
 .dp-panel details{margin:.2rem 0}.dp-panel summary{cursor:pointer;font-size:.85rem;color:#374151}
+.dp-chart{margin:.35rem 0 .45rem 0;padding:.55rem .6rem;background:#fff;border:1px solid #E5E7EB;border-radius:8px}
+.dp-chart-t{font-size:.85rem;font-weight:700;color:#1F2933;margin-bottom:.4rem}
+.dp-bar{display:flex;align-items:stretch;gap:0}
+.dp-seg{flex:1 1 0;min-width:0;padding:.45rem .5rem;border:1px solid #94A3B8;border-radius:6px;
+  overflow-wrap:break-word;word-break:normal;hyphens:manual}
+.dp-seg-name{font-weight:700;font-size:.88rem;color:#111827;line-height:1.25}
+.dp-seg-range{font-size:.8rem;color:#374151;margin-top:.15rem}
+.dp-seg.c0{background:#DBEAFE;border-color:#3B82F6}.dp-seg.c1{background:#EDE9FE;border-color:#8B5CF6}
+.dp-seg.c2{background:#FEF3C7;border-color:#D97706}.dp-seg.c3{background:#E0F2FE;border-color:#0284C7}
+.dp-seg.c4{background:#FCE7F3;border-color:#DB2777}
+.dp-seg.tie{border-style:dashed}
+.dp-seg.nothing{background:repeating-linear-gradient(135deg,#F3F4F6 0 6px,#E5E7EB 6px 12px);border-color:#6B7280;
+  border-style:dashed}
+.dp-bnd{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:0 .3rem;min-width:3.6rem}
+.dp-bnd-n{display:inline-flex;align-items:center;justify-content:center;width:1.3rem;height:1.3rem;border-radius:50%;
+  background:#1F2933;color:#fff;font-size:.72rem;font-weight:700}
+.dp-bnd-v{font-size:.72rem;font-weight:700;color:#1F2933;white-space:nowrap;margin-top:.15rem}
+.dp-bnd-list{margin:.45rem 0 .1rem 1.1rem;padding:0}.dp-bnd-list li{font-size:.85rem}
+.dp-chart-n{font-size:.8rem;color:#4B5563;margin-top:.2rem}
+@media (max-width: 640px){
+  .dp-bar{flex-direction:column}
+  .dp-bnd{flex-direction:row;justify-content:flex-start;gap:.4rem;padding:.25rem 0 .25rem .6rem;min-width:0}
+  .dp-bnd-v{margin-top:0}
+}
+@media (max-width: 900px){
+  .dp-chart.many .dp-bar{flex-direction:column}
+  .dp-chart.many .dp-bnd{flex-direction:row;justify-content:flex-start;gap:.4rem;padding:.25rem 0 .25rem .6rem;
+    min-width:0}
+  .dp-chart.many .dp-bnd-v{margin-top:0}
+}
 .dp-title,.dp-sub{overflow-wrap:anywhere}
 .dp-econ{color:#374151;font-size:.9rem;margin:.1rem 0 .1rem .1rem;overflow-wrap:anywhere}
 .dp-why{color:#1F2933;margin:.2rem 0 .35rem 0}
@@ -1057,6 +1155,37 @@ def card_html(card: dict, names: dict) -> str:
             f'<div class="dp-sec"><b>Ekonomika:</b> {_h(_nowrap_amounts(card["econ_why"]))}</div>{econ}</div>')
 
 
+def chart_html(chart: dict) -> str:
+    """Pruh hranic zlomu: úseky s nejvýhodnější variantou a očíslované hranice; text nese celou informaci,
+    barva jen pomáhá. Na úzkém displeji se pruh skládá svisle (CSS)."""
+    t = lambda x: _h(_nowrap_amounts(x))
+    parts = []
+    for i, seg in enumerate(chart["segments"]):
+        if i > 0:
+            b = chart["boundaries"][i - 1]
+            parts.append(f'<div class="dp-bnd" title="{t(b["value"] + ": " + b["text"])}">'
+                         f'<span class="dp-bnd-n">{b["n"]}</span><span class="dp-bnd-v">{t(b["value"])}</span></div>')
+        cls = "dp-seg nothing" if seg["nothing"] else f'dp-seg c{seg["color"]}' + (" tie" if seg["tie"] else "")
+        parts.append(f'<div class="{cls}"><div class="dp-seg-name">{_h(seg["label"])}</div>'
+                     f'<div class="dp-seg-range">{t(seg["range"])}</div></div>')
+    items = "".join(f'<li><b>Hranice {b["n"]} – přesně {t(b["value"])}:</b> {_h(b["text"])}.'
+                    + (f'<details><summary>Zobrazit všechny shodné varianty ({len(b["winners"])})</summary>'
+                       f'{_h(", ".join(b["winners"]))}</details>' if b.get("others") else "") + "</li>"
+                    for b in chart["boundaries"])
+    more = chart.get("never_more", [])
+    notes = [x for x in chart["never"] if x]
+    tail = [x for x in [chart["zero_note"], CHART_SCALE_NOTE] if x]
+    many = " many" if len(chart["segments"]) > MAX_CHART_ROW else ""
+    return (f'<div class="dp-chart{many}" role="img" aria-label="{_h(chart["summary"])}">'
+            f'<div class="dp-chart-t">Nejvýhodnější varianta podle: {t(chart["unknown"])}</div>'
+            f'<div class="dp-bar">{"".join(parts)}</div>'
+            f'<ul class="dp-bnd-list">{items}</ul>'
+            + "".join(f'<div class="dp-chart-n">{t(x)}</div>' for x in notes)
+            + (f'<details class="dp-chart-n"><summary>Další varianty, které nejsou nejvýhodnější nikdy ({len(more)})'
+               f'</summary>' + "".join(f"<div>{t(x)}</div>" for x in more) + "</details>" if more else "")
+            + "".join(f'<div class="dp-chart-n">{t(x)}</div>' for x in tail) + "</div>")
+
+
 def panel_html(panel: dict) -> str:
     """Panel „Ekonomické porovnání“ – bloky pod sebou (bez tabulek), funguje i na úzkém displeji."""
     t = lambda x: _h(_nowrap_amounts(x))
@@ -1086,6 +1215,10 @@ def panel_html(panel: dict) -> str:
         for block in panel["conditions"]:
             if block["title"]:
                 out.append(f'<div class="dp-sec"><b>{_h(block["title"])}:</b></div>')
+            if block.get("chart"):
+                out.append(chart_html(block["chart"]))
+            elif block.get("chart_note"):
+                out.append(f'<div class="dp-note">{_h(block["chart_note"])}</div>')
             if block["lead"]:
                 out.append(f'<div class="dp-sec">{t(block["lead"])}</div>')
             out.append("<ul>" + "".join(f"<li>{t(x)}</li>" for x in block["lines"]) + "</ul>")
