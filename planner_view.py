@@ -407,6 +407,8 @@ def group_economy(model: dm.DataModel, p: pl.Plan, g: dict) -> dict:
             unit=_unknown_unit(prof["key"]) if prof["key"] is not None else "",
             segments=[dict(start=float(lo), end=None if hi is None else float(hi), winners=list(w))
                       for lo, hi, w in prof["segments"]],
+            # přesně v hranici zlomu vycházejí varianty sousedních úseků stejně (úseky jsou otevřené)
+            boundaries=[dict(at=float(x), winners=list(w)) for x, w in prof.get("boundaries", [])],
             at_zero=list(prof["at_zero"])))
     conditions = []
     for c in g.get("pair_conditions", []):
@@ -474,12 +476,21 @@ def _labels(variants) -> str:
     return ", ".join(f"„{' + '.join(v) if v else 'nepřijmout nic'}“" for v in variants)
 
 
+def _rate(x: float) -> str:
+    return ef.rate_text(x) + "/den"
+
+
 def _span(seg: dict) -> str:
+    """Otevřený úsek (bez hranic – v hranici vycházejí sousední varianty stejně)."""
     if seg["end"] is None:
-        return f"nad {_czk(seg['start'])}/den"
+        return f"nad {_rate(seg['start'])}"
     if seg["start"] == 0:
-        return f"do {_czk(seg['end'])}/den"
-    return f"{_czk(seg['start']).removesuffix(' Kč')}–{_czk(seg['end'])}/den"
+        return f"pod {_rate(seg['end'])}"
+    return f"mezi {ef.rate_text(seg['start']).removesuffix(' Kč')} a {_rate(seg['end'])}"
+
+
+def _ties_at_boundaries(prof: dict) -> dict:
+    return {b["at"]: b["winners"] for b in prof.get("boundaries", [])}
 
 
 def _never_wins(ref: str, ge: dict) -> bool:
@@ -511,6 +522,11 @@ def _where_text(ref: str, ge: dict) -> str:
                 text = "vychází nejlépe při jakékoli výši nezadaného nákladu"
             else:
                 text = f"vychází nejlépe, pokud je {what} " + " nebo ".join(_span(x) for x in segs)
+                eq = [(x, [o for o in w if o not in with_ref]) for x, w in _ties_at_boundaries(prof).items()
+                      if set(w) & with_ref]
+                eq = [(x, o) for x, o in eq if o]
+                if eq:
+                    text += " (" + "; ".join(f"přesně při {_rate(x)} stejně jako {_and(o)}" for x, o in eq) + ")"
         if sc:
             label = SCENARIO_SHORT.get(sc, sc)
             out.append(f"Pokud {label}: {text}.")
@@ -557,8 +573,11 @@ def econ_badge(ref: str, entry: dict, g: Optional[dict], ge: Optional[dict]) -> 
         if not _in(ref, contenders):
             return EC_NO, f"Při jakékoli výši nezadaných nákladů je výhodnější jiná varianta – {SEE_PANEL}."
         if ge and _never_wins(ref, ge):
-            return EC_NO, ("Nevychází nejlépe při žádné výši nezadaného nákladu (nanejvýš shodně přesně "
-                           f"na hranici zlomu) – {SEE_PANEL}.")
+            with_ref = {v["label"] for v in ge["variants"] if ref in v["refs"]}
+            at = sorted({x for pr in ge["profiles"] for x, w in _ties_at_boundaries(pr).items() if set(w) & with_ref})
+            return EC_NO, ("Nevychází nejlépe při žádné výši nezadaného nákladu"
+                           + (f" (stejně jako nejlepší jen přesně při {' a '.join(_rate(x) for x in at)})" if at else "")
+                           + f" – {SEE_PANEL}.")
         where = _where_text(ref, ge) if ge else ""
         return EC_COND, (where + " " if where else "Záleží na nezadaných nákladech. ") + f"Podrobně {SEE_PANEL}."
     blocking = ", ".join((ge or {}).get("blocking", []))
@@ -723,7 +742,7 @@ def condition_sentence(c: dict) -> str:
     if len(terms) == 1:
         t = terms[0]
         limit = -k / t["coef"]
-        return head + f"je {_unknown_name(t)} {'nižší' if t['coef'] < 0 else 'vyšší'} než {_czk(limit)}/den."
+        return head + f"je {_unknown_name(t)} {'nižší' if t['coef'] < 0 else 'vyšší'} než {_rate(limit)}."
     if len(terms) == 2 and abs(terms[0]["coef"] + terms[1]["coef"]) < 1e-9:
         neg = next(t for t in terms if t["coef"] < 0)
         pos = next(t for t in terms if t["coef"] > 0)
@@ -732,26 +751,34 @@ def condition_sentence(c: dict) -> str:
         if abs(d) < 1e-9:
             return head + f"je {x} nižší než {y}."
         if d > 0:
-            return head + f"je {x} vyšší než {y} o méně než {_czk(d)}/den (nebo nižší)."
-        return head + f"je {x} nižší než {y} o více než {_czk(-d)}/den."
+            return head + f"je {x} vyšší než {y} o méně než {_rate(d)} (nebo nižší)."
+        return head + f"je {x} nižší než {y} o více než {_rate(-d)}."
     left = " + ".join(f"{_count(-t['coef'], t['coef_unit'])} × {_unknown_name(t)}" for t in terms if t["coef"] < 0)
     right = " + ".join(f"{_count(t['coef'], t['coef_unit'])} × {_unknown_name(t)}" for t in terms if t["coef"] > 0)
     return head + f"{left or '0'} < {_czk(k)}" + (f" + {right}" if right else "") + "."
 
 
 def _profile_lines(prof: dict, contenders: list) -> list:
-    """Pásma hranic zlomu jako seznam (bez grafiky – ta je v kroku 4D)."""
+    """Pásma hranic zlomu jako seznam (bez grafiky – ta je v kroku 4D).
+
+    Úseky jsou otevřené („pod“, „mezi“, „nad“); přesně v hranici zlomu se uvádí rovnost variant,
+    nikoli vítězství jedné z nich.
+    """
     out = []
+    ties = _ties_at_boundaries(prof)
     for seg in prof["segments"]:
+        if seg["start"] in ties:
+            out.append(f"přesně {_rate(seg['start'])}: {_and(ties[seg['start']])} vycházejí stejně (rovnocenné)")
         who = _and(seg["winners"]) + (" (shodně)" if len(seg["winners"]) > 1 else "")
         if prof["unknown"] is None or (seg["start"] == 0 and seg["end"] is None):
             out.append(f"při jakékoli výši nákladu: {who}")
         else:
             out.append(f"{_span(seg)}: {who}")
     winners = {w for seg in prof["segments"] for w in seg["winners"]}
-    never = [_vlabel(c) for c in contenders if _vlabel(c) not in winners]
-    if never:
-        out.append(f"{_and(never)}: nevychází nejlépe při žádné výši nákladu (nanejvýš shodně na hranici)")
+    for label in [_vlabel(c) for c in contenders if _vlabel(c) not in winners]:
+        at = [x for x, w in ties.items() if label in w]
+        out.append(f"{label}: nevychází nejlépe při žádné výši nákladu"
+                   + (f" (stejně jako nejlepší jen přesně při {' a '.join(_rate(x) for x in at)})" if at else ""))
     first = set(prof["segments"][0]["winners"])
     extra = [w for w in prof["at_zero"] if w not in first]
     if extra and prof["unknown"] is not None:

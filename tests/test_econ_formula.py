@@ -113,7 +113,8 @@ def test_same_unknown_rate_in_both_variants_cancels():
     # B + C = 33 000 − 5x, B = 21 000 − 3x, C = 12 000 − 2x: nad 6 000 Kč je C ztrátový, nad 7 000 Kč i B
     assert [(lo, hi, w) for lo, hi, w in g["profiles"][0]["profile"]["segments"]] == [
         (0.0, 6000.0, ("B + C",)), (6000.0, 7000.0, ("B",)), (7000.0, None, ("nepřijmout nic",))]
-    assert "do 6 000 Kč: B + C; 6 000 Kč–7 000 Kč: B; nad 7 000 Kč: nepřijmout nic" in g["text"]
+    assert ("pod 6 000 Kč: B + C; přesně 6 000 Kč: B + C = B (shodně); mezi 6 000 Kč a 7 000 Kč: B; "
+            "přesně 7 000 Kč: B = nepřijmout nic (shodně); nad 7 000 Kč: nepřijmout nic") in g["text"]
     # přesná shoda: stejné strojodny i tržba
     r = ef.compare(ef.variant_formula(m, [rent("A", 1, 4, price=5000)]),
                    ef.variant_formula(m, [rent("B", 1, 2, price=5000), rent("C", 3, 4, price=5000)]))

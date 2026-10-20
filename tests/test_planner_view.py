@@ -267,7 +267,7 @@ def test_tab_in_app_full_flow_without_changing_data():
     at.button(key="dp_rm_NP-1").click().run()
     assert badges(at) == [(pv.OP_FITS, pv.EC_NO), (pv.OP_FITS, pv.EC_COND)]
     shown = " ".join(m.value for m in at.tabs[7].markdown).replace("\u00a0", " ")
-    assert "nezamítá" in shown and "do 8 000 Kč/den" in shown
+    assert "nezamítá" in shown and "pod 8 000 Kč/den" in shown and "přesně 8 000 Kč/den" in shown
     assert panels(at) == [pv.EC_COND] and "Ekonomické porovnání" in shown            # E2.5c 4C: panel nad kartami
     assert shown.index("dp-panel") < shown.index('<div class="dp-card">')
     # „Chybějící údaje“ i „Co doplnit“ jen s údaji, které rozhodují (ne náklad nesouvisející FIKT-P07)
