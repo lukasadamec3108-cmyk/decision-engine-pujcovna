@@ -154,6 +154,7 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 ├── capacity.py                      # kapacitní plánování strojů (E2.3A): dostupnost, konflikty, požadavky
 ├── planner.py                       # plánovací a rozhodovací model (E2.5a)
 ├── planner_view.py                  # záložka Rozhodovací plánovač (E2.5b): formulář → požadavek, výsledek → karty
+├── econ_formula.py                 # příspěvek jako vzorec s neznámými náklady a porovnání variant (E2.5c, zatím bez UI)
 ├── capacity_view.py                 # kapacitní kalendář (E2.3B): převod výsledků capacity.py na mřížku
 ├── portfolio.py                     # výběr nákupní sestavy strojů v rámci rozpočtu
 ├── scheduling.py                    # plán zakázek (celočíselná optimalizace)

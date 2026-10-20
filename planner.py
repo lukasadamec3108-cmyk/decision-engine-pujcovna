@@ -483,6 +483,8 @@ def plan(model: dm.DataModel, job_starts: Optional[dict] = None, new_requests=()
             out.missing_data += list(verdict["missing"])
         out.groups.append(dict(requests=refs, verdict=verdict["verdict"],
                                options=[tuple(r.ref for r in o) for o in maximal],
+                               # všechny ekonomicky porovnávané varianty včetně „nepřijmout nic“
+                               candidates=[NOTHING] + [tuple(r.ref for r in o) for o in candidates],
                                choice=(tuple(r.ref for r in verdict["choice"])
                                        if verdict["choice"] is not None else None),
                                values={tuple(r.ref for r in o): v for o, v in verdict["values"].items()
