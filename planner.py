@@ -400,7 +400,10 @@ def _decide(contrib: dict) -> dict:
             if v != leader:
                 r = ef.compare(ef.restrict(contrib[leader], sc), ef.restrict(contrib[v], sc),
                                (ef.variant_label(leader), ef.variant_label(v)))
-                conditions.append(dict(scenario=sc, profile=None, text=prefix + r["text"]))
+                one = r["scenarios"][ef.ONLY] if r["scenarios"] else None
+                conditions.append(dict(scenario=sc, profile=None, text=prefix + r["text"], pair=dict(
+                    a=leader, b=v, status=r["status"], winner=r.get("winner"), strict=r.get("strict", False),
+                    known=one["diff"].known if one else None, terms=one["diff"].terms if one else ())))
     missing = tuple(dict.fromkeys(unknowns[k].label for v in front for f in contrib[v].scenarios.values()
                                   for k, _ in f.terms if k in unknowns))
     shown = " ".join(c["text"] + "." for c in conditions[:MAX_CONDITIONS_TEXT])
@@ -575,6 +578,9 @@ def plan(model: dm.DataModel, job_starts: Optional[dict] = None, new_requests=()
                                profiles=[dict(scenario=c["scenario"], profile=c["profile"])
                                          for c in verdict["conditions"] if c["profile"] is not None],
                                formulas=verdict["formulas"],
+                               # podmínky dvojic strukturovaně (víc neznámých): rozdíl a − b = known + Σ coef × neznámá
+                               pair_conditions=[dict(scenario=c["scenario"], **c["pair"])
+                                                for c in verdict["conditions"] if c.get("pair")],
                                # intervaly (dolní/horní mez) jen pro informaci, verdikt z nich nevzniká
                                values={tuple(r.ref for r in o): v for o, v in sums.items()
                                        if o in maximal or o == NOTHING
