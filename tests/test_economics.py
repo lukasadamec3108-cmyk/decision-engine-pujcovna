@@ -277,7 +277,8 @@ def test_app_uses_economics_only_through_planner_tab():
     assert not re.search(r"^\s*(import economics|from economics)", src, re.M)
     before_tab8 = src[:src.index("# ZÁLOŽKA 8 – ROZHODOVACÍ PLÁNOVAČ")]
     for line in before_tab8.splitlines():
-        if line.startswith(("import planner", "pl = importlib", "pv = importlib", "CODE_MODULES")):
+        if line.startswith(("import planner", "import econ_formula", "pl = importlib", "ef = importlib",
+                            "pv = importlib", "CODE_MODULES")):
             continue
         assert "pl." not in line and "pv." not in line, line
 

@@ -165,16 +165,22 @@ nebo se ze soupeřících požadavků vejde jen část a ekonomika chybí. Exist
   Předběžná rezervace zůstává vždy viditelná a nikdy se automaticky neruší.
 - **Provozně**: proveditelný / neproveditelný (co ho blokuje) / nelze určit (chybí údaje).
   Soupeřící požadavky → kombinace, které se vejdou (ověřené kapacitním modelem).
-- **Ekonomicky**: příspěvky z `economics.py` (bez fixních nákladů a bez ušlého zisku navíc).
-  Chybí-li náklad, známá částka je jen horní mez; doporučení jen při jasné převaze, shodný
-  přínos → rozhodne uživatel, jinak „nelze rozhodnout“ s výčtem chybějících údajů.
-- Ekonomicky se porovnávají **všechny** proveditelné kombinace (i menší) – ztrátový požadavek
-  (příspěvek < 0) se tak nedoporučí jen proto, že se „vejde“; u zakázky po termínu se odečte penále.
-- Mezi variantami je vždy i **„nepřijmout nic“** (přírůstkový příspěvek přesně 0 Kč, E2.5c). Je-li každá
-  varianta, která se vejde, ztrátová i v nejlepším případě, výsledek je „žádný se nevyplatí“ – nikdy
-  doporučení nejmenší ztráty. Varianta s příspěvkem přesně 0 Kč je s „nic“ rovnocenná (rozhodne
-  uživatel). Při neúplných údajích se „nic“ vybere jen tehdy, když je ztráta jistá i bez chybějících
-  nákladů (horní mez < 0); jinak „nelze rozhodnout“. Nic se neruší – ani předběžné rezervace.
+- **Ekonomicky** (E2.5c krok 3): porovnávají se jen kapacitně proveditelné kombinace soupeřících
+  požadavků a vždy i **„nepřijmout nic“** (přírůstkový příspěvek přesně 0 Kč). Příspěvky jsou vzorce
+  z `econ_formula.py` nad `economics.py` (bez fixních nákladů a bez ušlého zisku navíc); chybějící
+  sazba zůstává neznámou, společné neznámé se v porovnání vyruší, oba scénáře
+  `direct_cost_includes_machines` se respektují. Verdikt skupiny:
+  - **doporučení** – jediná varianta je prokazatelně (ostře) lepší než všechny ostatní při jakýchkoli
+    hodnotách neznámých sazeb a v obou scénářích; je-li jí „nic“, výsledek je **„žádný se nevyplatí“**
+    (všechny varianty jsou prokazatelně ztrátové) – nikdy doporučení nejmenší ztráty,
+  - **rovnocenné** – nejlepší varianty mají prokazatelně shodný výsledek (varianta s přesně 0 Kč je
+    rovnocenná s „nic“, ne lepší),
+  - **podmíněně lepší** – vítěz závisí na neznámé sazbě; vypíší se **hranice zlomu** (např. „do 2 750 Kč: A;
+    2 750–9 000 Kč: B; nad 9 000 Kč: nepřijmout nic“). Patří sem i varianta, která je při nulové sazbě
+    shodná s jinou a při kladné lepší – bez jednoznačného doporučení,
+  - **nelze rozhodnout** – rozhoduje chybějící základní údaj (tržba, přímé náklady, cena, sazba penále)
+    nebo neplatný údaj.
+  Varianty prokazatelně horší než jiná varianta se z výkladu vyřadí. Nic se neruší – ani předběžné rezervace.
 - Označení požadavků musí být jedinečná (i vůči předběžným rezervacím v datech).
 - Překrývající se servisní záznamy téhož kusu: kus je v servisu nejvýše jednou za den (dva různé
   kusy zvlášť); překryv není konflikt využití, plánovač na něj upozorní jako na možnou duplicitu dat.
@@ -186,7 +192,7 @@ Pro ekonomická doporučení zatím chybí: variabilní náklady za den pronájm
 
 ## Příspěvek jako vzorec s neznámými náklady (`econ_formula.py`, E2.5c krok 2)
 
-Výpočetní vrstva pro porovnání variant, zatím bez zobrazení v aplikaci. Příspěvek varianty je
+Výpočetní vrstva pro porovnání variant; od kroku 3 z ní vychází verdikt plánovače. Příspěvek varianty je
 vzorec `známá částka − Σ (jednotky využití × neznámá sazba)`; chybějící údaj zůstává proměnnou,
 nikdy se nenahradí nulou. Koeficienty se zjišťují přímo z `economics.py` (žádný druhý výpočet).
 

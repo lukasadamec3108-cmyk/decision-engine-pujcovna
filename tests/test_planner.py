@@ -146,11 +146,14 @@ def test_missing_machine_count_or_quantity_cannot_be_decided():
 # ---------------------------------------------------------------------------
 
 def test_missing_economic_data_gives_no_false_recommendation():
+    # E2.5c krok 3: chybí variabilní náklad → žádné doporučení, ale podmíněný výsledek s hranicí zlomu.
+    # B (27 000 − 3x) je proti A (18 000 − 3x) jistě lepší (x se vyruší); proti „nic“ jen při x < 9 000 Kč.
     p = pl.plan(model(), new_requests=[rent("A", 1, 3, price=6000), rent("B", 2, 4, price=9000)])
     g = p.groups[0]
-    assert g["verdict"] == pl.NO_DECISION and g["choice"] is None
+    assert g["verdict"] == pl.CONDITIONAL and g["choice"] is None
     assert sorted(g["options"]) == [("A",), ("B",)]                     # provozní varianty zůstávají
-    assert "variabilní náklad pronájmu" in g["text"]
+    assert set(g["contenders"]) == {("B",), pl.NOTHING}                  # A je prokazatelně horší než B
+    assert "variabilní náklad pronájmu" in g["text"] and "9 000 Kč" in g["text"]
     assert any("variabilní náklad" in x for x in p.missing_data)
     v = decision(p, "A")["economics"]
     assert v.lo is None and v.hi == 18000                                # známá částka = jen horní mez
@@ -435,7 +438,8 @@ def test_incomplete_data_never_recommend_nothing_automatically():
     # chybí variabilní náklad: známá je jen horní mez (kladná) → nelze rozhodnout, ne „nic“
     p, g = _pair(model(), rent("A", 1, 3, price=6000), rent("B", 2, 4, price=7000))
     assert g["values"][("A",)].lo is None and g["values"][("A",)].hi > 0
-    assert g["verdict"] == pl.NO_DECISION and g["choice"] is None
+    # E2.5c krok 3: B nebo „nic“ podle neznámé sazby (hranice 7 000 Kč) – nikdy automaticky „nic“
+    assert g["verdict"] == pl.CONDITIONAL and g["choice"] is None
     assert g["verdict"] != pl.NONE_PAYS
     # chybí tržba zakázky → horní mez neznámá → nelze rozhodnout
     j = Request("J", "job", pl.NEW, ((BAGR, 1),), 1, 3, name="J", revenue=None, direct_cost=1000)
@@ -444,7 +448,8 @@ def test_incomplete_data_never_recommend_nothing_automatically():
     # jedna varianta jistě ztrátová, druhá neúplná s kladnou horní mezí → nelze rozhodnout
     loss = job("J2", 1, 3, revenue=10000, direct=20000)
     p, g = _pair(model(), loss, rent("B", 2, 4, price=7000))
-    assert g["verdict"] == pl.NO_DECISION
+    assert g["verdict"] == pl.CONDITIONAL and g["choice"] is None       # B nebo „nic“ podle sazby
+    assert ("J2",) not in g["contenders"]                                # ztrátová zakázka vyloučena
 
 
 def test_nothing_only_when_loss_is_certain_even_with_missing_costs():

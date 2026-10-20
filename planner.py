@@ -17,11 +17,13 @@ ROZHODOVACÍ PRAVIDLA
    posun v okně bez penále, nikdy se ale automaticky nepřesouvá.
 5. Předběžné a nové požadavky jsou rovnocenné; o zbývající kapacitě rozhoduje ekonomika.
    Předběžná rezervace zůstává vždy viditelná a nikdy se automaticky neruší.
-6. Provozní proveditelnost a ekonomická výhodnost jsou oddělené. Ekonomické doporučení vznikne
-   jen tehdy, když je jedna kombinace lepší i v nejhorším případě (při chybějících nákladech je
-   známá částka jen horní mez). Jinak „nelze rozhodnout“ s výčtem chybějících údajů.
-   Mezi variantami je vždy i „nepřijmout nic“ (přírůstkový příspěvek 0 Kč): jsou-li všechny varianty
-   jistě ztrátové, výsledek je „žádný se nevyplatí“, nikdy doporučení nejmenší ztráty.
+6. Provozní proveditelnost a ekonomická výhodnost jsou oddělené. Ekonomicky se porovnávají jen
+   kapacitně proveditelné varianty a vždy i „nepřijmout nic“ (přírůstkový příspěvek 0 Kč).
+   Příspěvky jsou vzorce z econ_formula.py (nad economics.py): chybějící sazba zůstává neznámou,
+   společné neznámé se v porovnání vyruší, oba scénáře direct_cost_includes_machines se respektují.
+   Verdikt skupiny: doporučení (prokazatelně ostře lepší než vše ostatní), „žádný se nevyplatí“
+   (všechny varianty prokazatelně ztrátové), rovnocenné (prokazatelně shodné), podmíněně lepší
+   (záleží na neznámé sazbě – hranice zlomu), nebo nelze rozhodnout (chybí základní údaje).
 7. Alternativy jen podložené daty: posun zakázky uvnitř jejího okna bez penále. Jiný stroj ani
    externí zapůjčení se nenabízí – chybí údaje o zaměnitelnosti strojů a o externích cenách.
 """
@@ -45,8 +47,11 @@ OK_ALONE, NOT_FEASIBLE, UNDETERMINED = "proveditelný", "neproveditelný", "nelz
 RECOMMEND, EQUAL, NO_DECISION, ALL_FIT = ("doporučení", "rovnocenné", "nelze rozhodnout",
                                           "vše proveditelné současně")
 NONE_PAYS = "žádný se nevyplatí"       # nejlepší je nepřijmout žádný ze soupeřících požadavků
+CONDITIONAL = "podmíněně lepší"         # vítěz závisí na neznámé nákladové sazbě (hranice zlomu)
 NOTHING = ()                           # varianta „nepřijmout nic“ – přírůstkový příspěvek přesně 0 Kč
 MAX_GROUP = 12                         # nejvíc požadavků v jedné skupině (2^12 kombinací)
+MAX_FRONT = 40                         # nejvíc variant, které nelze navzájem vyloučit (jinak nelze rozhodnout)
+MAX_CONDITIONS_TEXT = 6                # kolik podmínek se vypíše v souhrnném textu (všechny jsou v „conditions“)
 
 
 # ---------------------------------------------------------------------------
@@ -311,38 +316,114 @@ def economic_note(v: Value) -> str:
     return "příspěvek nelze určit – chybí: " + ("; ".join(v.missing) or "neznámé")
 
 
-def _economic_verdict(options: list, values: dict) -> dict:
-    """options = všechny proveditelné kombinace (i menší – ztrátový požadavek je lepší vynechat).
-    Vždy se přidá i varianta „nepřijmout nic“ s přírůstkovým příspěvkem přesně 0 Kč – když jsou všechny
-    ostatní varianty ztrátové, nesmí se doporučit „nejmenší ztráta“.
-    Doporučí jen kombinaci, která je lepší i v nejhorším případě než každá jiná (včetně „nic“);
-    „nic“ vyhraje jen tehdy, když je každá jiná varianta ztrátová i v nejlepším případě (horní mez < 0)."""
-    options = [NOTHING] + [o for o in options if o != NOTHING]
-    sums = {o: _sum(values[r.ref] for r in o) for o in options}
-    missing = tuple(dict.fromkeys(m for v in sums.values() for m in v.missing))
-    known = [o for o in options if sums[o].lo is not None]
-    if known:
-        best = max(known, key=lambda o: sums[o].lo)
-        others = [o for o in options if o is not best]
-        if all(sums[o].hi is not None and sums[best].lo > sums[o].hi for o in others):
-            if best == NOTHING:
-                return dict(verdict=NONE_PAYS, choice=NOTHING, values=sums, missing=missing,
-                            text="Ekonomicky se nevyplatí přijmout žádný ze soupeřících požadavků – každá "
-                                 "varianta, která se vejde, je ztrátová i v nejlepším případě. Nic se neruší "
-                                 "– rozhodne uživatel.")
-            return dict(verdict=RECOMMEND, choice=best, values=sums, missing=missing,
-                        text="Kombinace je ekonomicky lepší i v nejhorším případě.")
-    if all(v.exact for v in sums.values()) and len({v.lo for v in sums.values()}) == 1:
-        return dict(verdict=EQUAL, choice=None, values=sums, missing=missing,
-                    text="Varianty mají shodný ekonomický přínos – rozhodne uživatel.")
-    if all(v.exact for v in sums.values()):
-        best = max(v.lo for v in sums.values())
-        tied = [o for o in options if sums[o].lo == best]
-        nothing = " (včetně varianty nepřijmout nic)" if NOTHING in tied else ""
-        return dict(verdict=EQUAL, choice=None, values=sums, missing=missing,
-                    text=f"Nejvyšší přínos má shodně {len(tied)} variant{nothing} – rozhodne uživatel.")
-    return dict(verdict=NO_DECISION, choice=None, values=sums, missing=missing,
-                text="Ekonomicky nelze rozhodnout – chybí údaje: " + ("; ".join(missing) or "neznámé"))
+def _decide(contrib: dict) -> dict:
+    """Robustní ekonomický verdikt nad vzorci variant z econ_formula (krok 3 E2.5c).
+
+    contrib … {varianta (tuple označení): econ_formula.Contribution}, vždy včetně NOTHING (0 Kč).
+    - DOPORUČENO: jediná varianta je prokazatelně (ostře) lepší než všechny ostatní při jakýchkoli
+      hodnotách neznámých sazeb a v obou scénářích direct_cost_includes_machines; je-li jí NOTHING,
+      verdikt je „žádný se nevyplatí“.
+    - ROVNOCENNÉ: nejlepší varianty mají prokazatelně shodný výsledek (stejný vzorec).
+    - PODMÍNĚNĚ LEPŠÍ: vítěz závisí jen na neznámých variabilních sazbách (nebo na scénáři) –
+      vrací hranice zlomu. Sem patří i „nikdy horší, ale při nulových sazbách shodné“.
+    - NELZE ROZHODNOUT: rozhoduje chybějící základní údaj požadavku nebo neplatný údaj.
+    Varianty, které jsou prokazatelně horší než jiná varianta, se z dalšího výkladu vyřadí.
+    """
+    import econ_formula as ef               # pozdní import: econ_formula sám používá planner
+    variants = list(contrib)
+    cache = {}
+
+    def cmp(a, b):
+        if (a, b) not in cache:
+            cache[(a, b)] = ef.compare(contrib[a], contrib[b], (ef.variant_label(a), ef.variant_label(b)))
+        return cache[(a, b)]
+
+    def beats(a, b):                         # a je ostře lepší než b pro všechny hodnoty neznámých
+        r = cmp(a, b)
+        return r["status"] == ef.CERTAIN and r["winner"] == ef.A and r["strict"]
+
+    def score(v):
+        c = contrib[v]
+        return max(f.known for f in c.scenarios.values()) if c.valid else float("-inf")
+
+    front = []                               # varianty, které žádná jiná prokazatelně nepřekoná
+    for v in sorted(variants, key=lambda v: (-score(v), len(v), v)):
+        if any(beats(u, v) for u in front):
+            continue
+        front = [u for u in front if not beats(v, u)] + [v]
+        if len(front) > MAX_FRONT:
+            return dict(verdict=NO_DECISION, choice=None, contenders=front, best=[], conditions=[],
+                        missing=(), text=f"Ekonomicky nelze rozhodnout – příliš mnoho variant, které nelze "
+                                          f"navzájem vyloučit (víc než {MAX_FRONT}).")
+    unknowns = {k: u for c in contrib.values() for k, u in c.unknowns.items()}
+    labels = [ef.variant_label(v) for v in front]
+
+    if len(front) == 1:
+        w = front[0]
+        if all(beats(w, v) for v in variants if v != w):
+            if w == NOTHING:
+                return dict(verdict=NONE_PAYS, choice=NOTHING, contenders=front, best=[w], conditions=[],
+                            missing=(), text="Ekonomicky se nevyplatí přijmout žádný ze soupeřících požadavků – "
+                                             "každá varianta, která se vejde, je prokazatelně ztrátová. Nic se "
+                                             "neruší – rozhodne uživatel.")
+            return dict(verdict=RECOMMEND, choice=w, contenders=front, best=[w], conditions=[], missing=(),
+                        text=f"Varianta {labels[0]} je prokazatelně ekonomicky lepší než všechny ostatní "
+                             "varianty včetně nepřijetí ničeho – při jakýchkoli hodnotách chybějících nákladů.")
+
+    pairs = [(a, b) for i, a in enumerate(front) for b in front[i + 1:]]
+    results = [cmp(a, b) for a, b in pairs]
+    if results and all(r["status"] == ef.CERTAIN and r["winner"] == ef.EQUAL for r in results):
+        return dict(verdict=EQUAL, choice=None, contenders=front, best=list(front), conditions=[], missing=(),
+                    text="Varianty " + ", ".join(labels) + " mají prokazatelně shodný ekonomický výsledek "
+                         "a ostatní jsou horší – rozhodne uživatel.")
+    undecided = [r for r in results if r["status"] == ef.UNDECIDABLE]
+    if undecided or not results:
+        reasons = tuple(dict.fromkeys(x for r in undecided for x in r["reasons"]))
+        return dict(verdict=NO_DECISION, choice=None, contenders=front, best=[], conditions=[], missing=reasons,
+                    text="Ekonomicky nelze rozhodnout – výsledek závisí na chybějících nebo neplatných údajích: "
+                         + ("; ".join(reasons) or "neznámé"))
+
+    # Podmíněně lepší: výklad po scénářích – hranice zlomu (jedna neznámá) nebo podmínky dvojic
+    scenarios = list(dict.fromkeys(sc for v in front for sc in contrib[v].scenarios))
+    if len(scenarios) > 1:
+        scenarios = [sc for sc in scenarios if sc != ef.ONLY]
+    conditions = []
+    for sc in scenarios:
+        prefix = f"Pokud {ef.SCENARIO_LABEL[sc]}: " if sc != ef.ONLY else ""
+        lines = {ef.variant_label(v): ef.scenario_formula(contrib[v], sc) for v in front}
+        prof = ef.profile(lines)
+        if prof is not None:
+            conditions.append(dict(scenario=sc, profile=prof, text=prefix + ef.profile_text(prof, unknowns)))
+            continue
+        leader = max(front, key=lambda v: ef.scenario_formula(contrib[v], sc).known)
+        for v in front:
+            if v != leader:
+                r = ef.compare(ef.restrict(contrib[leader], sc), ef.restrict(contrib[v], sc),
+                               (ef.variant_label(leader), ef.variant_label(v)))
+                conditions.append(dict(scenario=sc, profile=None, text=prefix + r["text"]))
+    missing = tuple(dict.fromkeys(unknowns[k].label for v in front for f in contrib[v].scenarios.values()
+                                  for k, _ in f.terms if k in unknowns))
+    shown = " ".join(c["text"] + "." for c in conditions[:MAX_CONDITIONS_TEXT])
+    if len(conditions) > MAX_CONDITIONS_TEXT:
+        shown += f" … a dalších {len(conditions) - MAX_CONDITIONS_TEXT} podmínek."
+    return dict(verdict=CONDITIONAL, choice=None, contenders=front, best=[], conditions=conditions,
+                missing=missing, text="Podmíněně – nejlepší varianta závisí na neznámých nákladech: " + shown)
+
+
+def _economic_verdict(model: dm.DataModel, candidates: list) -> dict:
+    """Vzorce všech porovnávaných variant (z econ_formula, nad economics.py) a robustní verdikt."""
+    import econ_formula as ef
+    reqs = {r.ref: r for o in candidates for r in o}
+    try:
+        forms = {ref: ef.request_formula(model, r) for ref, r in reqs.items()}
+    except ArithmeticError as exc:            # pojistka: příspěvek není lineární – nic se nedoporučí
+        return dict(verdict=NO_DECISION, choice=None, contenders=[], best=[], conditions=[], missing=(),
+                    formulas={}, text=f"Ekonomicky nelze rozhodnout – {exc}")
+    variants = [NOTHING] + [tuple(r.ref for r in o) for o in candidates if o]
+    contrib = {v: ef.combine(forms[ref] for ref in v) if v else ef.NOTHING for v in variants}
+    out = _decide(contrib)
+    out["formulas"] = {v: ef.describe(contrib[v]) for v in set(out["contenders"]) | {NOTHING}}
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -475,7 +556,8 @@ def plan(model: dm.DataModel, job_starts: Optional[dict] = None, new_requests=()
         # ekonomicky se porovnávají všechny proveditelné kombinace (podmnožiny ověřených variant)
         candidates = [s for s in feasible if any(set(s) <= set(v) for v in verified)]
         maximal = verified
-        verdict = _economic_verdict(candidates, values)
+        verdict = _economic_verdict(model, candidates)
+        sums = {o: _sum(values[r.ref] for r in o) for o in [NOTHING] + list(candidates)}
         for ref in refs:
             out.requests[ref]["decision"] = ("v konfliktu s jinými požadavky – vejde se jen část; "
                                              + verdict["verdict"])
@@ -485,10 +567,18 @@ def plan(model: dm.DataModel, job_starts: Optional[dict] = None, new_requests=()
                                options=[tuple(r.ref for r in o) for o in maximal],
                                # všechny ekonomicky porovnávané varianty včetně „nepřijmout nic“
                                candidates=[NOTHING] + [tuple(r.ref for r in o) for o in candidates],
-                               choice=(tuple(r.ref for r in verdict["choice"])
-                                       if verdict["choice"] is not None else None),
-                               values={tuple(r.ref for r in o): v for o, v in verdict["values"].items()
-                                       if o in maximal or o == verdict["choice"] or o == NOTHING},
+                               choice=verdict["choice"],
+                               # robustní výklad (E2.5c krok 3): varianty, které nelze vyloučit,
+                               # prokazatelně nejlepší, hranice zlomu a vzorce příspěvků
+                               contenders=verdict["contenders"], best=verdict["best"],
+                               conditions=[c["text"] for c in verdict["conditions"]],
+                               profiles=[dict(scenario=c["scenario"], profile=c["profile"])
+                                         for c in verdict["conditions"] if c["profile"] is not None],
+                               formulas=verdict["formulas"],
+                               # intervaly (dolní/horní mez) jen pro informaci, verdikt z nich nevzniká
+                               values={tuple(r.ref for r in o): v for o, v in sums.items()
+                                       if o in maximal or o == NOTHING
+                                       or tuple(r.ref for r in o) == verdict["choice"]},
                                text=verdict["text"]))
 
     for ref, v in values.items():
@@ -521,6 +611,8 @@ def explain(p: Plan) -> list:
                          + " | ".join(" + ".join(o) for o in g["options"]))
         if g.get("choice") and g["verdict"] == RECOMMEND:
             lines.append(f"  Doporučeno (jen doporučení, nic se nemění): {', '.join(g['choice'])}")
+        if g["verdict"] == CONDITIONAL:
+            lines += [f"  Podmínka: {c}" for c in g.get("conditions", [])]
         if g["verdict"] == NONE_PAYS:
             lines.append("  Ekonomicky nejlépe vychází nepřijmout žádný z nich (příspěvek 0 Kč); "
                          "předběžné rezervace se tím neruší.")
