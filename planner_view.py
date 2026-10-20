@@ -13,6 +13,10 @@ a srozumitelná vysvětlení (obyčejné typy → lze uložit do mezipaměti Str
   Nelze rozhodnout … chybí údaje, nebo se ze soupeřících požadavků vejde jen část a
                    ekonomika chybí.
 Nic se neukládá, nepotvrzuje ani nemění – požadavky existují jen v relaci uživatele.
+
+E2.5c krok 4A: evaluate navíc předává strukturovanou ekonomiku (klíč „economy“ u karty i skupiny):
+verdikt, doporučenou / shodné / nevyloučené varianty, vzorce příspěvků, hranice zlomu (Kč/den),
+podmínky dvojic a chybějící údaje – jen obyčejné typy, bez nových výpočtů. Zobrazení se zatím nemění.
 """
 
 import html
@@ -21,6 +25,8 @@ from typing import Optional
 import pandas as pd
 
 import datamodel as dm
+import econ_formula as ef
+import economics as ec
 import planner as pl
 
 RECOMMENDED, FEASIBLE, NOT_FEASIBLE, UNDECIDED = "Doporučeno", "Proveditelné", "Neproveditelné", "Nelze rozhodnout"
@@ -212,6 +218,212 @@ def _economic_text(e: dict, late: str = "") -> str:
     return "Ekonomicky: nehodnotí se – požadavek není provozně proveditelný."
 
 
+# ---------------------------------------------------------------------------
+# Strukturovaná ekonomika (E2.5c krok 4A) – jen obyčejné typy, žádné nové výpočty
+# ---------------------------------------------------------------------------
+#
+# Vše vychází z planner.plan a econ_formula (nad economics.py); tady se výsledek jen převádí
+# na slovníky, seznamy, řetězce a čísla (bezpečné pro mezipaměť Streamlitu).
+#
+# Stav údaje:  ZADANO … skutečná hodnota (i 0), NEZADANO … chybí (nikdy se nebere jako 0),
+#              NEPLATNE … nelze použít (text, záporné číslo…).
+# Příspěvek:   EXACT … přesná částka (i přesně 0 Kč), WITH_UNKNOWN … vzorec s neznámými,
+#              INVALID … nelze spočítat (neplatný údaj).
+# Jednotky:    částky v Kč, sazby za den v Kč/den, koeficient sazby ve dnech (strojodny nebo dny
+#              po termínu); u neznámé částky (tržba, přímé náklady) je koeficient bezrozměrný.
+
+ZADANO, NEZADANO, NEPLATNE = "zadáno", "nezadáno", "neplatné"            # stav vstupního údaje
+EXACT, WITH_UNKNOWN, INVALID = "přesný", "závisí na neznámých", "nelze spočítat"   # stav příspěvku
+KC, KC_DEN = "Kč", "Kč/den"
+VERDICT_KIND = {pl.RECOMMEND: "recommend", pl.NONE_PAYS: "none_pays", pl.EQUAL: "equal",
+                pl.CONDITIONAL: "conditional", pl.NO_DECISION: "undecided", pl.ALL_FIT: "all_fit"}
+MAX_OTHER_VARIANTS = 10                 # kolik prokazatelně horších variant se předá (zbytek jen počtem)
+_RATE_FIELDS = {"variable_cost_rental_day", "variable_cost_job_day", "rental_price_day", "penalty_per_day"}
+
+
+def _unknown_unit(key) -> str:
+    return KC_DEN if key and key[0] in _RATE_FIELDS else KC
+
+
+def _coef_unit(key) -> str:
+    if not key:
+        return ""
+    if key[0] == "penalty_per_day":
+        return "dní po termínu"
+    return "strojodnů" if key[0] in _RATE_FIELDS else ""
+
+
+def _plain_key(key) -> list:
+    return [str(x) for x in key] if key is not None else None
+
+
+def _unknown_info(key, unknowns: dict) -> dict:
+    u = unknowns.get(key)
+    return dict(key=_plain_key(key), label=u.label if u else " / ".join(map(str, key)),
+                kind=u.kind if u else ef.DATA, unit=_unknown_unit(key))
+
+
+def _formula_plain(f, unknowns: dict) -> dict:
+    """Vzorec jako slovník: known (Kč) + Σ coef × neznámá (koeficient a jednotky u každého členu)."""
+    return dict(known=float(f.known), unit=KC, exact=f.exact,
+                terms=[dict(_unknown_info(k, unknowns), coef=float(c), coef_unit=_coef_unit(k)) for k, c in f.terms])
+
+
+def _contribution_plain(c) -> dict:
+    """Příspěvek (požadavku nebo varianty) po scénářích + stav a meze; neplatný údaj → status NEPLATNE."""
+    if not c.valid:
+        return dict(status=INVALID, invalid=list(c.invalid), scenarios=[], lo=None, hi=None, unit=KC,
+                    value=None, text=ef.describe(c))
+    scen = [dict(scenario=sc, scenario_label=ef.SCENARIO_LABEL.get(sc, sc), **_formula_plain(f, c.unknowns))
+            for sc, f in c.scenarios.items()]
+    lo, hi = ef.bounds(c)
+    exact = all(x["exact"] for x in scen) and len({x["known"] for x in scen}) == 1
+    return dict(status=EXACT if exact else WITH_UNKNOWN, invalid=[], scenarios=scen,
+                lo=None if lo is None else float(lo), hi=None if hi is None else float(hi), unit=KC,
+                value=float(scen[0]["known"]) if exact else None, text=ef.describe(c))
+
+
+def _input(label: str, raw, unit: str, field: str) -> dict:
+    """Stav jednoho vstupního údaje stejnými pravidly jako economics.py (prázdné ≠ 0)."""
+    r = ec._amount(raw, label, False)
+    if r.invalid:
+        return dict(field=field, label=label, unit=unit, state=NEPLATNE, value=None, reason=r.invalid[0])
+    if r.missing:
+        return dict(field=field, label=label, unit=unit, state=NEZADANO, value=None, reason="")
+    return dict(field=field, label=label, unit=unit, state=ZADANO, value=float(r.value), reason="")
+
+
+def request_inputs(model: dm.DataModel, r: pl.Request) -> list:
+    """Ekonomické vstupy požadavku: skutečná nula / nezadáno / neplatné, s jednotkami."""
+    out = []
+    mt = model.machine_types.set_index("type_id")
+    for t, _ in r.needs:
+        name = str(mt.loc[t, "name"]) if t in mt.index else t
+        if r.kind == "rental":
+            if r.price_day is not None:
+                out.append(_input(f"{name}: cena pronájmu/den (zadaná)", r.price_day, KC_DEN, "price_day"))
+            else:
+                out.append(_input(f"{name}: cena pronájmu/den (ceník)", mt.loc[t, "rental_price_day"]
+                                  if t in mt.index else "", KC_DEN, "rental_price_day"))
+            out.append(_input(f"{name}: variabilní náklad pronájmu/den", mt.loc[t, "variable_cost_rental_day"]
+                              if t in mt.index else "", KC_DEN, "variable_cost_rental_day"))
+        else:
+            out.append(_input(f"{name}: variabilní náklad na zakázce/den", mt.loc[t, "variable_cost_job_day"]
+                              if t in mt.index else "", KC_DEN, "variable_cost_job_day"))
+    if r.kind == "job":
+        row = None
+        if r.in_data:
+            rows = model.jobs[model.jobs["job_id"] == r.ref]
+            row = rows.iloc[0] if len(rows) else None
+        for col, text, unit in (("revenue", "tržba", KC), ("direct_cost", "přímé náklady", KC),
+                                ("penalty_per_day", "penále/den", KC_DEN)):
+            raw = row[col] if row is not None else getattr(r, col)
+            out.append(_input(f"{r.ref}: {text}", "" if raw is None else raw, unit, col))
+        incl = ec.direct_cost_includes_machines(model)
+        out.append(dict(field="direct_cost_includes_machines",
+                        label="zda přímé náklady zakázek obsahují vlastní stroje", unit="",
+                        state=NEZADANO if incl is None else ZADANO,
+                        value=None if incl is None else ("ano" if incl else "ne"), reason=""))
+    return out
+
+
+def request_economy(model: dm.DataModel, r: pl.Request) -> dict:
+    """Ekonomika jednoho požadavku pro kartu: vzorec po scénářích a stav vstupů."""
+    try:
+        c = ef.request_formula(model, r)
+        out = _contribution_plain(c)
+    except ArithmeticError as exc:
+        out = dict(status=INVALID, invalid=[str(exc)], scenarios=[], lo=None, hi=None, unit=KC, value=None,
+                   text=[])
+    out["inputs"] = request_inputs(model, r)
+    return out
+
+
+def _variant_plain(v: tuple, c, role: str) -> dict:
+    return dict(refs=list(v), label=ef.variant_label(v), nothing=not v, role=role, contribution=_contribution_plain(c))
+
+
+def group_economy(model: dm.DataModel, p: pl.Plan, g: dict) -> dict:
+    """Strukturovaný ekonomický výsledek skupiny soupeřících požadavků (jen obyčejné typy).
+
+    verdict / kind … verdikt plánovače (beze změny) a jeho strojový kód
+    choice         … doporučená varianta (seznam označení; [] = „nepřijmout nic“; None = žádné doporučení)
+    best           … prokazatelně nejlepší (shodné) varianty, contenders … varianty, které nelze vyloučit
+    variants       … vzorce variant s rolí: doporučeno / nejlepší / kandidát / horší
+    profiles       … hranice zlomu podle jedné neznámé (Kč/den), conditions … podmínky dvojic (víc neznámých)
+    missing        … neznámé, na kterých rozhodnutí závisí; blocking … chybějící základní / neplatné údaje
+    """
+    kind = VERDICT_KIND.get(g["verdict"], "undecided")
+    base = dict(verdict=g["verdict"], kind=kind, requests=list(g["requests"]), text=g["text"])
+    if g["verdict"] == pl.ALL_FIT or not g.get("candidates"):
+        return dict(base, choice=None, best=[], contenders=[], variants=[], others_total=0, profiles=[],
+                    conditions=[], missing=[], blocking=[], scenarios=[])
+    forms = ef.group_formulas(model, p, g)
+    unknowns = {k: u for c in forms.values() for k, u in c.unknowns.items()}
+    choice = g.get("choice")
+    best = [tuple(v) for v in g.get("best", [])]
+    contenders = [tuple(v) for v in g.get("contenders", [])]
+
+    def role(v):
+        if choice is not None and v == tuple(choice):
+            return "doporučeno"
+        if v in best:
+            return "nejlepší"
+        if v in contenders:
+            return "kandidát"
+        return "horší"
+    order = {"doporučeno": 0, "nejlepší": 1, "kandidát": 2, "horší": 3}
+
+    def score(v):
+        c = forms[v]
+        return max(f.known for f in c.scenarios.values()) if c.valid else float("-inf")
+    ranked = sorted(forms, key=lambda v: (order[role(v)], -score(v), len(v), v))
+    main = [v for v in ranked if role(v) != "horší" or v == pl.NOTHING]
+    others = [v for v in ranked if v not in main]
+    variants = [_variant_plain(v, forms[v], role(v)) for v in main + others[:MAX_OTHER_VARIANTS]]
+
+    profiles = []
+    for item in g.get("profiles", []):
+        prof = item["profile"]
+        profiles.append(dict(
+            scenario=item["scenario"], scenario_label=ef.SCENARIO_LABEL.get(item["scenario"], item["scenario"]),
+            unknown=_unknown_info(prof["key"], unknowns) if prof["key"] is not None else None,
+            unit=_unknown_unit(prof["key"]) if prof["key"] is not None else "",
+            segments=[dict(start=float(lo), end=None if hi is None else float(hi), winners=list(w))
+                      for lo, hi, w in prof["segments"]],
+            at_zero=list(prof["at_zero"])))
+    conditions = []
+    for c in g.get("pair_conditions", []):
+        conditions.append(dict(
+            scenario=c["scenario"], scenario_label=ef.SCENARIO_LABEL.get(c["scenario"], c["scenario"]),
+            a=list(c["a"]), b=list(c["b"]), a_label=ef.variant_label(c["a"]), b_label=ef.variant_label(c["b"]),
+            status=c["status"], winner=c["winner"], strict=bool(c["strict"]),
+            known=None if c["known"] is None else float(c["known"]), unit=KC,
+            terms=[dict(_unknown_info(k, unknowns), coef=float(x), coef_unit=_coef_unit(k)) for k, x in c["terms"]]))
+    # chybějící údaje, na kterých rozhodnutí závisí: neznámé ve vzorcích nevyloučených variant
+    missing, seen = [], set()
+    for v in (contenders if kind in ("conditional", "undecided") else []):
+        for f in forms[v].scenarios.values() if forms[v].valid else ():
+            for k, _ in f.terms:
+                if k not in seen:
+                    seen.add(k)
+                    missing.append(_unknown_info(k, unknowns))
+    scen = sorted({sc for v in contenders for sc in (forms[v].scenarios if forms[v].valid else {})} - {ef.ONLY})
+    if scen and kind in ("conditional", "undecided"):
+        missing.append(dict(key=["direct_cost_includes_machines"], kind=ef.DATA, unit="",
+                            label="zda přímé náklady zakázek obsahují vlastní stroje"))
+    blocking = list(dict.fromkeys(r for v in forms.values() for r in v.invalid))
+    if kind == "undecided":
+        blocking += [x for x in dict.fromkeys(
+            t["label"] for v in contenders if forms[v].valid
+            for f in forms[v].scenarios.values() for t in [_unknown_info(k, unknowns) for k, _ in f.terms]
+            if t["kind"] != ef.RATE) if x not in blocking]
+    return dict(base, choice=None if choice is None else list(choice), best=[list(v) for v in best],
+                contenders=[list(v) for v in contenders], variants=variants, others_total=len(others),
+                profiles=profiles, conditions=conditions, missing=missing, blocking=blocking, scenarios=scen)
+
+
+
 def evaluate(model: dm.DataModel, job_starts: dict, requests: list) -> dict:
     """Spustí planner.plan a vrátí výsledek jen z obyčejných typů (bez objektů plánovače)."""
     p = pl.plan(model, job_starts, [to_request(r) for r in requests])
@@ -234,10 +446,13 @@ def evaluate(model: dm.DataModel, job_starts: dict, requests: list) -> dict:
                                                    + (f" – už přetíženo o {-int(free)} ks" if free < 0 else "")})
                       for t, d, free, need, c in e["problems"]],
             alternatives=[a["text"] for a in e["alternatives"]],
-            note=e["note"]))
+            note=e["note"],
+            # E2.5c 4A: strukturovaná ekonomika požadavku (jen proveditelné; jinak None)
+            economy=request_economy(model, r) if e["operational"] == pl.OK_ALONE else None))
     cards.sort(key=lambda c: (not c["own"], c["ref"]))      # nejdřív požadavky uživatele
     groups = [dict(requests=list(g["requests"]), verdict=g["verdict"], text=g["text"],
-                   options=[list(o) for o in g["options"]], choice=list(g["choice"]) if g.get("choice") else None)
+                   options=[list(o) for o in g["options"]], choice=list(g["choice"]) if g.get("choice") else None,
+                   economy=group_economy(model, p, g))
               for g in p.groups if set(g["requests"]) & set(mine)]
     types = {t for r in requests for t, _ in r["needs"]}
     lo = min((r["start"] for r in requests), default=None)

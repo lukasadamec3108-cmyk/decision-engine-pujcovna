@@ -204,6 +204,15 @@ nikdy se nenahradí nulou. Koeficienty se zjišťují přímo z `economics.py` (
   údaj požadavku (tržba, přímé náklady, cena, sazba penále) nebo neplatný údaj,
 - varianta „nepřijmout nic“ má vzorec přesně 0 Kč.
 
+### Strukturovaný výstup pro záložku 8 (`planner_view.evaluate`, E2.5c krok 4A)
+
+Karta i skupina soupeřících požadavků nesou klíč `economy` (jen obyčejné typy – bezpečné pro mezipaměť):
+verdikt (`kind`: recommend / none_pays / equal / conditional / undecided), doporučená varianta
+(`choice`; `[]` = „nepřijmout nic“), shodné a nevyloučené varianty, vzorce příspěvků po scénářích
+(`known` v Kč + členy `coef × neznámá` s jednotkou Kč/den), hranice zlomu (`profiles`, Kč/den),
+podmínky dvojic při více neznámých (`conditions`) a chybějící údaje. Vstupy požadavku mají stav
+**zadáno** (i skutečná 0), **nezadáno** (nikdy 0) nebo **neplatné**. Zobrazení se v kroku 4A nemění.
+
 ## Obnovení dat v běžící aplikaci
 
 Aplikace drží načtená data v mezipaměti. Klíčem je otisk obsahu všech CSV souborů v této složce
