@@ -228,6 +228,69 @@ TAB_CSS = """
 </style>
 """
 
+# UX/UI 2 – pilotní vizuální pravidla jen pro záložku 7. Vše je vymezené obalem .st-key-cap_tab,
+# takže se nedotkne ostatních záložek (ani kalendáře v záložce 8, který používá stejné CSS kalendáře).
+# Mění se jen vzhled: velikosti písma, mezery, rozložení karet; žádné texty ani výpočty.
+PILOT_CSS = """
+<style>
+.st-key-cap_tab .cap-title{font-size:1.25rem;font-weight:700;color:#1F2933;margin:.2rem 0 .35rem 0;line-height:1.3;padding:0}
+.st-key-cap_tab .cap-intro{color:#1F2933;font-size:.97rem;line-height:1.5;margin:0 0 .6rem 0}
+.st-key-cap_tab h3{font-size:1.05rem !important;font-weight:700;margin:1.4rem 0 .5rem 0 !important;padding:0 !important}
+.st-key-cap_tab .cap-scope{display:flex;flex-wrap:wrap;align-items:baseline;gap:.25rem .6rem;font-size:.875rem;color:#374151;
+  background:#F6F7F9;border:1px solid #E3E6EA;border-radius:8px;padding:.45rem .75rem;margin:.1rem 0 .6rem 0}
+.st-key-cap_tab .cap-scope b{color:#1F2933}
+.st-key-cap_tab .cap-scope .cap-scope-hint{color:#4B5563}
+.st-key-cap_tab .cap-flt{font-size:.8125rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#4B5563;margin:0 0 .1rem 0}
+.st-key-cap_tab .de-kpis{margin-bottom:.9rem}
+.st-key-cap_tab .de-kpi .lbl{font-size:.8125rem}
+.st-key-cap_tab .de-kpi .sub{font-size:.875rem}
+.st-key-cap_tab .de-status{font-size:.8125rem}
+.st-key-cap_tab .cc-legend{font-size:.8125rem;color:#374151;gap:.35rem .9rem;margin:.6rem 0 .3rem 0}
+.st-key-cap_tab .cc-wrap table{font-size:.8125rem}
+.st-key-cap_tab .cc-wrap thead th small{font-size:.75rem}
+.st-key-cap_tab .cc-type small{font-size:.75rem}
+.st-key-cap_tab .cc-num small{font-size:.75rem}
+@media (min-width:641px) and (max-width:900px){
+  .st-key-cap_tab .de-kpis{grid-template-columns:repeat(3,minmax(0,1fr));gap:.6rem}
+  .st-key-cap_tab .de-kpi{padding:.75rem .85rem}
+  .st-key-cap_tab .de-kpi .val{font-size:1.45rem;overflow-wrap:anywhere}
+}
+@media (max-width:640px){
+  .st-key-cap_tab .cap-title{font-size:1.15rem}
+  .st-key-cap_tab .de-kpis{gap:.5rem}
+  .st-key-cap_tab .de-kpi{padding:.65rem .85rem}
+  .st-key-cap_tab .de-kpi .val{font-size:1.45rem;margin:.2rem 0}
+  .st-key-cap_tab .cc-wrap table{font-size:.75rem}
+  .st-key-cap_tab .cc-wrap .cc-type{font-size:.75rem;min-width:96px;max-width:104px}
+  .st-key-cap_tab .cc-type small,.st-key-cap_tab .cc-wrap thead th small{font-size:.75rem}
+}
+</style>
+"""
+
+STATUS_SYMBOL = {"good": "✓", "bad": "✕", "warn": "?"}
+
+
+def status_text(text: str, tone: str) -> str:
+    """Text štítku stavu se symbolem, aby význam nenesla jen barva (✓ / ✕ / ?)."""
+    sym = STATUS_SYMBOL.get(tone, "")
+    return f"{sym} {text}" if sym else text
+
+
+def scope_html(start: int, end: int, types: list, all_types: list, names: dict, plan_start=None) -> str:
+    """Řádek „Platí pro“ nad souhrnnými ukazateli: zvolené období a stroje (jen popis filtrů)."""
+    period = f"den {start}" if start == end else f"dny {start}–{end}"
+    if plan_start is not None:
+        dates = (day_label(start, plan_start, short=True) if start == end
+                 else f"{day_label(start, plan_start, short=True)} – {day_label(end, plan_start, short=True)}")
+        period += f" ({dates})"
+    if list(types) == list(all_types):
+        machines = f"všechny typy strojů ({len(all_types)})"
+    else:
+        machines = ", ".join(names.get(t, t) for t in types)
+    return (f'<div class="cap-scope"><span>Platí pro: <b>{html.escape(period)}</b> · '
+            f'<b>{html.escape(machines)}</b></span>'
+            '<span class="cap-scope-hint">mění se podle filtrů níže</span></div>')
+
 
 def legend_html() -> str:
     items = [f'<span><i style="background:{COLORS[k]}"></i>{LABELS[k]}</span>'
