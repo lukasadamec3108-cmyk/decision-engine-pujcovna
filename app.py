@@ -1,3 +1,4 @@
+import hashlib
 import html
 import importlib
 import os
@@ -2632,6 +2633,36 @@ def dp_clear() -> None:
     st.session_state["dp_requests"] = []
 
 
+@st.fragment
+def dp_economic_comparison(panels: list, sig: str) -> None:
+    """Panely „Ekonomické porovnání“ s volitelnou simulací „Co kdyby“ (E2.5c 4D-B).
+
+    Fragment: změna hypotetické hodnoty přepočítá jen tuto část (graf se značkou a rámeček simulace).
+    Jedna nezadaná sazba (stejné pole i typ stroje, jediný scénář) = jedna společná hodnota pro všechny
+    skupiny. Skutečné doporučení, karty, data ani rezervace se nemění.
+    """
+    shown = set()
+    for panel in panels:
+        spec = panel.get("sim")
+        key = pv.sim_key(spec, sig) if spec and spec["available"] else None
+        x = st.session_state.get(key) if key else None
+        result = pv.simulate(spec, x) if key and x is not None else None
+        st.markdown(pv.panel_html(panel, result), unsafe_allow_html=True)
+        if key is None:
+            continue
+        if key not in shown:
+            shown.add(key)
+            st.number_input(
+                f"Co kdyby – zkuste předpoklad: {spec['unknown']}", min_value=0.0, value=None, step=100.0,
+                format="%.2f", key=key,
+                help="Prázdné pole = žádná simulace. Zadaná 0 je platná hypotetická hodnota. Počítá se s hodnotou "
+                     "na haléře, jak ji pole ukazuje. Nic se neukládá a skutečné doporučení se nemění.")
+        else:
+            ui.hint("Předpoklad pro tento náklad je společný se simulací výše – jde o stejný ekonomický parametr.")
+        if result is not None:
+            st.markdown(pv.sim_html(spec, result), unsafe_allow_html=True)
+
+
 with tab8:
     st.markdown("### Rozhodovací plánovač")
     st.markdown(pv.CSS, unsafe_allow_html=True)
@@ -2776,8 +2807,14 @@ with tab8:
 
         res = planner_result(data_version, code_version, tuple(sorted(dp_starts.items())), pv.freeze(dp_requests))
         st.markdown("#### Výsledek")
-        for panel in res["panels"]:                     # E2.5c 4C: ekonomické porovnání nad kartami
-            st.markdown(pv.panel_html(panel), unsafe_allow_html=True)
+        # E2.5c 4D-B: „Co kdyby“ – hypotetická hodnota se drží jen v relaci; klíč obsahuje otisk dat
+        # a požadavků, takže se po jejich změně hodnota sama vymaže (staré klíče se odstraní)
+        dp_sig = hashlib.sha256(repr((data_version, sorted(dp_starts.items()), pv.freeze(dp_requests)))
+                                .encode("utf-8")).hexdigest()[:12]
+        dp_sim_keys = {pv.sim_key(p["sim"], dp_sig) for p in res["panels"] if p.get("sim") and p["sim"]["available"]}
+        for k in [k for k in st.session_state if str(k).startswith(pv.SIM_KEY_PREFIX) and k not in dp_sim_keys]:
+            del st.session_state[k]
+        dp_economic_comparison(res["panels"], dp_sig)
         for card in res["cards"]:
             st.markdown(pv.card_html(card, dp_names), unsafe_allow_html=True)
             if card["blocking"]:
