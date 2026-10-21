@@ -176,7 +176,16 @@ vyplatí“ vodorovný pruh – úseky s nejvýhodnější variantou v pořadí 
 „nepřijmout nic“ má šrafovaný úsek a popisek „(0 Kč)“, varianty, které nejsou nejvýhodnější nikdy, jsou
 uvedené pod grafem. Úseky nejsou v měřítku (rozhodují uvedené hodnoty), barva nikdy nenese informaci
 sama. Graf vzniká jen z již vypočtených hranic a jen při jedné neznámé; při více neznámých se nezobrazí
-(s vysvětlením). Na úzkém displeji se pruh skládá svisle. Slovní pásma zůstávají pod grafem. Existující zakázka slouží jen jako
+(s vysvětlením). Na úzkém displeji se pruh skládá svisle. Slovní pásma zůstávají pod grafem.
+
+**„Co kdyby“** (E2.5c krok 4D-B, `planner_view.sim_spec` / `simulate` / `sim_html`): pod panelem s podmíněným
+výsledkem lze zadat hypotetickou hodnotu nezadaného nákladu (Kč/den; prázdné = žádná simulace, 0 = platná
+hypotetická nula). Příspěvek varianty je dosazení do vzorce plánovače (economics.py), porovnávají se nevyloučené
+varianty a „nepřijmout nic“; přesná rovnost podle výpočtu, rozdíl pod 1 Kč v haléřích s upozorněním
+„prakticky stejné“; poloha vůči hranicím zlomu a značka v grafu. Nabízí se jen při jedné nezadané sazbě
+a jednoznačném nastavení „stroje v přímých nákladech“; stejná sazba stejného stroje má jednu společnou
+hodnotu. Výsledek je v odděleném rámečku „hypotetický výpočet (není doporučení)“ – skutečné doporučení,
+data ani rezervace se nemění, nic se neukládá; po změně dat nebo požadavků se hodnota vymaže. Existující zakázka slouží jen jako
 šablona nového požadavku. Nové požadavky nesmějí nést označení zakázek ani rezervací z dat.
 
 - **Potvrzené závazky** (potvrzené pronájmy, servis, potvrzené zakázky v aktuálním plánu záložky 6)

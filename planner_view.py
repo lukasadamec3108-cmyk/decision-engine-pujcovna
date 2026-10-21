@@ -852,6 +852,141 @@ def profile_chart(prof: dict, contenders: list) -> Optional[dict]:
                 summary=f"Nejvýhodnější varianta podle {_unknown_name(prof['unknown'])}: {summary}.")
 
 
+# ---------------------------------------------------------------------------
+# „Co kdyby“ (E2.5c krok 4D-B) – hypotetická hodnota JEDNOHO nezadaného nákladu
+# ---------------------------------------------------------------------------
+#
+# Nic se nepočítá znovu ani nerozhoduje jinak: příspěvek varianty při hypotetické hodnotě x je dosazení do
+# vzorce, který už plánovač spočítal z economics.py (known + coef × x). Simulace se nabízí jen tam, kde je
+# výsledek „Podmíněné“, rozhoduje přesně jedna nezadaná sazba a nastavení „stroje v přímých nákladech“ je
+# jednoznačné (jediný scénář). Nejlepší varianta je při každé hodnotě x mezi nevyloučenými variantami
+# (ověřeno testy plánovače), proto stačí porovnat je a „nepřijmout nic“. Skutečné doporučení se nemění,
+# nic se neukládá.
+
+SIM_MULTI = ("Simulace „Co kdyby“ zatím není k dispozici: rozhoduje víc nezadaných údajů najednou a jedna "
+             "hypotetická hodnota by výsledek neurčila.")
+SIM_SETTING = ("Simulace „Co kdyby“ zatím není k dispozici: není zadáno, zda přímé náklady zakázek obsahují "
+               "vlastní stroje – hypotetický výsledek by stál na nejasném předpokladu.")
+SIM_TITLE = "Co kdyby – hypotetický výpočet (není doporučení)"
+SIM_NOTE = ("Jde jen o hypotézu pro zadanou hodnotu: skutečné doporučení, data ani rezervace se nemění "
+            "a nic se neukládá.")
+SIM_EPS = 1e-6                                     # přesná rovnost podle výpočtu (ne podle zaokrouhlení)
+
+
+def sim_spec(ge: dict) -> Optional[dict]:
+    """Zda a pro jakou neznámou lze nabídnout „Co kdyby“; None = výsledek není podmíněný (není co simulovat)."""
+    if ge["kind"] != "conditional":
+        return None
+    if ge["scenarios"]:
+        return dict(available=False, reason=SIM_SETTING)
+    rates = [m for m in ge["missing"] if m["kind"] == ef.RATE]
+    if len(ge["missing"]) != 1 or len(rates) != 1 or len(ge["profiles"]) != 1 or ge["profiles"][0]["unknown"] is None:
+        return dict(available=False, reason=SIM_MULTI)
+    key = rates[0]["key"]
+    prof = ge["profiles"][0]
+    variants = []
+    for v in ge["variants"]:
+        if not (v["nothing"] or v["role"] in ("doporučeno", "nejlepší", "kandidát")):
+            continue
+        c = v["contribution"]
+        if c["status"] == INVALID or len(c["scenarios"]) != 1:
+            return dict(available=False, reason=SIM_MULTI)
+        sc = c["scenarios"][0]
+        if any(t["key"] != key for t in sc["terms"]):     # každý vzorec smí záviset jen na této neznámé
+            return dict(available=False, reason=SIM_MULTI)
+        variants.append(dict(label=v["label"], refs=list(v["refs"]), nothing=v["nothing"], known=float(sc["known"]),
+                             coef=float(sum(t["coef"] for t in sc["terms"]))))
+    return dict(available=True, reason="", key=list(key), unknown=_unknown_name(rates[0]),
+                unknown_label=_plain_label(rates[0]["label"]), unit=KC_DEN, variants=variants,
+                boundaries=[dict(n=i + 1, at=float(b["at"]), winners=list(b["winners"]))
+                            for i, b in enumerate(prof["boundaries"])],
+                segments=[dict(start=seg["start"], end=seg["end"], winners=list(seg["winners"]), range=_span(seg))
+                          for seg in prof["segments"]])
+
+
+SIM_KEY_PREFIX = "dp_sim_"
+
+
+def sim_key(spec: dict, sig: str) -> str:
+    """Klíč hypotetické hodnoty v relaci: stejný nákladový parametr (pole + typ stroje) = stejný klíč.
+    Simulace je jen v jediném scénáři nastavení, takže stejný klíč znamená i stejný scénář.
+    sig = otisk dat a požadavků – po jejich změně vznikne nový klíč (hodnota se vymaže)."""
+    return SIM_KEY_PREFIX + "_".join(spec["key"]) + "_" + sig
+
+
+def _czk_exact(x: float) -> str:
+    text = f"{abs(x):,.2f}".replace(",", " ").replace(".", ",")
+    return ("−" if x < -SIM_EPS else "") + text + " Kč"
+
+
+def _gap(d: float) -> str:
+    return "méně než 0,01 Kč/den" if d < 0.005 else _rate(d)
+
+
+def simulate(spec: dict, x: float) -> dict:
+    """Příspěvky nevyloučených variant při hypotetické hodnotě x (Kč/den) a poloha x vůči hranicím zlomu."""
+    if not spec or not spec.get("available") or x is None or x < 0:
+        raise ValueError("Simulace není pro tuto skupinu dostupná nebo hodnota není platná.")
+    x = float(x)
+    vals = [(v, v["known"] + v["coef"] * x) for v in spec["variants"]]
+    top = max(val for _, val in vals)
+    winners = [v["label"] for v, val in vals if val >= top - SIM_EPS]
+    rest = [val for _, val in vals if val < top - SIM_EPS]
+    gap = top - max(rest) if rest else None
+    near = gap is not None and gap < 1.0                 # prakticky stejné: rozdíl pod 1 Kč
+    rows = []
+    for v, val in sorted(vals, key=lambda p: (-p[1], p[0]["label"])):
+        win = v["label"] in winners
+        rows.append(dict(label=v["label"], nothing=v["nothing"], value=val,
+                         amount=_czk_exact(val) if near else _czk(round(val)),
+                         tag=("vychází nejlépe" if len(winners) == 1 else "vychází stejně – nejlépe") if win else ""))
+    # poloha vůči hranicím zlomu (přesně v hranici / v úseku a vzdálenost k nejbližší hranici)
+    at = [b["at"] for b in spec["boundaries"]]
+    on = next((b for b in spec["boundaries"] if abs(x - b["at"]) <= SIM_EPS), None)
+    if on is not None:
+        position = dict(kind="boundary", n=on["n"], text=f"Hodnota leží přesně na hranici {on['n']} ({_rate(on['at'])}).")
+        segment = None
+    else:
+        segment = sum(1 for a in at if a < x)
+        seg = spec["segments"][segment]
+        below = [b for b in spec["boundaries"] if b["at"] < x]
+        above = [b for b in spec["boundaries"] if b["at"] > x]
+        near_b = min(below + above, key=lambda b: abs(b["at"] - x)) if at else None
+        text = f"Hodnota leží v úseku „{seg['range']}“"
+        if near_b is not None:
+            d = abs(near_b["at"] - x)
+            text += (f" – k hranici {near_b['n']} ({_rate(near_b['at'])}) zbývá {_gap(d)}"
+                     if near_b["at"] > x else f" – nad hranicí {near_b['n']} ({_rate(near_b['at'])}) o {_gap(d)}")
+        position = dict(kind="segment", index=segment, text=text + ".")
+    if len(winners) == 1 and near:
+        rival = next(v["label"] for v, val in sorted(vals, key=lambda p: -p[1]) if v["label"] not in winners)
+        verdict = (f"Prakticky stejné: {winners[0]} vychází lépe než {rival} jen o {_czk_exact(gap)}.")
+    elif len(winners) == 1:
+        verdict = f"Při tomto předpokladu vychází nejlépe {winners[0]}."
+    else:
+        verdict = f"Při tomto předpokladu vycházejí přesně stejně: {_and(winners)}."
+    return dict(x=x, x_text=_rate(x) + (" (hypotetická nula)" if x == 0 else ""), winners=winners, near=near,
+                gap=gap, rows=rows, verdict=verdict, position=position)
+
+
+def sim_html(spec: dict, result: dict) -> str:
+    """Rámeček „Co kdyby“ – vizuálně oddělený od skutečného doporučení (bez zelené a bez štítku Doporučeno)."""
+    t = lambda x: _h(_nowrap_amounts(x))
+    nb = lambda x: x.replace("-", "\u2011")              # názvy variant (FIKT-P07) se nelámou na spojovníku
+    verdict = t(result["verdict"])
+    for r in result["rows"]:
+        verdict = verdict.replace(_h(r["label"]), nb(_h(r["label"])))
+    rows = "".join(f'<div class="dp-sim-row{" win" if r["tag"] else ""}"><b>{nb(_h(r["label"]))}</b>'
+                   f'<span class="amt">{t(r["amount"])}</span>'
+                   + (f'<span class="dp-sim-win">◀ {_h(r["tag"])}</span>' if r["tag"] else "") + "</div>"
+                   for r in result["rows"])
+    return (f'<div class="dp-sim"><div class="dp-sim-t">{_h(SIM_TITLE)}</div>'
+            f'<div class="dp-sec">Předpoklad: {t(spec["unknown_label"])} = <b>{t(result["x_text"])}</b></div>'
+            f'<div class="dp-sim-v">{verdict}</div>{rows}'
+            f'<div class="dp-note">{t(result["position"]["text"])}</div>'
+            f'<div class="dp-note">{_h(SIM_NOTE)} Skutečné doporučení: {_h(EC_COND)}.</div></div>')
+
+
 def group_panel(ge: dict) -> Optional[dict]:
     """Obsah panelu „Ekonomické porovnání“ pro skupinu soupeřících požadavků (jen obyčejné typy)."""
     kind = ge["kind"]
@@ -948,7 +1083,7 @@ def group_panel(ge: dict) -> Optional[dict]:
              f"Požadavky {_and(ge['requests'])} soupeří o stejné stroje a současně se nevejdou – varianty se "
              "tentokrát ekonomicky neporovnávaly.")
     return dict(requests=list(ge["requests"]), kind=kind, badge=PANEL_BADGE[kind], headline=headline, why=why,
-                intro=intro,
+                intro=intro, sim=sim_spec(ge),
                 variants=[row(v) for v in shown], hidden=[row(v) for v in hidden],
                 hidden_total=ge["others_total"] - len([v for v in shown if v["role"] == "horší" and not v["nothing"]]),
                 conditions=conditions, missing=missing,
@@ -1105,6 +1240,16 @@ CSS = """
 .dp-bnd-v{font-size:.72rem;font-weight:700;color:#1F2933;white-space:nowrap;margin-top:.15rem}
 .dp-bnd-list{margin:.45rem 0 .1rem 1.1rem;padding:0}.dp-bnd-list li{font-size:.85rem}
 .dp-chart-n{font-size:.8rem;color:#4B5563;margin-top:.2rem}
+.dp-sim-tag{display:inline-block;margin-top:.25rem;font-size:.72rem;font-weight:700;color:#0F172A;background:#fff;
+  border:1px dashed #0F172A;border-radius:4px;padding:0 .3rem;white-space:nowrap}
+.dp-seg.sim{box-shadow:0 0 0 2px #0F172A inset}
+.dp-sim{border:2px dashed #64748B;border-radius:10px;padding:.7rem .9rem;margin:.2rem 0 .9rem 0;background:#F8FAFC;
+  overflow-wrap:break-word}
+.dp-sim-t{font-size:.8rem;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:.02em}
+.dp-sim-v{font-weight:700;color:#0F172A;margin:.3rem 0 .2rem 0}
+.dp-sim-row{display:flex;flex-wrap:wrap;gap:.1rem .5rem;align-items:baseline;padding:.2rem 0;border-top:1px solid #E5E7EB}
+.dp-sim-row b{min-width:7rem}.dp-sim-row .amt{flex:1 1 9rem;font-size:.9rem;color:#1F2933}
+.dp-sim-win{font-size:.78rem;font-weight:700;color:#0F172A}
 @media (max-width: 640px){
   .dp-bar{flex-direction:column}
   .dp-bnd{flex-direction:row;justify-content:flex-start;gap:.4rem;padding:.25rem 0 .25rem .6rem;min-width:0}
@@ -1155,19 +1300,24 @@ def card_html(card: dict, names: dict) -> str:
             f'<div class="dp-sec"><b>Ekonomika:</b> {_h(_nowrap_amounts(card["econ_why"]))}</div>{econ}</div>')
 
 
-def chart_html(chart: dict) -> str:
+def chart_html(chart: dict, marker: Optional[dict] = None) -> str:
     """Pruh hranic zlomu: úseky s nejvýhodnější variantou a očíslované hranice; text nese celou informaci,
-    barva jen pomáhá. Na úzkém displeji se pruh skládá svisle (CSS)."""
+    barva jen pomáhá. Na úzkém displeji se pruh skládá svisle (CSS).
+    marker … poloha hypotetické hodnoty z „Co kdyby“ (úsek nebo hranice) – jen popisek, úseky se nemění."""
     t = lambda x: _h(_nowrap_amounts(x))
+    tag = (f'<div class="dp-sim-tag">▼ předpoklad {t(marker["x_text"])}</div>' if marker else "")
     parts = []
     for i, seg in enumerate(chart["segments"]):
         if i > 0:
             b = chart["boundaries"][i - 1]
-            parts.append(f'<div class="dp-bnd" title="{t(b["value"] + ": " + b["text"])}">'
-                         f'<span class="dp-bnd-n">{b["n"]}</span><span class="dp-bnd-v">{t(b["value"])}</span></div>')
+            here = marker and marker["position"]["kind"] == "boundary" and marker["position"]["n"] == b["n"]
+            parts.append(f'<div class="dp-bnd{" sim" if here else ""}" title="{t(b["value"] + ": " + b["text"])}">'
+                         f'<span class="dp-bnd-n">{b["n"]}</span><span class="dp-bnd-v">{t(b["value"])}</span>'
+                         + (tag if here else "") + "</div>")
         cls = "dp-seg nothing" if seg["nothing"] else f'dp-seg c{seg["color"]}' + (" tie" if seg["tie"] else "")
-        parts.append(f'<div class="{cls}"><div class="dp-seg-name">{_h(seg["label"])}</div>'
-                     f'<div class="dp-seg-range">{t(seg["range"])}</div></div>')
+        here = marker and marker["position"]["kind"] == "segment" and marker["position"]["index"] == i
+        parts.append(f'<div class="{cls}{" sim" if here else ""}"><div class="dp-seg-name">{_h(seg["label"])}</div>'
+                     f'<div class="dp-seg-range">{t(seg["range"])}</div>' + (tag if here else "") + "</div>")
     items = "".join(f'<li><b>Hranice {b["n"]} – přesně {t(b["value"])}:</b> {_h(b["text"])}.'
                     + (f'<details><summary>Zobrazit všechny shodné varianty ({len(b["winners"])})</summary>'
                        f'{_h(", ".join(b["winners"]))}</details>' if b.get("others") else "") + "</li>"
@@ -1186,8 +1336,9 @@ def chart_html(chart: dict) -> str:
             + "".join(f'<div class="dp-chart-n">{t(x)}</div>' for x in tail) + "</div>")
 
 
-def panel_html(panel: dict) -> str:
-    """Panel „Ekonomické porovnání“ – bloky pod sebou (bez tabulek), funguje i na úzkém displeji."""
+def panel_html(panel: dict, sim_result: Optional[dict] = None) -> str:
+    """Panel „Ekonomické porovnání“ – bloky pod sebou (bez tabulek), funguje i na úzkém displeji.
+    sim_result … výsledek „Co kdyby“ (jen značka v grafu; skutečné doporučení se nemění)."""
     t = lambda x: _h(_nowrap_amounts(x))
 
     def var_rows(rows):
@@ -1216,7 +1367,7 @@ def panel_html(panel: dict) -> str:
             if block["title"]:
                 out.append(f'<div class="dp-sec"><b>{_h(block["title"])}:</b></div>')
             if block.get("chart"):
-                out.append(chart_html(block["chart"]))
+                out.append(chart_html(block["chart"], sim_result))
             elif block.get("chart_note"):
                 out.append(f'<div class="dp-note">{_h(block["chart_note"])}</div>')
             if block["lead"]:
@@ -1227,6 +1378,9 @@ def panel_html(panel: dict) -> str:
                            + "".join(f"<li>{t(x)}</li>" for x in block["more"]) + "</ul></details>")
         if any(b["break_even"] for b in panel["conditions"]):
             out.append(f'<div class="dp-note">{_h(BREAK_EVEN)}</div>')
+        sim = panel.get("sim")
+        if sim and not sim["available"]:
+            out.append(f'<div class="dp-note">{_h(sim["reason"])}</div>')
     if panel["missing"]:
         out.append('<div class="dp-h">Co doplnit</div><ul>' + "".join(f"<li>{t(x)}</li>" for x in panel["missing"])
                    + f'</ul><div class="dp-note">{_h(panel["missing_note"])}</div>')
