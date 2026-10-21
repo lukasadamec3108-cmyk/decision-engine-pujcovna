@@ -411,7 +411,7 @@ def check_request(cal: cp.Calendar, type_id: str, start: int, end: int, quantity
 # ---------------------------------------------------------------------------
 # Vše se počítá z denní tabulky capacity.daily_capacity (stejná jako pro kalendář).
 #
-# Kapacita = součet kusů k dispozici v jednotlivých dnech (kusodny). Každý den a typ stroje
+# Kapacita = součet kusů k dispozici v jednotlivých dnech (strojodny). Každý den a typ stroje
 # se rozdělí do právě jedné skupiny, takže se nic nezapočítá dvakrát:
 #   - běžný den (bez konfliktu): pronájem, vlastní zakázky, servis a volno přesně podle
 #     potvrzených nároků; při stavu „nelze určit“ (např. zakázka bez termínu) je zbytek místo
@@ -435,8 +435,8 @@ UTIL_COLORS = {**COLORS, "conflict": COLORS["over"], "unknown": "#9CA3AF"}
 def utilization_table(df: pd.DataFrame, names: dict, uncertain_types=()) -> pd.DataFrame:
     """Využití podle typu stroje z výstupu grid() / capacity.daily_capacity.
 
-    Sloupce: type_id, name, units_max (nejvíc kusů v jednom dni), capacity (kusodny),
-    rental, job, maintenance, conflict, unknown, free (kusodny; součet = capacity),
+    Sloupce: type_id, name, units_max (nejvíc kusů v jednom dni), capacity (strojodny),
+    rental, job, maintenance, conflict, unknown, free (strojodny; součet = capacity),
     productive_min, productive_max, util_min, util_max (%), conflict_days, excess_demand
     (nároky nad kapacitu), tentative (předběžné), capacity_known, rating.
     `uncertain_types` = typy, u nichž nelze spolehlivě určit počet kusů (Calendar.unknown_capacity).
@@ -513,7 +513,7 @@ def utilization_display(table: pd.DataFrame) -> pd.DataFrame:
         cap = f"{r.capacity}" if r.capacity_known else "nelze určit"
         out.append({
             "Stroj": r.name, "Kusů": r.units_max if r.capacity_known else "nelze určit",
-            "Kapacita (kusodny)": cap, "Pronájem": r.rental, "Vlastní zakázky": r.job, "Servis": r.maintenance,
+            "Kapacita (strojodny)": cap, "Pronájem": r.rental, "Vlastní zakázky": r.job, "Servis": r.maintenance,
             "Konflikt (nelze rozdělit)": r.conflict, "Nelze určit": r.unknown, "Volno": r.free,
             "Využití": share_text(r.util_min, r.util_max) if r.capacity_known else "nelze určit",
             "Konfliktní dny": r.conflict_days, "Hodnocení": r.rating,
@@ -522,7 +522,7 @@ def utilization_display(table: pd.DataFrame) -> pd.DataFrame:
 
 
 def utilization_figure(table: pd.DataFrame, fleet: dict):
-    """Vodorovný skládaný graf: rozdělení kapacity (% kusodnů) pro celou flotilu a každý typ.
+    """Vodorovný skládaný graf: rozdělení kapacity (% strojodnů) pro celou flotilu a každý typ.
 
     Typy s nejistým počtem kusů se nekreslí (jejich kapacitu nelze určit). Řazení podle jistého
     využití sestupně; využití (případně rozpětí) je součástí popisku řádku.
@@ -547,7 +547,7 @@ def utilization_figure(table: pd.DataFrame, fleet: dict):
             y=labels, x=shares, orientation="h", name=UTIL_LABELS[g], customdata=values,
             marker=dict(color=UTIL_COLORS[g], line=dict(color="#fff", width=1),
                         pattern=dict(shape=patterns.get(g, ""), fgcolor="#fff", size=6)),
-            hovertemplate="%{y}<br>" + UTIL_LABELS[g] + ": %{customdata} kusodnů (%{x:.1f} %)<extra></extra>",
+            hovertemplate="%{y}<br>" + UTIL_LABELS[g] + ": %{customdata} strojodnů (%{x:.1f} %)<extra></extra>",
         ))
     fig.update_layout(barmode="stack", bargap=0.3, legend_traceorder="normal")
     fig.update_xaxes(range=[0, 100], ticksuffix=" %")

@@ -259,13 +259,13 @@ def test_tab_in_app_full_flow_without_changing_data():
     click(at, "Přidat k porovnání")
     # E2.5c krok 3/4B: chybí variabilní náklad → podmíněně (hranice zlomu), žádné doporučení;
     # NP-2 (2 dny á 8 000) nevychází nejlépe při žádné výši nákladu, FIKT-P06 (5 dní) do 8 000 Kč/den
-    assert badges(at) == [(pv.OP_NO, None), (pv.OP_FITS, pv.EC_NO), (pv.OP_FITS, pv.EC_COND)]
+    assert badges(at) == [(pv.OP_NO, None), (pv.OP_FITS, pv.EC_WORSE), (pv.OP_FITS, pv.EC_COND)]
     assert any("Hranice zlomu" in m.value and "8 000 Kč/den" in m.value.replace("\u00a0", " ")
                for m in at.tabs[7].markdown)
     assert any("předběžná rezervace z dat – neruší se" in m.value for m in at.tabs[7].markdown)
     # 4) odebrání a vymazání
     at.button(key="dp_rm_NP-1").click().run()
-    assert badges(at) == [(pv.OP_FITS, pv.EC_NO), (pv.OP_FITS, pv.EC_COND)]
+    assert badges(at) == [(pv.OP_FITS, pv.EC_WORSE), (pv.OP_FITS, pv.EC_COND)]
     shown = " ".join(m.value for m in at.tabs[7].markdown).replace("\u00a0", " ")
     assert "nezamítá" in shown and "pod 8 000 Kč/den" in shown and "přesně 8 000 Kč/den" in shown
     assert panels(at) == [pv.EC_COND] and "Ekonomické porovnání" in shown            # E2.5c 4C: panel nad kartami

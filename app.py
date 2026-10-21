@@ -111,14 +111,14 @@ def load_data() -> pd.DataFrame:
 # ==================================================
 
 st.set_page_config(
-    page_title="Decision Engine – Investiční analýza půjčovny",
+    page_title="Decision Engine – Investice a provoz půjčovny",
     page_icon="📊",
     layout="wide",
 )
 ui.inject_css()
 
 APP_TITLE = "Decision Engine"
-APP_SUBTITLE = "Investiční analýza půjčovny"
+APP_SUBTITLE = "Investice a provoz půjčovny"
 APP_FOCUS = "Půjčovna malostrojů"
 DEMO_BADGE = "Ukázková data"
 
@@ -706,7 +706,7 @@ score_items = [
      _better_index(prob_loss_mini, prob_loss_dumper, False)),
     ("Velmi nepříznivý měsíc (VaR 5 %)", fmt_czk(var95_mini), fmt_czk(var95_dumper),
      _better_index(var95_mini, var95_dumper, True)),
-    ("Návratnost investice", _payback_text(roi_mini), _payback_text(roi_dumper),
+    ("Prostá návratnost investice", _payback_text(roi_mini), _payback_text(roi_dumper),
      _better_index(roi_mini, roi_dumper, False)
      if roi_mini is not None and roi_dumper is not None else None),
 ]
@@ -740,8 +740,8 @@ else:
     )
 if _points[1 - _rec_i] > _points[_rec_i]:
     _head += (
-        f"\n- V doplňkovém bodovém hodnocení vychází lépe {_other} "
-        f"({_points[1 - _rec_i]} : {_points[_rec_i]}) – je výhodnější v ukazatelích rizika "
+        f"\n- {_other} je ale lepší ve více doplňkových ukazatelích "
+        f"({_points[1 - _rec_i]} ze 4 oproti {_points[_rec_i]} ze 4) – v riziku "
         "nebo návratnosti. Zvažte, kolik rizika jste ochotni nést."
     )
 
@@ -756,14 +756,14 @@ ai_text = f"""
 **Srovnání ukazatelů:**
 {_rows}
 
-**Rozpětí měsíčního výsledku (simulace):**
+**Rozpětí měsíčního zisku stroje (simulace):**
 - Slabý měsíc (P10): {machine_1} {fmt_czk(p10_mini)} · {machine_2} {fmt_czk(p10_dumper)}
 - Typický měsíc (medián): {machine_1} {fmt_czk(p50_mini)} · {machine_2} {fmt_czk(p50_dumper)}
 - Dobrý měsíc (P90): {machine_1} {fmt_czk(p90_mini)} · {machine_2} {fmt_czk(p90_dumper)}
 
 **Co doplnit před nákupem:**
 - skutečnou poptávku po stroji {better_machine},
-- servisní náklady, odstávky a pojištění,
+- skutečné fixní a servisní náklady, odstávky a pojištění (výpočet zatím používá ukázkové hodnoty),
 - sezónnost (léto a zima).
 """
 
@@ -1177,23 +1177,28 @@ with tab1:
     ui.kpi_cards(
         [
             dict(
-                label="Očekávaný měsíční zisk",
+                label="Očekávaný měsíční zisk stroje",
                 value=fmt_czk(rec_profit),
                 negative=rec_profit < 0,
-                sub="Odhad průměrného měsíčního zisku.",
+                sub=f"Průměr {fmt_num(n)} simulovaných měsíců: tržby − fixní náklad − servis.",
             ),
             dict(
-                label="Riziko ztráty",
+                label="Šance ztrátového měsíce",
                 value=fmt_pct(rec_prob * 100),
                 chip=risk_status(rec_prob),
-                sub="Pravděpodobnost, že měsíc skončí ztrátou.",
+                sub="Podíl simulovaných měsíců, které skončí ztrátou.",
             ),
             dict(
                 label="Bod zvratu",
                 value=fmt_days(rec_be),
-                sub="Dní pronájmu měsíčně potřebných k pokrytí fixních nákladů.",
+                sub="Dní pronájmu měsíčně, které pokryjí fixní náklad (bez servisu a poruch).",
             ),
         ]
+    )
+    ui.hint(
+        "Zisk stroje nezahrnuje společné náklady půjčovny (prostory, mzdy, administrativa) ani daně. "
+        "Náklady jsou <b>ukázkové</b> – fixní náklad z postranního panelu, servis z ukázkových dat; "
+        "nejde o ověřené náklady firmy."
     )
 
     # --- C. Jednoduché srovnání obou strojů ---
@@ -1207,10 +1212,10 @@ with tab1:
     ui.compare_table(
         [machine_1, machine_2],
         [
-            ("Měsíční zisk",
+            ("Očekávaný měsíční zisk",
              [fmt_czk(expected_profit_mini), fmt_czk(expected_profit_dumper)],
              best_index(expected_profit_mini, expected_profit_dumper, True)),
-            ("Riziko ztráty",
+            ("Šance ztrátového měsíce",
              [fmt_pct(risk_loss_mini), fmt_pct(risk_loss_dumper)],
              best_index(prob_loss_mini, prob_loss_dumper, False)),
             ("Bod zvratu",
@@ -1232,15 +1237,17 @@ with tab1:
     if both_loss:
         steps = [
             "Za těchto předpokladů stroj nekupovat.",
-            f"Prověřit vyšší cenu nebo vytížení – minimum pro {better_machine} je "
-            f"{fmt_czk(rec_required)}/den.",
-            "Doplnit skutečné náklady a výpočet zopakovat.",
+            f"Prověřit vyšší cenu nebo vytížení – minimum pro {better_machine} při "
+            f"{expected_days} dnech pronájmu měsíčně je {fmt_czk(rec_required)}/den.",
+            "Nahradit ukázkové náklady skutečnými a výpočet zopakovat.",
         ]
     else:
         steps = [
-            f"Ověřit, že {better_machine} bude pronajatý alespoň {fmt_days(rec_be)} měsíčně.",
-            f"Zkontrolovat ceník: minimum {fmt_czk(rec_required)}/den, nyní {fmt_czk(rec_price)}/den.",
-            "Doplnit skutečné náklady a výpočet zopakovat.",
+            f"Ověřit, že {better_machine} bude pronajatý víc než {fmt_days(rec_be)} měsíčně "
+            "(bod zvratu – pokryje fixní náklad, servis už ne).",
+            f"Zkontrolovat ceník: minimum při {expected_days} dnech pronájmu měsíčně je "
+            f"{fmt_czk(rec_required)}/den (pokryje fixní náklad i servis), nyní {fmt_czk(rec_price)}/den.",
+            "Nahradit ukázkové náklady skutečnými a výpočet zopakovat.",
         ]
     st.markdown(
         '<div class="de-section">Co udělat dál</div><ol class="de-steps">'
@@ -1270,13 +1277,13 @@ with tab1:
                 f"přibližně v **{fmt_pct(rec_better_share * 100, 0)}** simulovaných měsíců."
             )
         col_s1, col_s2 = st.columns(2)
-        col_s1.metric(f"Bodové hodnocení – {machine_1}", f"{scorecard_mini} / 4")
-        col_s2.metric(f"Bodové hodnocení – {machine_2}", f"{scorecard_dumper} / 4")
+        col_s1.metric(f"{machine_1} – lepší ukazatele", f"{scorecard_mini} ze 4")
+        col_s2.metric(f"{machine_2} – lepší ukazatele", f"{scorecard_dumper} ze 4")
         ui.hint(
-            "Doplňkové body za vyšší očekávaný zisk, nižší šanci ztrátového měsíce, lepší velmi "
-            "nepříznivý měsíc (VaR 5 %) a rychlejší návratnost (jen když jsou oba stroje "
-            "v zisku). Při shodě bod nezíská žádný stroj. Doporučení určuje očekávaný zisk; "
-            "text níže sestavují pevná pravidla ze stejných výsledků."
+            "Doplňkové srovnání ve 4 ukazatelích: vyšší očekávaný zisk, nižší šance ztrátového měsíce, "
+            "lepší velmi nepříznivý měsíc (VaR 5 %) a kratší návratnost (jen když oba stroje vydělávají). "
+            "Při shodě nezíská bod nikdo. O doporučení rozhoduje jen očekávaný zisk; text níže "
+            "sestavují pevná pravidla ze stejných výsledků."
         )
         st.markdown(ai_text)
 
@@ -1302,12 +1309,14 @@ with tab1:
             "Bod zvratu na hlavní stránce počítá jen s fixními náklady (fixní náklad ÷ denní cena)."
         )
 
-    with st.expander(f"Rychlý odhad bez simulace ({expected_days} dní pronájmu)"):
+    with st.expander(f"Rychlý odhad bez simulace – přesně {expected_days} dní pronájmu"):
         col_q1, col_q2 = st.columns(2)
-        col_q1.metric(f"{machine_1} – měsíční výsledek", fmt_czk(expected_profit_mini_real))
-        col_q2.metric(f"{machine_2} – měsíční výsledek", fmt_czk(expected_profit_dumper_real))
+        col_q1.metric(f"{machine_1} – zisk při {expected_days} dnech", fmt_czk(expected_profit_mini_real))
+        col_q2.metric(f"{machine_2} – zisk při {expected_days} dnech", fmt_czk(expected_profit_dumper_real))
         ui.hint(
-            "Denní cena × počet dní − fixní náklad − průměrný servis. "
+            f"Jiný výpočet než očekávaný zisk výše: ceníková cena × {expected_days} dní − fixní náklad "
+            "− průměrný servis. Nepočítá s poruchami, kolísáním ceny a servisu ani s rozpětím dní podle "
+            f"scénáře trhu (simulace: {min_days}–{max_days} dní), proto vychází jinak. "
             "Počet dní změníte v postranním panelu v „Pokročilém nastavení“."
         )
         if expected_profit_mini_real < 0 and expected_profit_dumper_real < 0:
@@ -1343,7 +1352,8 @@ with tab2:
     st.markdown("### Jak mohou vypadat jednotlivé měsíce")
     st.markdown(
         f'<div class="de-intro">Simulace {fmt_num(n)} možných měsíců ukazuje, jak se může měnit '
-        "zisk nebo ztráta při různém vytížení a nákladech.</div>",
+        "měsíční zisk stroje (tržby − fixní náklad − servis) při různém počtu dní pronájmu, poruchách, "
+        "ceně a servisních nákladech. Náklady jsou ukázkové.</div>",
         unsafe_allow_html=True,
     )
 
@@ -1356,8 +1366,8 @@ with tab2:
                     ("Slabý měsíc (P10)", "1 z 10 měsíců dopadne hůř", fmt_czk(p10), "", p10 < 0),
                     ("Typický měsíc (medián)", "polovina měsíců dopadne lépe", fmt_czk(p50), "", p50 < 0),
                     ("Dobrý měsíc (P90)", "1 z 10 měsíců dopadne lépe", fmt_czk(p90), "", p90 < 0),
-                    ("Průměr všech měsíců", "", fmt_czk(mean), "", mean < 0),
-                    ("Podíl ztrátových měsíců", "", fmt_pct(prob * 100), loss_share_text(prob), False),
+                    ("Průměr všech měsíců", "= očekávaný měsíční zisk", fmt_czk(mean), "", mean < 0),
+                    ("Šance ztrátového měsíce", "", fmt_pct(prob * 100), loss_share_text(prob), False),
                 ],
             )
             for name, p10, p50, p90, mean, prob in (
@@ -1395,7 +1405,7 @@ with tab2:
     )
 
     ui.insight(
-        f"Pravděpodobnost, že <b>{machine_2}</b> dosáhne vyššího výsledku než "
+        f"Pravděpodobnost, že <b>{machine_2}</b> dosáhne v jednom měsíci vyššího zisku než "
         f"<b>{machine_1}</b>, je <b>{fmt_pct(prob_dumper_better * 100)}</b>."
     )
 
@@ -1488,7 +1498,7 @@ with tab3:
             tone="bad",
         )
 
-    st.markdown("### Riziko vs. výnos")
+    st.markdown("### Riziko a očekávaný zisk")
     fig_rr = go.Figure()
     # Bod s vyšším rizikem (vpravo) má název vlevo, aby se na úzkém displeji vešel do grafu.
     right_name = machine_1 if rr_x1 > rr_x2 else machine_2
@@ -1552,9 +1562,10 @@ with tab4:
     # --- Co nejvíc mění měsíční zisk ---
     st.markdown("### Co nejvíc mění měsíční zisk")
     st.markdown(
-        '<div class="de-intro">Graf ukazuje, jak moc se změní měsíční zisk, když se jeden údaj '
+        '<div class="de-intro">Graf ukazuje, jak moc se změní měsíční zisk stroje, když se jeden údaj '
         "změní o 10 % nahoru nebo dolů a ostatní zůstanou stejné. Délka pruhu je rozdíl zisku "
-        "mezi variantou −10 % a +10 %: čím delší pruh, tím větší vliv.</div>",
+        "mezi variantou −10 % a +10 %: čím delší pruh, tím větší vliv. Počítá se rychlým odhadem "
+        "pro pevný počet dní, ne simulací.</div>",
         unsafe_allow_html=True,
     )
 
@@ -1696,7 +1707,7 @@ with tab4:
     )
 
     # --- Zisk podle počtu dní pronájmu ---
-    st.markdown("### Zisk podle počtu dní pronájmu")
+    st.markdown("### Kdy stroj pokryje fixní náklad")
     be_values = {machine_1: break_even_mini, machine_2: break_even_dumper}
     be_finite = {k: v for k, v in be_values.items() if np.isfinite(v)}
     # Popisky míří od bodů ven (levý bod doleva nahoru, pravý doprava dolů), kde nevedou čáry.
@@ -1708,7 +1719,7 @@ with tab4:
             go.Scatter(
                 x=days_grid, y=curve, mode="lines", name=name,
                 line=dict(color=MACHINE_COLOR[name], width=3),
-                hovertemplate="%{x} dní → %{y:,.0f} Kč<extra>" + name + "</extra>",
+                hovertemplate="%{x} dní → po fixním nákladu %{y:,.0f} Kč<extra>" + name + "</extra>",
             )
         )
     for name, be in be_finite.items():
@@ -1728,14 +1739,14 @@ with tab4:
         )
     fig_be.add_hline(y=0, line=dict(color=ui.INK, dash="dash", width=1.5))
     fig_be.update_xaxes(title_text="Počet dní pronájmu za měsíc", dtick=5)
-    fig_be.update_yaxes(title_text="Měsíční zisk / ztráta (Kč)", tickformat=",.0f")
+    fig_be.update_yaxes(title_text="Tržby − fixní náklad (Kč/měsíc)", tickformat=",.0f")
     ui.readable_axes(ui.style_fig(fig_be, height=450))
     fig_be.update_layout(margin=dict(t=96))  # místo pro ikony grafu nad legendou
     chart(fig_be)
     ui.hint(
-        "Čárkovaná vodorovná čára je nulový zisk. Body na ní označují bod zvratu – od tohoto "
-        "počtu dní stroj pokryje fixní náklad. <b>Zjednodušený výpočet:</b> denní cena × počet dní − fixní náklad, "
-        "bez servisních nákladů a poruch. Skutečný bod zvratu je proto o něco vyšší."
+        "Graf neukazuje zisk, ale tržby po odečtení fixního nákladu: denní cena × počet dní − fixní náklad, "
+        "<b>bez servisních nákladů a poruch</b>. Body na čárkované nule jsou bod zvratu – od tohoto počtu "
+        "dní stroj pokryje fixní náklad. Po odečtení servisu je potřeba dní o něco víc."
     )
 
     def be_days(be: float):
@@ -1772,8 +1783,8 @@ with tab4:
     # --- Mapa ziskovosti ---
     with st.expander("Mapa ziskovosti – kombinace ceny a počtu dní"):
         st.markdown(
-            f'<div class="de-intro">Měsíční zisk stroje <b>{machine_1}</b> pro různé denní ceny '
-            "(60–140 % ceníku) a počty dní pronájmu.</div>",
+            f'<div class="de-intro">Tržby po odečtení fixního nákladu (bez servisu) stroje <b>{machine_1}</b> '
+            "pro různé denní ceny (60–140 % ceníku) a počty dní pronájmu.</div>",
             unsafe_allow_html=True,
         )
         fig_heat = go.Figure(
@@ -1781,11 +1792,11 @@ with tab4:
                 x=days_range, y=price_range, z=profit_matrix, zmid=0,
                 colorscale=[[0, ui.BAD], [0.5, "#F1F3F5"], [1, ui.BLUE]],
                 colorbar=dict(
-                    title=dict(text="Zisk / ztráta (Kč)", side="top"),
+                    title=dict(text="Tržby − fixní náklad (Kč)", side="top"),
                     orientation="h", y=-0.3, yanchor="top", x=0, xanchor="left",
                     len=1, thickness=12, tickformat=",.0f", nticks=5,
                 ),
-                hovertemplate="%{x} dní, %{y:,.0f} Kč/den<br>Zisk %{z:,.0f} Kč<extra></extra>",
+                hovertemplate="%{x} dní, %{y:,.0f} Kč/den<br>Po fixním nákladu %{z:,.0f} Kč<extra></extra>",
             )
         )
         fig_heat.add_trace(
@@ -1809,7 +1820,7 @@ with tab4:
                     textfont=dict(size=13, color=ui.INK), cliponaxis=False,
                     hovertemplate=(
                         f"Vaše nastavení: {days_text}, {fmt_czk(avg_daily_mini)}/den"
-                        f"<br>Zisk {fmt_czk(profit_curve_mini[expected_days])}<extra></extra>"
+                        f"<br>Po fixním nákladu {fmt_czk(profit_curve_mini[expected_days])}<extra></extra>"
                     ),
                 )
             )
@@ -1818,14 +1829,14 @@ with tab4:
         chart(ui.readable_axes(ui.style_fig(fig_heat, height=470, legend=False)))
         if profit_matrix.max() <= 0:
             ui.insight(
-                "V zobrazeném rozsahu ceny a počtu dní není žádná zisková kombinace.",
+                "V zobrazeném rozsahu ceny a počtu dní tržby nikde nepokryjí ani fixní náklad.",
                 tone="bad",
             )
         ui.explain(
             [
                 ("Jak mapu číst",
                  "Každé políčko je jedna kombinace: vodorovně počet dní pronájmu za měsíc, "
-                 "svisle cena za den. <b>Modrá</b> znamená zisk, <b>červená</b> ztrátu. "
+                 "svisle cena za den. <b>Modrá</b> = tržby pokryjí fixní náklad, <b>červená</b> = nepokryjí. "
                  "Čím sytější barva, tím větší částka."),
                 ("Přerušovaná čára",
                  "Hranice nulového zisku – tržby přesně pokryjí fixní náklad. Vpravo a nad "
@@ -1868,7 +1879,10 @@ with tab5:
     st.markdown(
         '<div class="de-intro">Aplikace projde všechny kombinace strojů, které se vejdou do '
         "rozpočtu, a vybere tu s nejvyšším očekávaným měsíčním provozním ziskem. Pokud se "
-        "žádný nákup nevyplatí, doporučí nic nekupovat.</div>",
+        "žádný nákup nevyplatí, doporučí nic nekupovat. <b>Jiný výpočet než záložky 1–4:</b> "
+        "počítá s fixními náklady jednotlivých strojů z ukázkových dat (ne s fixním nákladem "
+        "z postranního panelu) a s průměrnou poptávkou bez simulace – částky za stejný stroj "
+        "se proto liší.</div>",
         unsafe_allow_html=True,
     )
 
@@ -1895,16 +1909,17 @@ with tab5:
                 dict(label="Celková investice", value=fmt_czk(pb["investment"]),
                      sub=f"zbývá {fmt_czk(budget - pb['investment'])} z rozpočtu"),
                 dict(label="Očekávaný měsíční provozní zisk", value=fmt_czk(pb["profit"]),
-                     sub=f"tržby {fmt_czk(pb['revenue'])} − náklady {fmt_czk(pb['costs'])}"),
+                     sub=f"tržby {fmt_czk(pb['revenue'])} − fixní náklady a servis {fmt_czk(pb['costs'])}"),
                 dict(label="Prostá návratnost", value=months_text(payback),
-                     sub="investice ÷ měsíční provozní zisk"),
+                     sub="investice ÷ měsíční provozní zisk, bez úroků a společných nákladů"),
             ]
         )
         stress = pf.profit_with_demand(df, pb["counts"], 0.8)
         ui.insight(
-            "Jde o <b>průměrný měsíc</b> při očekávané poptávce, ne o zaručený výsledek. "
-            f"Pokud by poptávka byla o 20&nbsp;% nižší, zisk této sestavy by klesl na "
-            f"<b>{fmt_czk(stress)}</b>.",
+            "Jde o <b>průměrný měsíc</b> při očekávané poptávce, ne o zaručený výsledek, a o provozní "
+            "zisk strojů bez společných nákladů půjčovny (prostory, mzdy, administrativa), úroků a daní. "
+            f"Pokud by poptávka byla o 20&nbsp;% nižší, provozní zisk této sestavy by klesl na "
+            f"<b>{fmt_czk(stress)}</b>. Další krok: ověřit skutečnou poptávku a náklady strojů.",
             tone="bad" if stress < 0 else "",
         )
 
@@ -2029,7 +2044,7 @@ with tab5:
                     "Poptávka (dny)": fmt_num(row["demand_days_mean"], 0),
                     "Tržby (Kč/měs.)": fmt_num(one["revenue"]),
                     "Náklady (Kč/měs.)": fmt_num(one["costs"]),
-                    "Zisk (Kč/měs.)": fmt_num(one["profit"]),
+                    "Provozní zisk (Kč/měs.)": fmt_num(one["profit"]),
                 }
             )
         st.dataframe(pd.DataFrame(unit_rows), hide_index=True, width="stretch")
@@ -2054,7 +2069,8 @@ with tab6:
     st.markdown(
         '<div class="de-intro">Aplikace rozvrhne 12 zakázek ze zásobníku (fiktivní data) tak, '
         "aby žádný stroj nebyl ve stejný den využit víckrát, než kolik je kusů, a aby byl "
-        "<b>zisk po penále co nejvyšší</b>.</div>",
+        "<b>zisk zakázek po penále co nejvyšší</b>. Plán hlídá kapacitu jen mezi vlastními "
+        "zakázkami – pronájmy strojů a servis zatím nezná (ty ukazuje záložka Kapacita strojů).</div>",
         unsafe_allow_html=True,
     )
 
@@ -2074,8 +2090,8 @@ with tab6:
 
     ui.kpi_cards(
         [
-            dict(label="Zisk po penále", value=fmt_czk(plan_sum["profit_after_penalty"]),
-                 sub=f"zisk {fmt_czk(plan_sum['profit'])} − penále {fmt_czk(plan_sum['penalty'])}",
+            dict(label="Zisk zakázek po penále", value=fmt_czk(plan_sum["profit_after_penalty"]),
+                 sub=f"zisk zakázek {fmt_czk(plan_sum['profit'])} − penále {fmt_czk(plan_sum['penalty'])}",
                  negative=plan_sum["profit_after_penalty"] < 0),
             dict(label="Zakázky po termínu", value=f"{plan_sum['late']} z {plan_sum['scheduled']}",
                  sub=f"penále celkem {fmt_czk(plan_sum['penalty'])}"),
@@ -2085,14 +2101,14 @@ with tab6:
     )
     if plan_result["optimal"]:
         ui.insight(
-            "Řešič <b>prokázal</b>, že při zadaných délkách zakázek, termínech a počtech strojů "
-            "nemá žádný jiný plán nižší celkové penále. Nejde o záruku – skutečné zakázky se "
+            "Výpočet <b>ověřil</b>, že při zadaných délkách zakázek, termínech a počtech strojů "
+            "neexistuje plán s nižším celkovým penále. Nejde o záruku – skutečné zakázky se "
             "mohou zdržet nebo změnit."
         )
     else:
         ui.insight(
-            "Zobrazený plán je <b>nejlepší nalezený</b>, optimalitu se v časovém limitu "
-            "nepodařilo prokázat.",
+            "Zobrazený plán je <b>nejlepší nalezený</b> – v časovém limitu se nepodařilo ověřit, "
+            "že lepší plán neexistuje.",
             tone="bad",
         )
     if plan_sum["waiting"]:
@@ -2115,7 +2131,7 @@ with tab6:
             ("Zisk po penále", [fmt_czk(old_sum["profit_after_penalty"]),
                                 fmt_czk(plan_sum["profit_after_penalty"])],
              1 if plan_sum["profit_after_penalty"] > old_sum["profit_after_penalty"] else None),
-            ("Překročení kapacity strojů", [str(len(old_conflicts)), str(len(plan_conflicts))], None),
+            ("Kolize mezi zakázkami plánu", [str(len(old_conflicts)), str(len(plan_conflicts))], None),
         ],
         rec_index=1,
         tag="Nový",
@@ -2126,6 +2142,11 @@ with tab6:
         f"datech. Nový plán je o <b>{fmt_czk(gain)}</b> výhodnější jen díky jinému pořadí a "
         "využití volných dní strojů. Původní plán řadil zakázky podle skóre bez ohledu na "
         "termíny a stroj nevyužil, dokud nebyl volný pro další zakázku v pořadí."
+    )
+    ui.insight(
+        "<b>Kolize mezi zakázkami plánu</b> počítá jen překrytí vlastních zakázek navzájem. Pronájmy "
+        "strojů a servis plán nezná, takže s nimi se zakázky překrývat mohou – takové konflikty ukazuje "
+        "záložka <b>Kapacita strojů</b>. Další krok: zkontrolovat tam konfliktní dny a vyřešit je ručně."
     )
 
     # --- Harmonogram ---
@@ -2235,7 +2256,7 @@ with tab6:
     st.dataframe(detail, width="stretch", hide_index=True)
 
     # --- Vytížení strojů ---
-    st.markdown("### Vytížení strojů")
+    st.markdown("### Vytížení strojů zakázkami")
     machine_usage_df = sch.utilization(job_plan, machine_capacity)
     bottleneck_machine = machine_usage_df.iloc[0]["machine"]
     bottleneck_utilization = float(machine_usage_df.iloc[0]["utilization"])
@@ -2252,10 +2273,11 @@ with tab6:
         )
     )
     fig_usage.update_yaxes(autorange="reversed")
-    fig_usage.update_xaxes(title_text="Vytížení v plánu (%)", range=[0, 130])
+    fig_usage.update_xaxes(title_text="Vytížení zakázkami v plánu (%)", range=[0, 130])
     chart(ui.readable_axes(ui.style_fig(fig_usage, height=360, legend=False)))
     ui.hint(
-        f"Vytížení = obsazené dny stroje ÷ (počet kusů × délka plánu {fmt_days(plan_sum['length'], 0)}). "
+        f"Vytížení = dny stroje na zakázkách ÷ (počet kusů × délka plánu {fmt_days(plan_sum['length'], 0)}). "
+        "Pronájmy a servis nezahrnuje – celkovou obsazenost ukazuje záložka Kapacita strojů. "
         f"Nejvytíženější je <b>{bottleneck_machine}</b> ({fmt_pct(bottleneck_utilization, 0)})."
     )
 
@@ -2263,24 +2285,26 @@ with tab6:
         ui.explain(
             [
                 ("Cíl plánu",
-                 "Co nejvyšší zisk po penále. Tržba, náklady a zisk zakázky na pořadí nezávisí, "
+                 "Co nejvyšší zisk zakázek po penále. Tržba, náklady a zisk zakázky na pořadí nezávisí, "
                  "takže při plánování všech zakázek je to totéž jako co nejnižší celkové penále. "
                  "Při stejném penále se zakázky dokončí co nejdříve."),
                 ("Pojmy",
                  "<b>Tržba</b> = očekávaná tržba zakázky, <b>náklady</b> = přímé náklady zakázky "
                  "(z dat), <b>zisk</b> = tržba − náklady, <b>penále</b> = dny po termínu × denní "
-                 "penále, <b>zisk po penále</b> = zisk − penále."),
+                 "penále, <b>zisk po penále</b> = zisk − penále. Nejde o čistý zisk firmy: fixní náklady "
+                 "strojů a společné náklady půjčovny se neodečítají a data neuvádějí, zda přímé náklady "
+                 "zakázek obsahují náklady vlastních strojů."),
                 ("Stroje",
                  "Každá zakázka potřebuje po celou dobu všechny své stroje. V jednom dni lze stroj "
                  "použít tolikrát, kolik je kusů (vibrační deska 2 ks, ostatní 1 ks). Volné dny "
                  "stroje může využít kterákoli zakázka."),
                 ("Jak se plán hledá",
                  "Celočíselná optimalizace (SciPy, řešič HiGHS) projde všechny přípustné začátky "
-                 "zakázek. Pokud řešič optimum v časovém limitu neprokáže, aplikace to uvede."),
+                 "zakázek. Pokud v časovém limitu neověří, že lepší plán neexistuje, aplikace to uvede."),
                 ("Co model nezahrnuje",
                  "Víkendy a svátky, pozdější možný začátek zakázky, přejezdy a obsluhu strojů, "
-                 "pronájmy strojů mimo zakázky, nejistotu délky zakázek a riziko (priorita "
-                 "a riziko jsou jen informativní)."),
+                 "pronájmy strojů mimo zakázky, servisní odstávky, nejistotu délky zakázek a riziko "
+                 "(priorita a riziko jsou jen informativní)."),
             ]
         )
 
@@ -2320,8 +2344,9 @@ with tab7:
     st.markdown("### Kapacita strojů po dnech")
     st.markdown(cv.TAB_CSS, unsafe_allow_html=True)
     st.markdown(
-        '<div class="de-intro">Kolik kusů každého stroje je v jednotlivých dnech volných a co je drží – '
-        "pronájmy, vlastní zakázky podle plánu ze záložky 6 a servis. Pronájmy a servis jsou "
+        '<div class="de-intro">Kolik kusů každého stroje je v jednotlivých dnech volných a co je drží: '
+        "<b>potvrzené</b> pronájmy, vlastní zakázky podle plánu ze záložky 6 a servis. <b>Předběžné</b> "
+        "rezervace kapacitu neblokují – jsou vyznačené zvlášť jako možné riziko. Pronájmy a servis jsou "
         "<b>fiktivní ukázková data</b>. Kde chybí údaje, kalendář ukáže „nelze určit“, "
         "nikdy volno.</div>",
         unsafe_allow_html=True,
@@ -2370,12 +2395,14 @@ with tab7:
             [
                 dict(label="Dny s konfliktem", value=str(n_conf),
                      sub=("bez konfliktu v období" if not n_conf else
-                          "dny: " + cv.days_text(cap_sum["conflict_days"], cap_start)),
+                          "potvrzené nároky převyšují počet kusů · dny: "
+                          + cv.days_text(cap_sum["conflict_days"], cap_start)),
                      negative=n_conf > 0),
                 dict(label="Nelze určit", value=str(cap_sum["unknown_cells"]),
-                     sub="dní × strojů s neúplnými údaji" if cap_sum["unknown_cells"] else "údaje jsou úplné"),
+                     sub=("dní × strojů s neúplnými údaji o kapacitě" if cap_sum["unknown_cells"]
+                          else "údaje o kapacitě jsou úplné")),
                 dict(label="Nejvytíženější stroj", value=html.escape(cap_sum["busiest"] or "–"),
-                     sub=(f"obsazenost vč. servisu {fmt_pct(cap_sum['busiest_share'], 0)} kusodnů v období"
+                     sub=(f"obsazeno {fmt_pct(cap_sum['busiest_share'], 0)} strojodnů v období (vč. servisu)"
                           if cap_sum["busiest"] else "")),
             ]
         )
@@ -2404,8 +2431,10 @@ with tab7:
                         "nepřesahuje obsazení počet kusů.", unsafe_allow_html=True)
         else:
             st.dataframe(cap_conf, width="stretch", hide_index=True)
-            ui.hint("Aplikace konflikty jen ukazuje – nic nepřesouvá a neurčuje, zda má přednost "
-                    "pronájem, nebo zakázka. Plán záložky 6 zatím o pronájmech a servisu neví.")
+            ui.hint("Konflikt = potvrzené nároky (pronájmy, zakázky z plánu, servis) převyšují počet kusů. "
+                    "Vzniká hlavně tím, že plán záložky 6 zatím o pronájmech a servisu neví. Aplikace "
+                    "konflikty jen ukazuje – nic nepřesouvá a neurčuje, kdo má přednost. "
+                    "<b>Další krok:</b> vyřešit ručně, např. posunem zakázky, pronájmu nebo servisu.")
 
         st.markdown("### Detail dne")
         d1, d2 = st.columns([3, 2])
@@ -2432,7 +2461,9 @@ with tab7:
 
     if cap_view == CAP_VIEWS[0]:
         st.markdown("### Ověřit nový požadavek")
-        ui.hint("Zjistí, zda lze přijmout požadavek na stroj v daném termínu. Nic se nerezervuje ani nepřesouvá.")
+        ui.hint("Rychlá kontrola kapacity: vejde se požadavek na stroj v daném termínu? Předběžné rezervace "
+                "kapacitu neblokují, dokud je nezapočtete volbou níže. Nic se nerezervuje ani nepřesouvá. "
+                "Ekonomiku a porovnání více požadavků řeší záložka Rozhodovací plánovač.")
         q1, q2, q3, q4 = st.columns([3, 1, 1, 1])
         with q1:
             req_type = st.selectbox("Typ stroje", cap_types_all, format_func=lambda t: cap_names[t], key="cap_req_type")
@@ -2461,17 +2492,18 @@ with tab7:
             ui.explain(
                 [
                     ("Zdroj výpočtu",
-                     "Všechny počty, konflikty i ověření požadavku počítá modul kapacitního plánování "
-                     "(capacity.py); kalendář je jen zobrazuje."),
+                     "Všechny počty, konflikty i ověření požadavku počítá kapacitní výpočet aplikace; "
+                     "kalendář je jen zobrazuje."),
                     ("Dny",
                      "Celé dny, začátek i konec včetně. Rezervace může navázat den po skončení předchozí; "
                      "předání ve stejný den je konflikt."),
                     ("Kapacita",
-                     "Kusy ve flotile k dispozici ten den minus kusy v servisu. Počítají se kusy, ne strojodny."),
+                     "Kapacita dne = kusy ve flotile k dispozici ten den minus kusy v servisu."),
                     ("Stavy",
                      "Potvrzené pronájmy, zakázky a servis kapacitu blokují. Předběžné rezervace (přerušovaná linka) ji "
-                     "neblokují, jen varují. Zakázka bez termínu v plánu (nebo neplatný údaj) znamená "
-                     "„nelze určit“ – nikdy volno."),
+                     "neblokují, jen varují; při ověření nového požadavku je lze volbou započítat. V Rozhodovacím "
+                     "plánovači soutěží předběžné rezervace o volnou kapacitu stejně jako nové požadavky. "
+                     "Zakázka bez termínu v plánu (nebo neplatný údaj) znamená „nelze určit“ – nikdy volno."),
                     ("Zakázky",
                      "Termíny zakázek jsou z plánu záložky 6 včetně zpoždění. Plán zatím nebere ohled na "
                      "pronájmy a servis, proto tu mohou být konflikty."),
@@ -2498,7 +2530,7 @@ with tab7:
             "ze záložky 6. Výsledky jsou ilustrativní."
         )
         st.markdown(
-            f"**Kapacita flotily ve zvoleném období:** {fmt_num(cap_total)} kusodnů "
+            f"**Kapacita flotily ve zvoleném období:** {fmt_num(cap_total)} strojodnů "
             f"({len(use_table)} typů strojů, {n_days} {'den' if n_days == 1 else 'dny' if n_days < 5 else 'dní'})"
             + (f" – bez typů s neúplnými údaji o flotile: {html.escape(', '.join(use_fleet['excluded']))}"
                if use_fleet["excluded"] else "")
@@ -2507,30 +2539,30 @@ with tab7:
         ui.kpi_cards(
             [
                 dict(label="Využití flotily", value=cv.share_text(use_fleet["util_min"], use_fleet["util_max"]),
-                     sub=f"pronájmy a vlastní zakázky z {fmt_num(cap_total)} kusodnů (servis se nepočítá)"),
-                dict(label="Volná kapacita", value=f"{fmt_num(use_fleet['free'])} kusodnů",
+                     sub=f"pronájmy a vlastní zakázky z {fmt_num(cap_total)} strojodnů (servis se nepočítá)"),
+                dict(label="Volná kapacita", value=f"{fmt_num(use_fleet['free'])} strojodnů",
                      sub=f"{pct(use_fleet['free'])} kapacity"
                      + (f" · nelze určit {fmt_num(use_fleet['unknown'])}" if use_fleet["unknown"] else "")),
                 dict(label="Konfliktní dny", value=str(len(use_conf)),
                      sub=("bez konfliktu v období" if not use_conf else
                           "dny: " + cv.days_text(use_conf, cap_start)
-                          + f" · poptávka nad kapacitu {fmt_num(use_fleet['excess_demand'])} kusodnů"),
+                          + f" · poptávka nad kapacitu {fmt_num(use_fleet['excess_demand'])} strojodnů"),
                      negative=bool(use_conf)),
             ]
         )
         ui.kpi_cards(
             [
-                dict(label="Pronájmy", value=f"{fmt_num(use_fleet['rental'])} kusodnů",
+                dict(label="Pronájmy", value=f"{fmt_num(use_fleet['rental'])} strojodnů",
                      sub=f"{pct(use_fleet['rental'])} kapacity · potvrzené rezervace"),
-                dict(label="Vlastní zakázky", value=f"{fmt_num(use_fleet['job'])} kusodnů",
+                dict(label="Vlastní zakázky", value=f"{fmt_num(use_fleet['job'])} strojodnů",
                      sub=f"{pct(use_fleet['job'])} kapacity · podle plánu záložky 6"),
-                dict(label="Servis", value=f"{fmt_num(use_fleet['maintenance'])} kusodnů",
+                dict(label="Servis", value=f"{fmt_num(use_fleet['maintenance'])} strojodnů",
                      sub=f"{pct(use_fleet['maintenance'])} kapacity · stroj nedostupný"),
             ]
         )
         if use_fleet["conflict"]:
             ui.insight(
-                f"V konfliktních dnech je <b>{fmt_num(use_fleet['conflict'])} kusodnů</b> obsazených, ale bez "
+                f"V konfliktních dnech je <b>{fmt_num(use_fleet['conflict'])} strojodnů</b> obsazených, ale bez "
                 "rozhodnutí o přednosti nelze určit, zda pronájmem, zakázkou, nebo servisem – v grafu "
                 "i tabulce jsou vedené zvlášť jako „konflikt“. Proto může být využití uvedené rozpětím.",
                 tone="bad",
@@ -2555,7 +2587,7 @@ with tab7:
         )
         if use_fleet["tentative"]:
             ui.hint(
-                f"Předběžné rezervace: {fmt_num(use_fleet['tentative'])} kusodnů – kapacitu neblokují "
+                f"Předběžné rezervace: {fmt_num(use_fleet['tentative'])} strojodnů – kapacitu neblokují "
                 "a do využití se nepočítají."
             )
 
@@ -2577,8 +2609,8 @@ with tab7:
                      "Denní kapacita z kapacitního modulu – stejná jako v kalendáři (stejné filtry, data "
                      "a plán zakázek ze záložky 6)."),
                     ("Kapacita",
-                     "Součet kusů k dispozici v jednotlivých dnech (kusodny). Objednaný stroj se počítá až "
-                     "od dodání."),
+                     "Součet kusů k dispozici v jednotlivých dnech ve strojodnech (1 strojoden = 1 kus "
+                     "stroje na 1 den). Objednaný stroj se počítá až od dodání."),
                     ("Rozdělení",
                      "Každý den a stroj patří do jedné skupiny – nic se nepočítá dvakrát. Běžný den: "
                      "pronájem, vlastní zakázky, servis a volno. Konfliktní den (víc nároků než kusů): "
@@ -2672,9 +2704,12 @@ with tab8:
         "stránky zmizí."
     )
     st.markdown(
-        '<div class="de-intro">Zadejte požadavek na pronájem nebo vlastní zakázku. Plánovač ověří, zda se vejde '
-        "do kapacity, kterou nechávají potvrzené pronájmy, zakázky z plánu záložky 6 a servis, a odděleně "
-        "zhodnotí ekonomiku. Předběžné rezervace jsou rovnocenné novým požadavkům a nikdy se neruší.</div>",
+        '<div class="de-intro">Zadejte požadavek na pronájem nebo vlastní zakázku. Plánovač odpovídá zvlášť na '
+        "dvě otázky: <b>Provoz</b> – vejde se požadavek do kapacity, kterou nechávají potvrzené pronájmy, "
+        "zakázky z plánu záložky 6 a servis? <b>Ekonomika</b> – která varianta přinese nejvyšší příspěvek "
+        "(tržba − variabilní náklady; nejde o čistý zisk)? Požadavek se může vejít, a přesto být ekonomicky "
+        "méně výhodný. Předběžné rezervace z dat soutěží o volnou kapacitu stejně jako nové požadavky "
+        "a nikdy se automaticky neruší.</div>",
         unsafe_allow_html=True,
     )
 
@@ -2865,12 +2900,19 @@ with tab8:
     with st.expander("Jak plánovač rozhoduje"):
         ui.explain(
             [
-                ("Zdroj", "Rozhodovací logika planner.py nad kapacitním a ekonomickým modulem – stejná data a plán "
+                ("Zdroj", "Rozhodovací pravidla aplikace nad kapacitním a ekonomickým výpočtem – stejná data a plán "
                           "zakázek jako záložky 6 a 7."),
                 ("Provoz", "Potvrzené pronájmy, zakázky v plánu a servis blokují kapacitu. Požadavek je proveditelný, "
                            "jen když se vejde do zbytku; žádná doporučená varianta nepřekročí kapacitu."),
-                ("Ekonomika", "Odděleně od provozu: příspěvek z pronájmu a ze zakázky (bez fixních nákladů). Chybějící "
-                              "údaj se nepočítá jako 0 – známá částka je jen horní mez."),
+                ("Ekonomika", "Odděleně od provozu: příspěvek = tržba − variabilní náklady (u zakázky také přímé "
+                              "náklady a penále). Fixní náklady strojů a společné náklady se neodečítají, nejde tedy "
+                              "o čistý zisk. Chybějící údaj se nepočítá jako 0 – známá částka je jen horní mez. "
+                              "Strojoden = 1 kus stroje na 1 den."),
+                ("Štítky ekonomiky", "★ Doporučeno – prokazatelně nejlepší varianta. Méně výhodné – lepší je jiná "
+                                     "varianta. Nevyplatí se – každá varianta, která se vejde, je ztrátová. "
+                                     "= Rovnocenné – varianty vycházejí stejně. ⇄ Záleží na nákladech – rozhoduje "
+                                     "výše nezadaného nákladu (viz hranice zlomu). ? Nelze rozhodnout – chybí údaje. "
+                                     "Bez porovnání – požadavek nemá soupeře."),
                 ("Doporučeno", "Jen když se ze soupeřících požadavků vejde část a jedna varianta je ekonomicky lepší "
                                "i v nejhorším případě. Samostatný požadavek bez soupeře je „Proveditelné“."),
                 ("Nelze rozhodnout", "Chybí údaje o požadavku nebo kapacitě, nebo se vejde jen část soupeřících "

@@ -233,7 +233,7 @@ def test_shared_value_for_same_cost_parameter():
 def test_sim_box_is_separated_from_recommendation():
     spec = p07()["sim"]
     out = pv.sim_html(spec, pv.simulate(spec, 6000)).replace(NBSP, " ")
-    assert "Co kdyby – hypotetický výpočet &#40;není doporučení&#41;" in out and "Skutečné doporučení: ⇄ Podmíněné" in out
+    assert "Co kdyby – hypotetický výpočet &#40;není doporučení&#41;" in out and "Skutečné doporučení: ⇄ Záleží na nákladech" in out
     assert "#1E7B4A" not in out and "★" not in out and "ec-rec" not in out
     css = "".join(line for line in pv.CSS.splitlines() if line.startswith((".dp-sim", ".dp-seg.sim")))
     assert "#1E7B4A" not in css and "dashed" in css
@@ -290,9 +290,9 @@ def test_tab_simulation_flow_and_reset():
     shown = " ".join(m.value for m in at.tabs[7].markdown).replace(NBSP, " ").replace("\u2011", "-")
     assert "Co kdyby – hypotetický výpočet &#40;není doporučení&#41;" in shown
     assert "Při tomto předpokladu vychází nejlépe FIKT-P06." in shown and "▼ předpoklad 6 000 Kč/den" in shown
-    assert "Skutečné doporučení: ⇄ Podmíněné" in shown
+    assert "Skutečné doporučení: ⇄ Záleží na nákladech" in shown
     # skutečné štítky karet se nezměnily
-    assert '<small>Ekonomika:</small>⇄ Podmíněné' in shown and 'class="dp-badge ec-rec"' not in shown
+    assert '<small>Ekonomika:</small>⇄ Záleží na nákladech' in shown and 'class="dp-badge ec-rec"' not in shown
     old_key = box.key
     # změna požadavků → nový klíč, hodnota vymazaná
     at.number_input(key="dp_r_from").set_value(30); at.number_input(key="dp_r_to").set_value(31)
