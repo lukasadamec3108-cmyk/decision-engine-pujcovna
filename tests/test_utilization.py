@@ -124,7 +124,7 @@ def test_zero_capacity_and_missing_data_are_not_zero():
     t, f, _ = table([Unit("A-1", A), Unit("A-2", A, "owned", "x"), Unit("B-1", "B")])
     assert not row(t).capacity_known and row(t).rating == "nelze určit"
     shown = cv.utilization_display(t).set_index("Stroj").loc["Stroj A"]
-    assert shown["Kapacita (kusodny)"] == "nelze určit" and shown["Využití"] == "nelze určit"
+    assert shown["Kapacita (strojodny)"] == "nelze určit" and shown["Využití"] == "nelze určit"
     assert f["excluded"] == ["Stroj A"] and f["capacity"] == 10
 
 
@@ -229,14 +229,14 @@ def capacity_line(at):
 
 def test_overview_in_app_follows_period_and_type_filters():
     at = overview_app()
-    assert "225 kusodnů" in capacity_line(at)
+    assert "225 strojodnů" in capacity_line(at)
     kpis = " ".join(m.value for m in at.tabs[6].markdown if "de-kpi" in m.value)
-    assert "61,8–62,2 %" in kpis and "77 kusodnů" in kpis and "Ukázková data" in " ".join(
+    assert "61,8–62,2 %" in kpis and "77 strojodnů" in kpis and "Ukázková data" in " ".join(
         m.value for m in at.tabs[6].markdown)
     at.slider(key="cap_period").set_value((1, 10)).run()
-    assert "90 kusodnů" in capacity_line(at)                     # 9 kusů × 10 dní
+    assert "90 strojodnů" in capacity_line(at)                     # 9 kusů × 10 dní
     at.multiselect(key="cap_types").set_value(["SILNICNI_VALEC"]).run()
-    assert "10 kusodnů" in capacity_line(at)
+    assert "10 strojodnů" in capacity_line(at)
     shown = [d.value for d in at.tabs[6].dataframe][0]
     assert shown["Stroj"].tolist() == ["Silniční válec"]
     assert not at.exception
@@ -291,9 +291,9 @@ def test_overview_refreshes_after_data_file_change():
     from test_data_refresh import run_copy
     out = run_copy(script=REFRESH_SCRIPT)
     assert out["exc"] == []
-    assert "25 kusodnů" in out["start"]                          # pronájmy 25 kusodnů
-    # FIKT-P02 (nákladní auto, dny 17–24): v období 1–25 ubere 8 kusodnů pronájmu
-    assert "17 kusodnů" in out["bez_FIKT_P02"] and "25 kusodnů" not in out["bez_FIKT_P02"].split("Pronájmy")[1][:80]
+    assert "25 strojodnů" in out["start"]                          # pronájmy 25 strojodnů
+    # FIKT-P02 (nákladní auto, dny 17–24): v období 1–25 ubere 8 strojodnů pronájmu
+    assert "17 strojodnů" in out["bez_FIKT_P02"] and "25 strojodnů" not in out["bez_FIKT_P02"].split("Pronájmy")[1][:80]
 
 
 if __name__ == "__main__":

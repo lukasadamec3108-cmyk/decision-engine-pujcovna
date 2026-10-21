@@ -93,7 +93,8 @@ def test_equal_panel():
 def test_conditional_single_unknown_panel():
     pn = one_panel(run(DEMO, [rent("NP-1", 22, 23, None, "PASOVY_DUMPER")], STARTS))
     assert pn["badge"] == pv.EC_COND
-    assert pn["headline"] == "Záleží na nezadaném nákladu: Pásový dumper: variabilní náklad pronájmu (Kč/den)."
+    assert pn["headline"] == ("Výsledek záleží na nákladu, který zatím není zadaný: "
+                              "Pásový dumper: variabilní náklad pronájmu (Kč/den).")
     (block,) = pn["conditions"]
     assert block["lines"][:3] == ["pod 8 000 Kč/den: FIKT-P06",
                                   "přesně 8 000 Kč/den: FIKT-P06, NP-1 a nepřijmout nic vycházejí stejně (rovnocenné)",

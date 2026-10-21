@@ -455,10 +455,13 @@ def group_economy(model: dm.DataModel, p: pl.Plan, g: dict) -> dict:
 
 OP_FITS, OP_NO, OP_UNKNOWN = "✓ Vejde se", "✕ Nevejde se", "? Provoz nelze určit"
 EC_REC, EC_NO, EC_EQ, EC_COND, EC_UND, EC_NONE = ("★ Doporučeno", "Nevyplatí se", "= Rovnocenné",
-                                                  "⇄ Podmíněné", "? Nelze rozhodnout", "Bez porovnání")
+                                                  "⇄ Záleží na nákladech", "? Nelze rozhodnout", "Bez porovnání")
+# UX/UI 1: „Nevyplatí se“ jen tam, kde je každá proveditelná varianta ztrátová (verdikt NONE_PAYS);
+# varianta, která jen prohrává s jinou (lepší) variantou, je „Méně výhodné“ – pravidla se nemění.
+EC_WORSE = "Méně výhodné"
 OP_CLASS = {OP_FITS: "op-ok", OP_NO: "op-no", OP_UNKNOWN: "op-und"}
-EC_CLASS = {EC_REC: "ec-rec", EC_NO: "ec-no", EC_EQ: "ec-eq", EC_COND: "ec-cond", EC_UND: "ec-und",
-            EC_NONE: "ec-none"}
+EC_CLASS = {EC_REC: "ec-rec", EC_NO: "ec-no", EC_WORSE: "ec-no", EC_EQ: "ec-eq", EC_COND: "ec-cond",
+            EC_UND: "ec-und", EC_NONE: "ec-none"}
 NOT_A_REJECTION = ("Jde jen o ekonomické doporučení – požadavek se tím nezamítá a žádná rezervace se neruší; "
                    "rozhodnutí je na vás.")
 
@@ -558,7 +561,7 @@ def econ_badge(ref: str, entry: dict, g: Optional[dict], ge: Optional[dict]) -> 
     if v == pl.RECOMMEND:
         if ref in (g["choice"] or ()):
             return EC_REC, f"Je součástí doporučené varianty {_labels([g['choice']])} – {SEE_PANEL}."
-        return EC_NO, f"Výhodnější je varianta {_labels([g['choice']])} – {SEE_PANEL}."
+        return EC_WORSE, f"Výhodnější je varianta {_labels([g['choice']])} – {SEE_PANEL}."
     if v == pl.NONE_PAYS:
         return EC_NO, f"Každá varianta, která se vejde, je prokazatelně ztrátová – {SEE_PANEL}."
     if v == pl.EQUAL:
@@ -567,15 +570,15 @@ def econ_badge(ref: str, entry: dict, g: Optional[dict], ge: Optional[dict]) -> 
             others = [b for b in best if ref not in b]
             return EC_EQ, (f"Stejně výhodná jako {_labels(others) or 'jiná varianta'}"
                            + (" (0 Kč)" if () in others else "") + f" – {SEE_PANEL}.")
-        return EC_NO, f"Výhodnější jsou shodně varianty {_labels(best)} – {SEE_PANEL}."
+        return EC_WORSE, f"Výhodnější jsou shodně varianty {_labels(best)} – {SEE_PANEL}."
     if v == pl.CONDITIONAL:
         contenders = [tuple(c) for c in g.get("contenders", [])]
         if not _in(ref, contenders):
-            return EC_NO, f"Při jakékoli výši nezadaných nákladů je výhodnější jiná varianta – {SEE_PANEL}."
+            return EC_WORSE, f"Při jakékoli výši nezadaných nákladů je výhodnější jiná varianta – {SEE_PANEL}."
         if ge and _never_wins(ref, ge):
             with_ref = {v["label"] for v in ge["variants"] if ref in v["refs"]}
             at = sorted({x for pr in ge["profiles"] for x, w in _ties_at_boundaries(pr).items() if set(w) & with_ref})
-            return EC_NO, ("Nevychází nejlépe při žádné výši nezadaného nákladu"
+            return EC_WORSE, ("Nevychází nejlépe při žádné výši nezadaného nákladu"
                            + (f" (stejně jako nejlepší jen přesně při {' a '.join(_rate(x) for x in at)})" if at else "")
                            + f" – {SEE_PANEL}.")
         where = _where_text(ref, ge) if ge else ""
@@ -695,7 +698,9 @@ PANEL_BADGE = {"recommend": EC_REC, "none_pays": EC_NO, "equal": EC_EQ, "conditi
 PANEL_NOTE = ("Jde jen o ekonomické doporučení – žádný požadavek se tím nezamítá a žádná rezervace se neruší; "
               "rozhodnutí je na vás.")
 BREAK_EVEN = "Hranice zlomu je výše nákladu, při které vycházejí obě varianty stejně."
-ROLE_TAG = {"doporučeno": "doporučeno", "nejlepší": "shodně nejlepší", "kandidát": "připadá v úvahu",
+AMOUNT_NOTE = ("Částky jsou příspěvek: tržba − variabilní náklady (u zakázky také přímé náklady a penále). "
+               "Fixní náklady strojů a společné náklady půjčovny se neodečítají – nejde o čistý zisk.")
+ROLE_TAG = {"doporučeno": "doporučeno", "nejlepší": "shodně nejlepší", "kandidát": "může vyjít nejlépe",
             "horší": "prokazatelně horší"}
 MAX_PANEL_CONDITIONS = 4
 
@@ -1046,7 +1051,8 @@ def group_panel(ge: dict) -> Optional[dict]:
     elif kind == "conditional":
         rates = [m for m in ge["missing"] if m["kind"] == ef.RATE]
         setting = any(m["key"] == ["direct_cost_includes_machines"] for m in ge["missing"])
-        headline = (f"Záleží na nezadaném nákladu: {_unknown_name(rates[0])}." if len(rates) == 1 and not setting
+        headline = (f"Výsledek záleží na nákladu, který zatím není zadaný: {_unknown_name(rates[0])}."
+                    if len(rates) == 1 and not setting
                     else "Záleží na nezadaných údajích – žádná varianta není nejlepší při každé jejich výši.")
         why.append("Neznámý náklad se nepočítá jako 0 Kč; rozhoduje jeho skutečná výše – viz „Kdy se co vyplatí“.")
         contenders = [tuple(x) for x in ge["contenders"]]
@@ -1365,7 +1371,8 @@ def panel_html(panel: dict, sim_result: Optional[dict] = None) -> str:
     if panel["why"]:
         out.append('<div class="dp-h">Proč?</div><ul>' + "".join(f"<li>{t(x)}</li>" for x in panel["why"]) + "</ul>")
     if panel["variants"]:
-        out.append('<div class="dp-h">Porovnávané varianty</div>' + var_rows(panel["variants"]))
+        out.append('<div class="dp-h">Porovnávané varianty</div>' + var_rows(panel["variants"])
+                   + f'<div class="dp-note">{_h(AMOUNT_NOTE)}</div>')
     if panel["hidden_total"]:
         out.append(f'<details><summary>Další varianty ({panel["hidden_total"]}) – prokazatelně horší</summary>'
                    + var_rows(panel["hidden"])

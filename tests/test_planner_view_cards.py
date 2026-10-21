@@ -43,8 +43,8 @@ def badges(cs):
 def test_recommended_and_others():
     cs = cards(model(var_rental=1500, var_job=2000, includes="ne"),
                [job("NP-1", 1, 10), rent("NP-2", 1, 5, 6500), rent("NP-3", 6, 10, 7000)])
-    assert badges(cs) == {"NP-1": (pv.OP_FITS, pv.EC_REC), "NP-2": (pv.OP_FITS, pv.EC_NO),
-                          "NP-3": (pv.OP_FITS, pv.EC_NO)}
+    assert badges(cs) == {"NP-1": (pv.OP_FITS, pv.EC_REC), "NP-2": (pv.OP_FITS, pv.EC_WORSE),
+                          "NP-3": (pv.OP_FITS, pv.EC_WORSE)}
     assert "doporučené varianty „NP-1“" in cs["NP-1"]["econ_why"] and "Ekonomické porovnání" in cs["NP-1"]["econ_why"]
     assert "„NP-1“" in cs["NP-2"]["econ_why"]
     # E2.5c 4C: upozornění „nic se nezamítá“ a zdůvodnění jsou jednou v panelu
@@ -68,7 +68,7 @@ def test_none_pays_explains_it_is_not_a_rejection():
 
 def test_equal_with_nothing():
     cs = cards(model(var_rental=500), [rent("NP-1", 1, 3, 500), rent("NP-2", 2, 4, 0)])
-    assert badges(cs) == {"NP-1": (pv.OP_FITS, pv.EC_EQ), "NP-2": (pv.OP_FITS, pv.EC_NO)}
+    assert badges(cs) == {"NP-1": (pv.OP_FITS, pv.EC_EQ), "NP-2": (pv.OP_FITS, pv.EC_WORSE)}
     assert "„nepřijmout nic“ (0 Kč)" in cs["NP-1"]["econ_why"]
     assert cs["NP-1"]["economy_lines"][0] == "Příspěvek: přesně 0 Kč (vychází ze zadaných údajů)."
 
@@ -84,9 +84,9 @@ def test_conditional_with_break_even_in_kc_per_day():
 
 def test_conditional_never_winner_is_not_shown_as_conditional():
     # NP-1 (2 dny á 8 000 = 16 000 − 2x) vs NP-2 (5 dní á 8 000 = 40 000 − 5x): všechny se rovnají při 8 000 Kč/den;
-    # NP-1 nevyhrává v žádném úseku → „Nevyplatí se“ (nanejvýš shodně na hranici)
+    # NP-1 nevyhrává v žádném úseku → „Méně výhodné“ (nanejvýš shodně na hranici)
     cs = cards(model(), [rent("NP-1", 2, 3, 8000), rent("NP-2", 1, 5, 8000)])
-    assert badges(cs) == {"NP-1": (pv.OP_FITS, pv.EC_NO), "NP-2": (pv.OP_FITS, pv.EC_COND)}
+    assert badges(cs) == {"NP-1": (pv.OP_FITS, pv.EC_WORSE), "NP-2": (pv.OP_FITS, pv.EC_COND)}
     assert "stejně jako nejlepší jen přesně při 8 000 Kč/den" in cs["NP-1"]["econ_why"]
 
 
@@ -205,8 +205,8 @@ def test_card_html_shows_both_labelled_badges_and_no_legacy_green():
 
 
 def test_every_badge_has_text():
-    for label in (pv.OP_FITS, pv.OP_NO, pv.OP_UNKNOWN, pv.EC_REC, pv.EC_NO, pv.EC_EQ, pv.EC_COND, pv.EC_UND,
-                  pv.EC_NONE):
+    for label in (pv.OP_FITS, pv.OP_NO, pv.OP_UNKNOWN, pv.EC_REC, pv.EC_NO, pv.EC_WORSE, pv.EC_EQ, pv.EC_COND,
+                  pv.EC_UND, pv.EC_NONE):
         assert re.search(r"[A-Za-zÁ-ž]{3}", label), label
 
 
@@ -231,12 +231,13 @@ def test_econ_badges_follow_planner_verdict_random():
                     assert lab == pv.EC_NONE
                 elif g["verdict"] == pl.RECOMMEND:
                     assert (lab == pv.EC_REC) == (ref in g["choice"])
+                    assert lab in (pv.EC_REC, pv.EC_WORSE)          # „Nevyplatí se“ jen při NONE_PAYS
                 elif g["verdict"] == pl.NONE_PAYS:
                     assert lab == pv.EC_NO
                 elif g["verdict"] == pl.EQUAL:
-                    assert lab in (pv.EC_EQ, pv.EC_NO)
+                    assert lab in (pv.EC_EQ, pv.EC_WORSE)
                 elif g["verdict"] == pl.CONDITIONAL:
-                    assert lab in (pv.EC_COND, pv.EC_NO)
+                    assert lab in (pv.EC_COND, pv.EC_WORSE)
                     if lab == pv.EC_COND:
                         assert any(ref in c for c in g["contenders"])
                 else:
@@ -248,7 +249,7 @@ def test_tentative_booking_card_gets_badges_and_keeps_note():
     before = files_hash()
     m = model(var_rental=1000, bookings=[("FIKT-T", 1, 5, 1, pl.TENTATIVE)])
     cs = cards(m, [rent("NP-1", 3, 4, 9000)])
-    assert badges(cs) == {"NP-1": (pv.OP_FITS, pv.EC_NO), "FIKT-T": (pv.OP_FITS, pv.EC_REC)}
+    assert badges(cs) == {"NP-1": (pv.OP_FITS, pv.EC_WORSE), "FIKT-T": (pv.OP_FITS, pv.EC_REC)}
     assert "nic se automaticky neruší" in cs["FIKT-T"]["note"]
     assert files_hash() == before
 
