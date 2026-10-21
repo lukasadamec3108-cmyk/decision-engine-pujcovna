@@ -924,10 +924,14 @@ def _gap(d: float) -> str:
 
 
 def simulate(spec: dict, x: float) -> dict:
-    """Příspěvky nevyloučených variant při hypotetické hodnotě x (Kč/den) a poloha x vůči hranicím zlomu."""
+    """Příspěvky nevyloučených variant při hypotetické hodnotě x (Kč/den) a poloha x vůči hranicím zlomu.
+
+    x se zaokrouhlí na haléře – přesně na hodnotu, kterou pole ukazuje (formát na 2 desetinná místa); počítá se
+    tedy vždy s tím, co uživatel vidí. Rovnost i poloha vůči hranici se určují z výpočtu, ne ze zaokrouhlených
+    hodnot hranic."""
     if not spec or not spec.get("available") or x is None or x < 0:
         raise ValueError("Simulace není pro tuto skupinu dostupná nebo hodnota není platná.")
-    x = float(x)
+    x = round(float(x), 2)
     vals = [(v, v["known"] + v["coef"] * x) for v in spec["variants"]]
     top = max(val for _, val in vals)
     winners = [v["label"] for v, val in vals if val >= top - SIM_EPS]
@@ -940,27 +944,33 @@ def simulate(spec: dict, x: float) -> dict:
         rows.append(dict(label=v["label"], nothing=v["nothing"], value=val,
                          amount=_czk_exact(val) if near else _czk(round(val)),
                          tag=("vychází nejlépe" if len(winners) == 1 else "vychází stejně – nejlépe") if win else ""))
-    # poloha vůči hranicím zlomu (přesně v hranici / v úseku a vzdálenost k nejbližší hranici)
-    at = [b["at"] for b in spec["boundaries"]]
-    on = next((b for b in spec["boundaries"] if abs(x - b["at"]) <= SIM_EPS), None)
-    if on is not None:
+    # poloha vůči hranicím zlomu: „přesně na hranici“ jen při skutečné rovnosti z výpočtu; jinak úsek, ve kterém
+    # vítěz opravdu vyhrává (u hodnoty těsně u hranice rozhoduje výpočet, ne zaokrouhlená hodnota hranice)
+    bnds = spec["boundaries"]
+    if len(winners) > 1 and bnds:
+        on = min(bnds, key=lambda b: abs(b["at"] - x))
         position = dict(kind="boundary", n=on["n"], text=f"Hodnota leží přesně na hranici {on['n']} ({_rate(on['at'])}).")
-        segment = None
     else:
-        segment = sum(1 for a in at if a < x)
+        segment = sum(1 for b in bnds if b["at"] < x)
+        for cand in (segment, segment - 1, segment + 1):         # oprava těsně u hranice podle skutečného vítěze
+            if 0 <= cand < len(spec["segments"]) and set(winners) <= set(spec["segments"][cand]["winners"]):
+                segment = cand
+                break
         seg = spec["segments"][segment]
-        below = [b for b in spec["boundaries"] if b["at"] < x]
-        above = [b for b in spec["boundaries"] if b["at"] > x]
-        near_b = min(below + above, key=lambda b: abs(b["at"] - x)) if at else None
         text = f"Hodnota leží v úseku „{seg['range']}“"
-        if near_b is not None:
-            d = abs(near_b["at"] - x)
-            text += (f" – k hranici {near_b['n']} ({_rate(near_b['at'])}) zbývá {_gap(d)}"
-                     if near_b["at"] > x else f" – nad hranicí {near_b['n']} ({_rate(near_b['at'])}) o {_gap(d)}")
+        lower = bnds[segment - 1] if segment >= 1 else None            # hranice pod úsekem
+        upper = bnds[segment] if segment < len(bnds) else None          # hranice nad úsekem
+        opts = [b for b in (lower, upper) if b is not None]
+        if opts:
+            nb_ = min(opts, key=lambda b: abs(b["at"] - x))
+            d = abs(nb_["at"] - x)
+            text += (f" – k hranici {nb_['n']} ({_rate(nb_['at'])}) zbývá {_gap(d)}" if nb_ is upper
+                     else f" – nad hranicí {nb_['n']} ({_rate(nb_['at'])}) o {_gap(d)}")
         position = dict(kind="segment", index=segment, text=text + ".")
     if len(winners) == 1 and near:
         rival = next(v["label"] for v, val in sorted(vals, key=lambda p: -p[1]) if v["label"] not in winners)
-        verdict = (f"Prakticky stejné: {winners[0]} vychází lépe než {rival} jen o {_czk_exact(gap)}.")
+        diff = "méně než 0,01 Kč" if gap < 0.005 else _czk_exact(gap)
+        verdict = f"Prakticky stejné: {winners[0]} vychází lépe než {rival} jen o {diff}."
     elif len(winners) == 1:
         verdict = f"Při tomto předpokladu vychází nejlépe {winners[0]}."
     else:

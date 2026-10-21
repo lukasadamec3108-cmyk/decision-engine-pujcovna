@@ -2655,8 +2655,8 @@ def dp_economic_comparison(panels: list, sig: str) -> None:
             st.number_input(
                 f"Co kdyby – zkuste předpoklad: {spec['unknown']}", min_value=0.0, value=None, step=100.0,
                 format="%.2f", key=key,
-                help="Prázdné pole = žádná simulace. Zadaná 0 je platná hypotetická hodnota. Nic se neukládá "
-                     "a skutečné doporučení se nemění.")
+                help="Prázdné pole = žádná simulace. Zadaná 0 je platná hypotetická hodnota. Počítá se s hodnotou "
+                     "na haléře, jak ji pole ukazuje. Nic se neukládá a skutečné doporučení se nemění.")
         else:
             ui.hint("Předpoklad pro tento náklad je společný se simulací výše – jde o stejný ekonomický parametr.")
         if result is not None:

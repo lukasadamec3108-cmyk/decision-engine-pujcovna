@@ -86,11 +86,40 @@ def test_decimal_boundary_near_tie_in_halere():
     r = pv.simulate(spec, 4166.67)
     assert r["winners"] == ["NP-1"] and r["near"]
     assert "nad hranicí 1 (4 166,67 Kč/den) o méně než 0,01 Kč/den" in r["position"]["text"]
-    # přesná rovnost podle výpočtu (ne podle zaokrouhleného zobrazení)
-    r = pv.simulate(spec, 12500 / 3)
-    assert sorted(r["winners"]) == ["NP-1", "NP-4"] and r["position"]["kind"] == "boundary"
+    # hodnota se počítá na haléře (jak ji pole ukazuje): 12 500/3 i 4 166,666667 = 4 166,67 → NP-1 o 0,01 Kč
+    for typed in (12500 / 3, 4166.666667):
+        r = pv.simulate(spec, typed)
+        assert r["x"] == 4166.67 and r["winners"] == ["NP-1"] and r["position"]["kind"] == "segment"
+        assert r["verdict"] == "Prakticky stejné: NP-1 vychází lépe než NP-4 jen o 0,01 Kč."
     # daleko od hranice: celé koruny
     assert pv.simulate(spec, 1000)["rows"][0]["amount"] == "25 500 Kč"
+
+
+def test_audit_position_always_agrees_with_calculation():
+    # audit PR #36: hodnota rovná zaokrouhlené hranici nesmí hlásit „přesně na hranici“ s jediným vítězem
+    # ani rozdíl „0,00 Kč“; poloha i rovnost se řídí výpočtem
+    rnd = random.Random(9)
+    checked = 0
+    for _ in range(60):
+        reqs = []
+        for i in range(rnd.randint(2, 4)):
+            s = rnd.randint(1, 6)
+            reqs.append(rent(f"NP-{i + 1}", s, s + rnd.randint(0, 4), rnd.choice([None, 2000, 4500, 6100, 9000])))
+        for pn in pv.evaluate(model(units=rnd.randint(1, 2)), {}, reqs)["panels"]:
+            spec = pn["sim"]
+            if not spec or not spec["available"]:
+                continue
+            xs = [b["at"] for b in spec["boundaries"]] + [b["at"] + 1e-7 for b in spec["boundaries"]] \
+                + [round(b["at"], 2) for b in spec["boundaries"]] + [rnd.uniform(0, 20000) for _ in range(5)]
+            for x in xs:
+                r = pv.simulate(spec, x)
+                assert (r["position"]["kind"] == "boundary") == (len(r["winners"]) > 1)
+                if r["position"]["kind"] == "segment":
+                    assert set(r["winners"]) <= set(spec["segments"][r["position"]["index"]]["winners"])
+                assert "0,00 Kč" not in r["verdict"]
+                assert r["x"] == round(x, 2)
+                checked += 1
+    assert checked > 100
 
 
 def test_multiple_boundaries_and_ties():
