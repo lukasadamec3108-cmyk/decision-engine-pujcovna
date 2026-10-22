@@ -2340,19 +2340,17 @@ def show_in_calendar(type_id: str) -> None:
     st.session_state["cap_view"] = CAP_VIEWS[0]
 
 
-with tab7, st.container(key="cap_tab"):
-    # UX/UI 2 (pilot): vzhled vymezený obalem „cap_tab“ (CSS jen pro tuto záložku). Souhrnné ukazatele
-    # se vypisují do místa NAD filtry (cap_summary), ale počítají se až PO přečtení filtrů – vždy tedy
-    # odpovídají aktuálnímu výběru. Widgety, jejich klíče, pořadí a výchozí hodnoty se nemění.
-    st.markdown(cv.TAB_CSS + cv.PILOT_CSS, unsafe_allow_html=True)
-    st.markdown('<div class="cap-title" role="heading" aria-level="2">Kapacita strojů po dnech</div>',
-                unsafe_allow_html=True)
-    st.markdown(
-        '<div class="cap-intro">Kolik kusů každého stroje je v jednotlivých dnech volných a co je drží: '
+with tab7, ui.tab_container("kapacita"):
+    # UX/UI 2: společný standard záložek (ui_theme) + pravidla kalendáře (cv.CALENDAR_TAB_CSS).
+    # Souhrnné ukazatele se vypisují do místa NAD filtry (summary_slot), ale počítají se až PO přečtení
+    # filtrů – vždy tedy odpovídají aktuálnímu výběru. Widgety, jejich klíče, pořadí a výchozí hodnoty se nemění.
+    st.markdown(cv.TAB_CSS + cv.CALENDAR_TAB_CSS, unsafe_allow_html=True)
+    ui.tab_header(
+        "Kapacita strojů po dnech",
+        "Kolik kusů každého stroje je v jednotlivých dnech volných a co je drží: "
         "<b>potvrzené</b> pronájmy, vlastní zakázky podle plánu ze záložky 6 a servis. <b>Předběžné</b> "
         "rezervace kapacitu neblokují – jsou vyznačené zvlášť jako možné riziko. Pronájmy a servis jsou "
-        "<b>fiktivní ukázková data</b>.</div>",
-        unsafe_allow_html=True,
+        "<b>fiktivní ukázková data</b>.",
     )
 
     _, cap_plan, _ = plan_jobs(jobs_df, machine_capacity, code_version)
@@ -2363,10 +2361,9 @@ with tab7, st.container(key="cap_tab"):
     cap_default_end, cap_max_day = cv.period_bounds(cap_cal)
     cap_types_all = [t for t in cap_names if t in cap_cal.type_ids()]
 
-    cap_summary = st.container(key="cap_summary")         # souhrn – naplní se až po filtrech níže
+    cap_summary = ui.summary_slot("kapacita")              # souhrn – naplní se až po filtrech níže
 
-    with st.container(border=True, key="cap_filters"):
-        st.markdown('<div class="cap-flt">Období, stroje a zobrazení</div>', unsafe_allow_html=True)
+    with ui.filter_box("kapacita", "Období, stroje a zobrazení"):
         f1, f2 = st.columns([3, 2])
         with f1:
             cap_pick = st.multiselect(
@@ -2387,7 +2384,7 @@ with tab7, st.container(key="cap_tab"):
         )
 
     with cap_summary:
-        st.markdown(cv.scope_html(cap_from, cap_to, cap_types, cap_types_all, cap_names, cap_start),
+        st.markdown(ui.scope_html(*cv.scope_texts(cap_from, cap_to, cap_types, cap_types_all, cap_names, cap_start)),
                     unsafe_allow_html=True)
         if cap_cal.issues:
             st.warning(
@@ -2437,12 +2434,12 @@ with tab7, st.container(key="cap_tab"):
 
         st.markdown("### Konflikty v období")
         if cap_conf.empty:
-            st.markdown(ui.status_chip(cv.status_text("Bez konfliktu", "good"), "good")
+            st.markdown(ui.status_chip(ui.status_text("Bez konfliktu", "good"), "good")
                         + " Ve zvoleném období a u vybraných strojů "
                         "nepřesahuje obsazení počet kusů.", unsafe_allow_html=True)
         else:
             n_rows = len(cap_conf)
-            st.markdown(ui.status_chip(cv.status_text(
+            st.markdown(ui.status_chip(ui.status_text(
                 f"{n_rows} {'konflikt' if n_rows == 1 else 'konflikty' if n_rows < 5 else 'konfliktů'}", "bad"), "bad"),
                 unsafe_allow_html=True)
             st.dataframe(cap_conf, width="stretch", hide_index=True)
@@ -2493,7 +2490,7 @@ with tab7, st.container(key="cap_tab"):
         req = cv.check_request(cap_cal, req_type, int(req_from), int(req_to), int(req_qty), req_tent,
                                cap_jobs, cap_start)
         st.markdown(
-            ui.status_chip(cv.status_text(req["status"], req["tone"]), req["tone"]) + " "
+            ui.status_chip(ui.status_text(req["status"], req["tone"]), req["tone"]) + " "
             + html.escape(req["headline"]),
             unsafe_allow_html=True,
         )

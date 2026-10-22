@@ -159,6 +159,7 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 ├── portfolio.py                     # výběr nákupní sestavy strojů v rámci rozpočtu
 ├── scheduling.py                    # plán zakázek (celočíselná optimalizace)
 ├── tools/hash_password.py           # vytvoření hashe hesla pro secrets (heslo se zadává skrytě)
+├── tools/regression/                # regresní nástroje pro úpravy vzhledu (snímek, porovnání, pixelová kontrola)
 ├── docs/SLOVNIK.md                  # slovník pojmů aplikace (druhy zisku, kapacita, rezervace, stavy údajů)
 ├── tests/                           # testy (python -m pytest tests)
 │   └── fixtures/legacy/             # původní tabulky pro kontrolu zpětné kompatibility
