@@ -5,6 +5,7 @@ Modul neobsahuje žádné výpočty – jen prezentaci výsledků.
 
 import base64
 import html
+from contextlib import contextmanager
 from pathlib import Path
 
 import streamlit as st
@@ -89,6 +90,42 @@ def mark_src() -> str:
 # ==================================================
 # CSS
 # ==================================================
+
+
+# ==================================================
+# SPOLEČNÝ STANDARD ZÁLOŽEK (UX/UI 2, etapa 0)
+# ==================================================
+# Pravidla platí JEN uvnitř obalu záložky vytvořeného funkcí tab_container() – tedy v prvku s třídou
+# „st-key-de_tab_<název>“. Záložky bez obalu se nemění. Hodnoty převzaté z pilotu záložky 7 (PR #38).
+# Používá jen vlastní třídy (de-…) a třídy st-key-*, žádné automaticky generované třídy Streamlitu.
+
+TAB_KEY_PREFIX = "de_tab_"
+_TAB = '[class*="st-key-de_tab_"]'
+TAB_STANDARD_CSS = f"""
+{_TAB} .de-tab-title{{font-size:1.25rem;font-weight:700;color:#1F2933;margin:.2rem 0 .35rem 0;line-height:1.3;padding:0}}
+{_TAB} .de-tab-intro{{color:#1F2933;font-size:.97rem;line-height:1.5;margin:0 0 .6rem 0}}
+{_TAB} h3{{font-size:1.05rem !important;font-weight:700;margin:1.4rem 0 .5rem 0 !important;padding:0 !important}}
+{_TAB} .de-scope{{display:flex;flex-wrap:wrap;align-items:baseline;gap:.25rem .6rem;font-size:.875rem;color:#374151;
+  background:#F6F7F9;border:1px solid #E3E6EA;border-radius:8px;padding:.45rem .75rem;margin:.1rem 0 .6rem 0}}
+{_TAB} .de-scope b{{color:#1F2933}}
+{_TAB} .de-scope .de-scope-hint{{color:#4B5563}}
+{_TAB} .de-filter-label{{font-size:.8125rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#4B5563;margin:0 0 .1rem 0}}
+{_TAB} .de-kpis{{margin-bottom:.9rem}}
+{_TAB} .de-kpi .lbl{{font-size:.8125rem}}
+{_TAB} .de-kpi .sub{{font-size:.875rem}}
+{_TAB} .de-status{{font-size:.8125rem}}
+@media (min-width:641px) and (max-width:900px){{
+  {_TAB} .de-kpis{{grid-template-columns:repeat(3,minmax(0,1fr));gap:.6rem}}
+  {_TAB} .de-kpi{{padding:.75rem .85rem}}
+  {_TAB} .de-kpi .val{{font-size:1.45rem;overflow-wrap:anywhere}}
+}}
+@media (max-width:640px){{
+  {_TAB} .de-tab-title{{font-size:1.15rem}}
+  {_TAB} .de-kpis{{gap:.5rem}}
+  {_TAB} .de-kpi{{padding:.65rem .85rem}}
+  {_TAB} .de-kpi .val{{font-size:1.45rem;margin:.2rem 0}}
+}}
+"""
 
 
 def inject_css() -> None:
@@ -297,6 +334,7 @@ def inject_css() -> None:
         @media (max-width: 420px) {{
             .de-sub {{ display: none; }}
         }}
+        {TAB_STANDARD_CSS}
         </style>
         """,
         unsafe_allow_html=True,
@@ -382,6 +420,52 @@ def hero(label: str, title: str, text: str, tone: str = "") -> None:
 def status_chip(text: str, tone: str) -> str:
     """Barevný štítek stavu – barva vždy doplněná slovním popisem (good / warn / bad)."""
     return f'<span class="de-status {tone}">{html.escape(text)}</span>'
+
+
+# --- Společné komponenty standardu záložek (UX/UI 2, etapa 0) -----------------------------------
+# Jen zobrazení: nic nepočítají, nečtou ani nezapisují stav widgetů. Klíče obalů mají vlastní
+# předpony (de_tab_, de_summary_, de_filters_), aby se nemohly potkat s klíči widgetů.
+
+STATUS_SYMBOL = {"good": "✓", "bad": "✕", "warn": "?"}
+
+
+def status_text(text: str, tone: str) -> str:
+    """Text štítku stavu se symbolem, aby význam nenesla jen barva (✓ / ✕ / ?)."""
+    sym = STATUS_SYMBOL.get(tone, "")
+    return f"{sym} {text}" if sym else text
+
+
+def tab_container(slug: str):
+    """Obal záložky – uvnitř platí společný standard (TAB_STANDARD_CSS). Použití: with tab, tab_container("…"):"""
+    return st.container(key=TAB_KEY_PREFIX + slug)
+
+
+def tab_header(title: str, intro_html: str = "") -> None:
+    """Nadpis záložky a krátký úvod (nejvýš 1–2 věty). intro_html je pevný text aplikace (smí obsahovat <b>)."""
+    st.markdown(f'<div class="de-tab-title" role="heading" aria-level="2">{html.escape(title)}</div>',
+                unsafe_allow_html=True)
+    if intro_html:
+        st.markdown(f'<div class="de-tab-intro">{intro_html}</div>', unsafe_allow_html=True)
+
+
+def summary_slot(slug: str):
+    """Místo pro souhrnné ukazatele NAD ovládacími prvky. Plní se až PO přečtení filtrů, takže vždy
+    odpovídá aktuálnímu výběru (vzor z pilotu záložky 7)."""
+    return st.container(key=f"de_summary_{slug}")
+
+
+@contextmanager
+def filter_box(slug: str, label: str):
+    """Rámeček s filtry a přepínači záložky. Widgety uvnitř si ponechávají své klíče i výchozí hodnoty."""
+    with st.container(border=True, key=f"de_filters_{slug}"):
+        st.markdown(f'<div class="de-filter-label">{html.escape(label)}</div>', unsafe_allow_html=True)
+        yield
+
+
+def scope_html(scope: str, subject: str, hint: str = "mění se podle filtrů níže") -> str:
+    """Řádek „Platí pro“ nad souhrnem: pro jaké období a co platí ukazatele (texty se escapují)."""
+    return (f'<div class="de-scope"><span>Platí pro: <b>{html.escape(scope)}</b> · '
+            f'<b>{html.escape(subject)}</b></span><span class="de-scope-hint">{html.escape(hint)}</span></div>')
 
 
 def kpi_cards(cards: list) -> None:

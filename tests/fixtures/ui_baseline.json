@@ -1,0 +1,720 @@
+{
+ "sidebar": {
+  "elements": {
+   "dataframe": 0,
+   "download_button": 0,
+   "plotly_chart": 0
+  },
+  "expanders": [
+   "Pokročilé nastavení",
+   "Správa účtů (jen administrátor)"
+  ],
+  "numbers": {
+   "0": 60,
+   "1": 5,
+   "100 000": 2,
+   "15": 2,
+   "2": 29,
+   "25": 2,
+   "3": 18,
+   "3 000 000": 2,
+   "4": 20,
+   "41": 2,
+   "5": 6,
+   "53": 2,
+   "64": 2,
+   "8": 10,
+   "9": 28
+  },
+  "text": "bb6bc45752ed08b8",
+  "widgets": [
+   {
+    "key": null,
+    "label": "Stroj 1",
+    "options": [
+     "Mini bagr",
+     "Pásový dumper",
+     "Smykový nakladač",
+     "Vibrační deska",
+     "Kolový bagr",
+     "Silniční válec",
+     "Řezačka asfaltu",
+     "Nákladní auto"
+    ],
+    "type": "selectbox",
+    "value": "Mini bagr"
+   },
+   {
+    "key": null,
+    "label": "Stroj 2",
+    "options": [
+     "Mini bagr",
+     "Pásový dumper",
+     "Smykový nakladač",
+     "Vibrační deska",
+     "Kolový bagr",
+     "Silniční válec",
+     "Řezačka asfaltu",
+     "Nákladní auto"
+    ],
+    "type": "selectbox",
+    "value": "Pásový dumper"
+   },
+   {
+    "key": null,
+    "label": "Měsíční fixní náklady na jeden stroj",
+    "options": [],
+    "type": "number_input",
+    "value": "100000"
+   },
+   {
+    "key": null,
+    "label": "Scénář trhu",
+    "options": [
+     "Pesimistický",
+     "Realistický",
+     "Optimistický"
+    ],
+    "type": "selectbox",
+    "value": "Realistický"
+   },
+   {
+    "key": null,
+    "label": "Investiční rozpočet",
+    "options": [],
+    "type": "number_input",
+    "value": "3000000"
+   },
+   {
+    "key": null,
+    "label": "Odhad poptávky pro rychlý výpočet (dny/měsíc)",
+    "options": [],
+    "type": "slider",
+    "value": "18"
+   },
+   {
+    "key": null,
+    "label": "Počet simulací (měsíců)",
+    "options": [],
+    "type": "slider",
+    "value": "1000"
+   },
+   {
+    "key": "logout",
+    "label": "Odhlásit se",
+    "options": [],
+    "type": "button",
+    "value": "False"
+   },
+   {
+    "key": "admin_pw1",
+    "label": "Nové heslo",
+    "options": [],
+    "type": "text_input",
+    "value": "prázdné"
+   },
+   {
+    "key": "admin_pw2",
+    "label": "Heslo znovu",
+    "options": [],
+    "type": "text_input",
+    "value": "prázdné"
+   }
+  ]
+ },
+ "tab_labels": [
+  "🏆 Doporučení",
+  "📈 Možné výsledky",
+  "⚠️ Riziko",
+  "🎯 Co ovlivňuje zisk",
+  "🛒 Nákup strojů",
+  "🗓️ Plán zakázek",
+  "📅 Kapacita strojů",
+  "🧭 Rozhodovací plánovač"
+ ],
+ "tabs": {
+  "1": {
+   "elements": {
+    "dataframe": 0,
+    "download_button": 1,
+    "plotly_chart": 0
+   },
+   "expanders": [
+    "Jak aplikace došla k doporučení",
+    "Podrobné ukazatele obou strojů",
+    "Rychlý odhad bez simulace – přesně 18 dní pronájmu"
+   ],
+   "numbers": {
+    "0": 4,
+    "1 000": 4,
+    "1 200 000": 2,
+    "1,6": 6,
+    "10": 2,
+    "10 940": 2,
+    "11 220": 6,
+    "11 862": 2,
+    "12,5": 6,
+    "15": 2,
+    "15 966": 2,
+    "15,4": 2,
+    "16 117": 2,
+    "18": 8,
+    "25": 2,
+    "27,3": 4,
+    "27,8": 2,
+    "29 000": 2,
+    "34 802": 2,
+    "4": 10,
+    "42 387": 2,
+    "43 169": 8,
+    "5": 4,
+    "5 000": 2,
+    "5563": 2,
+    "6 222": 2,
+    "6 389": 4,
+    "6 500": 2,
+    "7 459": 2,
+    "71 335": 2,
+    "75,8": 2,
+    "8 000": 4,
+    "850 000": 2,
+    "88": 4,
+    "90": 2
+   },
+   "text": "ea83fed7e4287fbe",
+   "widgets": [
+    {
+     "key": null,
+     "label": "Stáhnout report (DOCX)",
+     "options": [],
+     "type": "download_button",
+     "value": "False"
+    }
+   ]
+  },
+  "2": {
+   "elements": {
+    "dataframe": 0,
+    "download_button": 0,
+    "plotly_chart": 2
+   },
+   "expanders": [
+    "Podrobnější analýza výsledků"
+   ],
+   "numbers": {
+    "0": 6,
+    "1": 14,
+    "1 000": 2,
+    "1,6": 2,
+    "10": 18,
+    "10 940": 2,
+    "11 220": 2,
+    "11 862": 4,
+    "16 117": 4,
+    "27,3": 2,
+    "3": 2,
+    "34 802": 4,
+    "42 387": 2,
+    "43 169": 2,
+    "5": 4,
+    "71 335": 4,
+    "8": 4,
+    "80": 4,
+    "87,5": 2,
+    "90": 6,
+    "97706": 4
+   },
+   "text": "2c3086e65dbb4c60",
+   "widgets": []
+  },
+  "3": {
+   "elements": {
+    "dataframe": 0,
+    "download_button": 0,
+    "plotly_chart": 1
+   },
+   "expanders": [
+    "Jak číst ukazatele rizika"
+   ],
+   "numbers": {
+    "1": 4,
+    "1,6": 2,
+    "10": 4,
+    "15": 4,
+    "15 966": 2,
+    "27,3": 2,
+    "3": 2,
+    "5": 18,
+    "6,0": 2,
+    "7 459": 2,
+    "8": 2,
+    "8,0": 2,
+    "97706": 2
+   },
+   "text": "3b5440acbf2a109d",
+   "widgets": []
+  },
+  "4": {
+   "elements": {
+    "dataframe": 0,
+    "download_button": 0,
+    "plotly_chart": 3
+   },
+   "expanders": [
+    "Mapa ziskovosti – kombinace ceny a počtu dní",
+    "Jak se počítají údaje na této záložce"
+   ],
+   "numbers": {
+    "0": 2,
+    "1": 2,
+    "1 611": 2,
+    "10": 10,
+    "100 000": 2,
+    "13": 2,
+    "14 400": 2,
+    "140": 2,
+    "16": 2,
+    "18": 6,
+    "25,2": 2,
+    "278": 2,
+    "4,5": 2,
+    "5": 2,
+    "6 222": 2,
+    "6 389": 2,
+    "6 500": 2,
+    "60": 2,
+    "8": 2,
+    "8 000": 2,
+    "97706": 2
+   },
+   "text": "28e6caaf7c0abe9f",
+   "widgets": []
+  },
+  "5": {
+   "elements": {
+    "dataframe": 1,
+    "download_button": 0,
+    "plotly_chart": 1
+   },
+   "expanders": [
+    "Předpoklady a metodika"
+   ],
+   "numbers": {
+    "0": 3,
+    "000,22": 1,
+    "000,24": 1,
+    "000,41": 1,
+    "000,58": 1,
+    "000,61": 1,
+    "000,62": 1,
+    "000,77": 1,
+    "000,89": 1,
+    "040": 1,
+    "1": 11,
+    "1 100 000": 2,
+    "1 100 000,17": 1,
+    "1 200 000": 2,
+    "1 200 000,20": 1,
+    "1 600 000,18": 1,
+    "1 800 000,14": 1,
+    "11,9": 2,
+    "115 960,57": 1,
+    "125 315": 2,
+    "126 450": 2,
+    "126 450,64": 1,
+    "13,7": 2,
+    "131 480,90": 1,
+    "14304": 8,
+    "15 000": 2,
+    "159 040": 2,
+    "159 040,70": 1,
+    "16,0": 2,
+    "16,9": 2,
+    "160 740,83": 1,
+    "168 000": 2,
+    "176 400,115": 1,
+    "180 000": 2,
+    "180 000,16": 1,
+    "19 000": 2,
+    "19,9": 2,
+    "199 215": 2,
+    "2": 3,
+    "2 400 000,15": 1,
+    "2 730 000": 4,
+    "20": 2,
+    "22 825": 2,
+    "24 900": 2,
+    "250 000": 2,
+    "250 000,12": 1,
+    "270 000": 2,
+    "3": 1,
+    "3 000 000": 4,
+    "30": 2,
+    "367 215": 2,
+    "39 900": 2,
+    "39 900,15": 1,
+    "4": 5,
+    "400": 1,
+    "41 825": 2,
+    "41 825,19": 1,
+    "450": 1,
+    "480": 1,
+    "5": 1,
+    "6": 1,
+    "6 561": 2,
+    "62 450": 2,
+    "64 000": 2,
+    "7": 1,
+    "70 000": 2,
+    "740": 1,
+    "8": 2,
+    "825": 1,
+    "850 000,18": 1,
+    "89 040": 2,
+    "900": 1,
+    "960": 1
+   },
+   "text": "0e7fcb82795910eb",
+   "widgets": []
+  },
+  "6": {
+   "elements": {
+    "dataframe": 2,
+    "download_button": 0,
+    "plotly_chart": 2
+   },
+   "expanders": [
+    "Přínos všech zakázek pro plán",
+    "Předpoklady a metodika"
+   ],
+   "numbers": {
+    "0": 19,
+    "1": 4,
+    "1 000 000": 2,
+    "1,2": 1,
+    "1,3": 1,
+    "1,4": 1,
+    "1,5": 2,
+    "10": 2,
+    "10 000": 3,
+    "10,0": 1,
+    "108 000": 7,
+    "11": 4,
+    "11,0": 1,
+    "11,18": 1,
+    "110 000": 5,
+    "115 000": 4,
+    "12": 12,
+    "12,0": 1,
+    "120 000": 1,
+    "125 000": 1,
+    "13,16": 1,
+    "130 000": 4,
+    "14,0": 2,
+    "142 000": 4,
+    "15,0": 1,
+    "150 000": 1,
+    "16": 2,
+    "16,2": 1,
+    "160 000": 6,
+    "162 000": 2,
+    "17,20": 1,
+    "18": 2,
+    "18 000": 6,
+    "180 000": 1,
+    "2": 4,
+    "2 000": 1,
+    "20": 6,
+    "210 000": 1,
+    "22 000": 1,
+    "220 000": 1,
+    "25": 2,
+    "25 000": 1,
+    "260 000": 1,
+    "270 000": 2,
+    "28 000": 1,
+    "3": 6,
+    "3,8": 1,
+    "32 000": 1,
+    "320 000": 1,
+    "33 000": 4,
+    "35 000": 1,
+    "4": 2,
+    "40 000": 1,
+    "42 000": 4,
+    "45 000": 1,
+    "5": 2,
+    "5 000": 1,
+    "5,0": 1,
+    "5,10": 1,
+    "50 000": 4,
+    "52 000": 1,
+    "55 000": 5,
+    "6": 2,
+    "6,0": 1,
+    "6,11": 1,
+    "6,12": 1,
+    "60 000": 3,
+    "65 000": 2,
+    "7": 2,
+    "70 000": 8,
+    "730 000": 2,
+    "8": 4,
+    "8,0": 1,
+    "80 000": 1,
+    "85 000": 1,
+    "892 000": 4,
+    "9": 2,
+    "9,11": 1,
+    "9,7": 1,
+    "90 000": 1,
+    "95": 2,
+    "95 000": 5,
+    "97706": 2
+   },
+   "text": "233c25601be13e7e",
+   "widgets": []
+  },
+  "7": {
+   "elements": {
+    "dataframe": 4,
+    "download_button": 0,
+    "plotly_chart": 0
+   },
+   "expanders": [
+    "Jak kalendář počítá"
+   ],
+   "numbers": {
+    "0": 8,
+    "001": 1,
+    "005": 1,
+    "006": 1,
+    "01": 6,
+    "05": 1,
+    "1": 13,
+    "10": 1,
+    "11": 3,
+    "11,1": 1,
+    "13,0": 1,
+    "14,0": 1,
+    "15": 3,
+    "15,0": 1,
+    "16": 6,
+    "16,0": 1,
+    "17": 2,
+    "18": 4,
+    "18,1": 1,
+    "2": 7,
+    "20": 2,
+    "25": 2,
+    "3": 3,
+    "4": 4,
+    "5": 4,
+    "5,1": 1,
+    "6": 8,
+    "7": 2,
+    "8": 2,
+    "841": 2,
+    "9": 6,
+    "96": 2
+   },
+   "text": "5bb5dd287141d362",
+   "widgets": [
+    {
+     "key": "cap_types",
+     "label": "Typy strojů",
+     "options": [
+      "Mini bagr",
+      "Pásový dumper",
+      "Smykový nakladač",
+      "Vibrační deska",
+      "Kolový bagr",
+      "Silniční válec",
+      "Řezačka asfaltu",
+      "Nákladní auto"
+     ],
+     "type": "multiselect",
+     "value": "[]"
+    },
+    {
+     "key": "cap_plan_start",
+     "label": "Datum prvního dne plánu (nepovinné)",
+     "options": [],
+     "type": "date_input",
+     "value": "None"
+    },
+    {
+     "key": "cap_period",
+     "label": "Období (dny plánu)",
+     "options": [],
+     "type": "slider",
+     "value": "(1, 25)"
+    },
+    {
+     "key": "cap_view",
+     "label": "Zobrazení",
+     "options": [
+      "Kalendář dostupnosti",
+      "Přehled využití"
+     ],
+     "type": "radio",
+     "value": "Kalendář dostupnosti"
+    },
+    {
+     "key": "cap_detail_type",
+     "label": "Stroj",
+     "options": [
+      "Mini bagr",
+      "Pásový dumper",
+      "Smykový nakladač",
+      "Vibrační deska",
+      "Kolový bagr",
+      "Silniční válec",
+      "Řezačka asfaltu",
+      "Nákladní auto"
+     ],
+     "type": "selectbox",
+     "value": "MINI_BAGR"
+    },
+    {
+     "key": "cap_detail_day",
+     "label": "Den plánu",
+     "options": [],
+     "type": "number_input",
+     "value": "1"
+    },
+    {
+     "key": "cap_req_type",
+     "label": "Typ stroje",
+     "options": [
+      "Mini bagr",
+      "Pásový dumper",
+      "Smykový nakladač",
+      "Vibrační deska",
+      "Kolový bagr",
+      "Silniční válec",
+      "Řezačka asfaltu",
+      "Nákladní auto"
+     ],
+     "type": "selectbox",
+     "value": "MINI_BAGR"
+    },
+    {
+     "key": "cap_req_from",
+     "label": "Od dne",
+     "options": [],
+     "type": "number_input",
+     "value": "13"
+    },
+    {
+     "key": "cap_req_to",
+     "label": "Do dne (včetně)",
+     "options": [],
+     "type": "number_input",
+     "value": "16"
+    },
+    {
+     "key": "cap_req_qty",
+     "label": "Počet kusů",
+     "options": [],
+     "type": "number_input",
+     "value": "1"
+    },
+    {
+     "key": "cap_req_tent",
+     "label": "Počítat i s předběžnými rezervacemi (opatrnější pohled)",
+     "options": [],
+     "type": "checkbox",
+     "value": "False"
+    }
+   ]
+  },
+  "8": {
+   "elements": {
+    "dataframe": 0,
+    "download_button": 0,
+    "plotly_chart": 0
+   },
+   "expanders": [
+    "Jak plánovač rozhoduje"
+   ],
+   "numbers": {
+    "0": 2,
+    "1": 4,
+    "6": 4,
+    "7": 2
+   },
+   "text": "a37b6cf5e46cedc4",
+   "widgets": [
+    {
+     "key": "dp_kind",
+     "label": "Typ požadavku",
+     "options": [
+      "Pronájem stroje",
+      "Vlastní zakázka"
+     ],
+     "type": "radio",
+     "value": "Pronájem stroje"
+    },
+    {
+     "key": "dp_r_type",
+     "label": "Stroj",
+     "options": [
+      "Mini bagr",
+      "Pásový dumper",
+      "Smykový nakladač",
+      "Vibrační deska",
+      "Kolový bagr",
+      "Silniční válec",
+      "Řezačka asfaltu",
+      "Nákladní auto"
+     ],
+     "type": "selectbox",
+     "value": "MINI_BAGR"
+    },
+    {
+     "key": "dp_r_qty",
+     "label": "Počet kusů",
+     "options": [],
+     "type": "number_input",
+     "value": "1"
+    },
+    {
+     "key": "dp_r_from",
+     "label": "Od dne",
+     "options": [],
+     "type": "number_input",
+     "value": "21"
+    },
+    {
+     "key": "dp_r_to",
+     "label": "Do dne (včetně)",
+     "options": [],
+     "type": "number_input",
+     "value": "24"
+    },
+    {
+     "key": "dp_r_price",
+     "label": "Cena za den (Kč, nepovinné)",
+     "options": [],
+     "type": "number_input",
+     "value": "None"
+    },
+    {
+     "key": "FormSubmitter:dp_form-Vyhodnotit samostatně",
+     "label": "Vyhodnotit samostatně",
+     "options": [],
+     "type": "button",
+     "value": "False"
+    },
+    {
+     "key": "FormSubmitter:dp_form-Přidat k porovnání",
+     "label": "Přidat k porovnání",
+     "options": [],
+     "type": "button",
+     "value": "False"
+    }
+   ]
+  }
+ }
+}
