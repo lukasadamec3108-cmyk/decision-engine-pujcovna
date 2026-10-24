@@ -35,29 +35,9 @@ ASSETS = Path(__file__).parent / "assets"
 # ČESKÉ FORMÁTOVÁNÍ ČÍSEL
 # ==================================================
 
-NBSP = " "
-
-
-def fmt_num(value, decimals: int = 0) -> str:
-    """Číslo v českém formátu: mezera mezi tisíci, desetinná čárka, znaménko minus."""
-    if value is None:
-        return "–"
-    text = f"{abs(float(value)):,.{decimals}f}"
-    text = text.replace(",", NBSP).replace(".", ",")
-    return ("−" if float(value) < 0 and text.strip("0,") else "") + text
-
-
-def fmt_czk(value, decimals: int = 0) -> str:
-    return f"{fmt_num(value, decimals)}{NBSP}Kč"
-
-
-def fmt_pct(value_percent, decimals: int = 1) -> str:
-    """Formátuje hodnotu, která už je v procentech (např. 24.6 → „24,6 %“)."""
-    return f"{fmt_num(value_percent, decimals)}{NBSP}%"
-
-
-def fmt_days(value, decimals: int = 1) -> str:
-    return f"{fmt_num(value, decimals)}{NBSP}dní"
+# Funkce jsou v modulu formatting (bez Streamlitu, používá je i export DOCX); zde se znovu
+# vystavují, aby zůstalo ui.fmt_czk i „from ui_theme import fmt_czk“.
+from formatting import NBSP, fmt_czk, fmt_days, fmt_num, fmt_pct  # noqa: E402,F401
 
 
 PRIORITY_CZ = {"High": "Vysoká", "Medium": "Střední", "Low": "Nízká"}
