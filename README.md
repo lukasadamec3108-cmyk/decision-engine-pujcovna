@@ -146,7 +146,10 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 ### Struktura projektu
 
 ```
-├── app.py                           # Streamlit aplikace (výpočty, záložky, export reportu)
+├── app.py                           # Streamlit aplikace: vstupy, záložky a zobrazení; výpočty volá z modulů
+├── investice.py                     # investiční výpočty záložek 1–4 (Monte Carlo, metriky, LP/DP, citlivost)
+├── report_docx.py                   # investiční report DOCX (export z první záložky)
+├── formatting.py                    # české formátování čísel (bez závislosti na Streamlitu)
 ├── ui_theme.py                      # vzhled: barvy, české formátování čísel, karty, šablona grafů
 ├── auth.py                          # přihlašování: jedno heslo nebo uživatelské účty (hash hesel)
 ├── datamodel.py                     # společná datová vrstva: načtení, kontrola, převod pro výpočty

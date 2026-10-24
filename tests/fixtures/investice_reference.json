@@ -1,0 +1,1258 @@
+{
+ "oba_ztratove": {
+  "best_d1": 0,
+  "best_d2": 30,
+  "best_dp_profit": "-0x1.7ed0000000001p+15",
+  "better_machine": "Řezačka asfaltu",
+  "break_even_dumper": "0x1.56db6db6db6dbp+5",
+  "break_even_mini": "0x1.e000000000000p+5",
+  "ci_dumper": [
+   "-0x1.da99665d21ccfp+16",
+   "-0x1.9c87ab690a583p+16"
+  ],
+  "ci_mini": [
+   "-0x1.f6773e38469b0p+16",
+   "-0x1.c380cdbeb9992p+16"
+  ],
+  "days_grid": {
+   "dtype": "int64",
+   "sha256": "bcc9bcfc670935c6018dc26a74956a373b655f8930dd55ab074d816d7d233780",
+   "shape": [
+    32
+   ]
+  },
+  "days_range": {
+   "dtype": "int64",
+   "sha256": "f0163ff82df800a0cae0f53996b37f2ea2ed6943c7e76ac608ba9729bf78cc05",
+   "shape": [
+    26
+   ]
+  },
+  "dp_better": "Řezačka asfaltu",
+  "drivers": [
+   [
+    "Denní cena",
+    "price"
+   ],
+   [
+    "Vytížení (dny/měsíc)",
+    "days"
+   ],
+   [
+    "Fixní náklad",
+    "fixed"
+   ],
+   [
+    "Servisní náklad",
+    "service"
+   ]
+  ],
+  "expected_profit_dumper": "-0x1.bb4c286684818p+16",
+  "expected_profit_dumper_real": "-0x1.0a9a000000000p+17",
+  "expected_profit_mini": "-0x1.dae1f92450ff2p+16",
+  "expected_profit_mini_real": "-0x1.126a000000000p+17",
+  "investment_cost_dumper": 250000,
+  "investment_cost_mini": 180000,
+  "labels": [
+   "Fixní náklad – Vibrační deska",
+   "Fixní náklad – Řezačka asfaltu",
+   "Denní cena – Řezačka asfaltu",
+   "Vytížení (dny/měsíc) – Řezačka asfaltu",
+   "Denní cena – Vibrační deska",
+   "Vytížení (dny/měsíc) – Vibrační deska",
+   "Servisní náklad – Řezačka asfaltu",
+   "Servisní náklad – Vibrační deska"
+  ],
+  "lp_better": "oba stroje podobně",
+  "lp_profit": "-0x0.0p+0",
+  "mc_better": "Řezačka asfaltu",
+  "p10_dumper": "-0x1.da99665d21ccfp+16",
+  "p10_mini": "-0x1.f6773e38469b0p+16",
+  "p50_dumper": "-0x1.ba2f0a2883806p+16",
+  "p50_mini": "-0x1.d9141bc0299c6p+16",
+  "p90_dumper": "-0x1.9c87ab690a583p+16",
+  "p90_mini": "-0x1.c380cdbeb9992p+16",
+  "price_range": {
+   "dtype": "float64",
+   "sha256": "c588107757bfb2a9d18d193fd9515aa35051c8fddb14bcea8f01ea89322d6b86",
+   "shape": [
+    16
+   ]
+  },
+  "prob_dumper_better": "0x1.b17e4b17e4b18p-1",
+  "prob_loss_dumper": "0x1.0000000000000p+0",
+  "prob_loss_mini": "0x1.0000000000000p+0",
+  "profit_curve_dumper": {
+   "dtype": "float64",
+   "sha256": "b8f163a1dbba3ddb2c71fc64f5502d269151946bae7419f16767a6f565c3d410",
+   "shape": [
+    32
+   ]
+  },
+  "profit_curve_mini": {
+   "dtype": "float64",
+   "sha256": "9ab7e617c3a0e8ded9b7a32ba95ced3e30e05e2293c61c4d570625f461b8fa68",
+   "shape": [
+    32
+   ]
+  },
+  "profit_diff": "0x1.f95d0bdcc7da0p+12",
+  "profit_dumper": {
+   "dtype": "float64",
+   "sha256": "b219d9ccb3a612ba5e0be5c03150a4649449044a39e52ae314c97f2dc095d8ce",
+   "shape": [
+    300
+   ]
+  },
+  "profit_dumper_day": "-0x1.9855555555556p+10",
+  "profit_matrix": {
+   "dtype": "float64",
+   "sha256": "555a45e5de07ba328e0450b2ce6037d57ded84664f04fb51f3ce37c5d69c6acd",
+   "shape": [
+    16,
+    26
+   ]
+  },
+  "profit_mini": {
+   "dtype": "float64",
+   "sha256": "31ec2ef5b8ed401281ff830de27d898dd696e44352e9352e2eb613294321754d",
+   "shape": [
+    300
+   ]
+  },
+  "profit_mini_day": "-0x1.4500000000000p+11",
+  "required_price_1": "0x1.de20000000000p+14",
+  "required_price_2": "0x1.e140000000000p+14",
+  "risk_diff": "0x0.0p+0",
+  "risk_loss_dumper": "0x1.9000000000000p+6",
+  "risk_loss_mini": "0x1.9000000000000p+6",
+  "roi_dumper": null,
+  "roi_mini": null,
+  "rr_x1": "0x1.9000000000000p+6",
+  "rr_x2": "0x1.9000000000000p+6",
+  "rr_y1": "-0x1.dae1f92450ff2p+16",
+  "rr_y2": "-0x1.bb4c286684818p+16",
+  "score_rows": [
+   [
+    "profit",
+    "-0x1.dae1f92450ff2p+16",
+    "-0x1.bb4c286684818p+16",
+    1
+   ],
+   [
+    "loss",
+    "0x1.0000000000000p+0",
+    "0x1.0000000000000p+0",
+    null
+   ],
+   [
+    "var95",
+    "-0x1.fbf46c1778e88p+16",
+    "-0x1.e3af9314748ffp+16",
+    1
+   ],
+   [
+    "payback",
+    null,
+    null,
+    null
+   ]
+  ],
+  "scorecard_dumper": 2,
+  "scorecard_mini": 0,
+  "sensitivity_data": [
+   [
+    "Fixní náklad – Vibrační deska",
+    "0x1.d4c0000000000p+14"
+   ],
+   [
+    "Fixní náklad – Řezačka asfaltu",
+    "0x1.d4c0000000000p+14"
+   ],
+   [
+    "Denní cena – Řezačka asfaltu",
+    "0x1.b580000000000p+11"
+   ],
+   [
+    "Vytížení (dny/měsíc) – Řezačka asfaltu",
+    "0x1.b580000000000p+11"
+   ],
+   [
+    "Denní cena – Vibrační deska",
+    "0x1.3880000000000p+11"
+   ],
+   [
+    "Vytížení (dny/měsíc) – Vibrační deska",
+    "0x1.3880000000000p+11"
+   ],
+   [
+    "Servisní náklad – Řezačka asfaltu",
+    "0x1.9000000000000p+9"
+   ],
+   [
+    "Servisní náklad – Vibrační deska",
+    "0x1.2c00000000000p+9"
+   ]
+  ],
+  "sim_1": {
+   "daily_price": {
+    "dtype": "float64",
+    "sha256": "01064899e8844d3fa422c41ce15e75109393fc04f9138544f483a6f5bd1fc010",
+    "shape": [
+     300
+    ]
+   },
+   "failure_days": {
+    "dtype": "int64",
+    "sha256": "667e21257ff22c927d94a80306d8e44f401143b2a14f8a2b7ccb774509eff51f",
+    "shape": [
+     300
+    ]
+   },
+   "profit": {
+    "dtype": "float64",
+    "sha256": "31ec2ef5b8ed401281ff830de27d898dd696e44352e9352e2eb613294321754d",
+    "shape": [
+     300
+    ]
+   },
+   "real_days": {
+    "dtype": "float64",
+    "sha256": "7ced858d626f07b05f62a3a01ae44d6b0905bd4c588e3c4f28a4d834dc316c42",
+    "shape": [
+     300
+    ]
+   },
+   "revenue": {
+    "dtype": "float64",
+    "sha256": "83be0ec298dce51c5dca21d9ac412e84d660f723834b589882fed0a17909b08a",
+    "shape": [
+     300
+    ]
+   },
+   "service_cost": {
+    "dtype": "float64",
+    "sha256": "c9a907717008a999c083e47027e8b9e24c817cecd76e14844120135ab8c9a7d7",
+    "shape": [
+     300
+    ]
+   },
+   "util_days": {
+    "dtype": "float64",
+    "sha256": "5371fdd035ca37309bfb8edc3e25736b0a912978ec13a00d70f5e8178034b647",
+    "shape": [
+     300
+    ]
+   }
+  },
+  "sim_2": {
+   "daily_price": {
+    "dtype": "float64",
+    "sha256": "9b6c7132fd6e35bdcfa012e6252795ff5abfc09cc23b7eb70dfdd1d4611dc64a",
+    "shape": [
+     300
+    ]
+   },
+   "failure_days": {
+    "dtype": "int64",
+    "sha256": "4457826f6f5b0684b90c4b008778927d6aba2883a89d9d55da60b458291bed47",
+    "shape": [
+     300
+    ]
+   },
+   "profit": {
+    "dtype": "float64",
+    "sha256": "b219d9ccb3a612ba5e0be5c03150a4649449044a39e52ae314c97f2dc095d8ce",
+    "shape": [
+     300
+    ]
+   },
+   "real_days": {
+    "dtype": "float64",
+    "sha256": "b3c0a8a2fa4a578115ba49f221950f2d34851cac9779a28233b6d064e145c086",
+    "shape": [
+     300
+    ]
+   },
+   "revenue": {
+    "dtype": "float64",
+    "sha256": "81cc12021c16eeb8bc87b5780eb092d5c1be1517fab6b3827c3458c55b26a660",
+    "shape": [
+     300
+    ]
+   },
+   "service_cost": {
+    "dtype": "float64",
+    "sha256": "c366c6978bc4784f756039f5bb7418fc49425c71bf89b08edc9e92d72ae2285b",
+    "shape": [
+     300
+    ]
+   },
+   "util_days": {
+    "dtype": "float64",
+    "sha256": "8708e6c15c3fcb3e588dab3e0a537ac41ff5540414be45844d83faf7b1280534",
+    "shape": [
+     300
+    ]
+   }
+  },
+  "values": [
+   "0x1.d4c0000000000p+14",
+   "0x1.d4c0000000000p+14",
+   "0x1.b580000000000p+11",
+   "0x1.b580000000000p+11",
+   "0x1.3880000000000p+11",
+   "0x1.3880000000000p+11",
+   "0x1.9000000000000p+9",
+   "0x1.2c00000000000p+9"
+  ],
+  "var95_dumper": "-0x1.e3af9314748ffp+16",
+  "var95_mini": "-0x1.fbf46c1778e88p+16",
+  "verdict_score_dumper": 3,
+  "verdict_score_mini": 0,
+  "x1_opt": "0x0.0p+0",
+  "x2_opt": "0x0.0p+0"
+ },
+ "optimisticky": {
+  "best_d1": 30,
+  "best_d2": 0,
+  "best_dp_profit": "0x1.0c8e000000000p+18",
+  "better_machine": "Kolový bagr",
+  "break_even_dumper": "0x1.9435e50d79436p+2",
+  "break_even_mini": "0x1.4000000000000p+2",
+  "ci_dumper": [
+   "0x1.d422b8a51711bp+16",
+   "0x1.72764a62a1867p+17"
+  ],
+  "ci_mini": [
+   "0x1.4326283a2983bp+17",
+   "0x1.ef5d28268101bp+17"
+  ],
+  "days_grid": {
+   "dtype": "int64",
+   "sha256": "bcc9bcfc670935c6018dc26a74956a373b655f8930dd55ab074d816d7d233780",
+   "shape": [
+    32
+   ]
+  },
+  "days_range": {
+   "dtype": "int64",
+   "sha256": "f0163ff82df800a0cae0f53996b37f2ea2ed6943c7e76ac608ba9729bf78cc05",
+   "shape": [
+    26
+   ]
+  },
+  "dp_better": "Kolový bagr",
+  "drivers": [
+   [
+    "Denní cena",
+    "price"
+   ],
+   [
+    "Vytížení (dny/měsíc)",
+    "days"
+   ],
+   [
+    "Fixní náklad",
+    "fixed"
+   ],
+   [
+    "Servisní náklad",
+    "service"
+   ]
+  ],
+  "expected_profit_dumper": "0x1.2b66f91c67dfap+17",
+  "expected_profit_dumper_real": "0x1.339e000000000p+17",
+  "expected_profit_mini": "0x1.95c8425c783e2p+17",
+  "expected_profit_mini_real": "0x1.a3ec000000000p+17",
+  "investment_cost_dumper": 1800000,
+  "investment_cost_mini": 2400000,
+  "labels": [
+   "Denní cena – Kolový bagr",
+   "Vytížení (dny/měsíc) – Kolový bagr",
+   "Vytížení (dny/měsíc) – Silniční válec",
+   "Denní cena – Silniční válec",
+   "Fixní náklad – Kolový bagr",
+   "Fixní náklad – Silniční válec",
+   "Servisní náklad – Kolový bagr",
+   "Servisní náklad – Silniční válec"
+  ],
+  "lp_better": "Kolový bagr",
+  "lp_profit": "0x1.0c8e000000000p+18",
+  "mc_better": "Kolový bagr",
+  "p10_dumper": "0x1.d422b8a51711bp+16",
+  "p10_mini": "0x1.4326283a2983bp+17",
+  "p50_dumper": "0x1.2968ccea8af74p+17",
+  "p50_mini": "0x1.949357b159ea4p+17",
+  "p90_dumper": "0x1.72764a62a1867p+17",
+  "p90_mini": "0x1.ef5d28268101bp+17",
+  "price_range": {
+   "dtype": "float64",
+   "sha256": "ebe6cf90ba2199257b9f86f369445752eae4f0a24faee243f5580f20f6b59e65",
+   "shape": [
+    16
+   ]
+  },
+  "prob_dumper_better": "0x1.cac083126e979p-4",
+  "prob_loss_dumper": "0x0.0p+0",
+  "prob_loss_mini": "0x0.0p+0",
+  "profit_curve_dumper": {
+   "dtype": "float64",
+   "sha256": "7832c097424f10a64fd6279b99cdcf7ebd0c967a064187446142f34d9c2388af",
+   "shape": [
+    32
+   ]
+  },
+  "profit_curve_mini": {
+   "dtype": "float64",
+   "sha256": "5505fe0313a9c0cff107e6333b032599f65afe73d6f7640c999854103b602f92",
+   "shape": [
+    32
+   ]
+  },
+  "profit_diff": "-0x1.a9852500417a0p+15",
+  "profit_dumper": {
+   "dtype": "float64",
+   "sha256": "a876780583cf8ef1e75118653deeb589ddedd7ac1d2ef0fc8362977983f81979",
+   "shape": [
+    2000
+   ]
+  },
+  "profit_dumper_day": "0x1.ab15555555556p+12",
+  "profit_matrix": {
+   "dtype": "float64",
+   "sha256": "e14a54286057d3ab1686fd2a27912d5082eefc74e06142220ecf700ce2c2da9c",
+   "shape": [
+    16,
+    26
+   ]
+  },
+  "profit_mini": {
+   "dtype": "float64",
+   "sha256": "cead9a6c77c4ca4b286457226a3e6843e28d926eb33d397f612c5ceb1c8966c9",
+   "shape": [
+    2000
+   ]
+  },
+  "profit_mini_day": "0x1.1e75555555555p+13",
+  "required_price_1": "0x1.a900000000000p+11",
+  "required_price_2": "0x1.9000000000000p+11",
+  "risk_diff": "0x0.0p+0",
+  "risk_loss_dumper": "0x0.0p+0",
+  "risk_loss_mini": "0x0.0p+0",
+  "roi_dumper": "0x1.77bfaa60bf317p+3",
+  "roi_mini": "0x1.71a80827afa5bp+3",
+  "rr_x1": "0x0.0p+0",
+  "rr_x2": "0x0.0p+0",
+  "rr_y1": "0x1.95c8425c783e2p+17",
+  "rr_y2": "0x1.2b66f91c67dfap+17",
+  "score_rows": [
+   [
+    "profit",
+    "0x1.95c8425c783e2p+17",
+    "0x1.2b66f91c67dfap+17",
+    0
+   ],
+   [
+    "loss",
+    "0x0.0p+0",
+    "0x0.0p+0",
+    null
+   ],
+   [
+    "var95",
+    "0x1.290fe671efe45p+17",
+    "0x1.b149acb30e43bp+16",
+    0
+   ],
+   [
+    "payback",
+    "0x1.71a80827afa5bp+3",
+    "0x1.77bfaa60bf317p+3",
+    0
+   ]
+  ],
+  "scorecard_dumper": 0,
+  "scorecard_mini": 3,
+  "sensitivity_data": [
+   [
+    "Denní cena – Kolový bagr",
+    "0x1.d4c0000000008p+15"
+   ],
+   [
+    "Vytížení (dny/měsíc) – Kolový bagr",
+    "0x1.d4c0000000008p+15"
+   ],
+   [
+    "Vytížení (dny/měsíc) – Silniční válec",
+    "0x1.7318000000004p+15"
+   ],
+   [
+    "Denní cena – Silniční válec",
+    "0x1.7318000000000p+15"
+   ],
+   [
+    "Fixní náklad – Kolový bagr",
+    "0x1.7700000000000p+13"
+   ],
+   [
+    "Fixní náklad – Silniční válec",
+    "0x1.7700000000000p+13"
+   ],
+   [
+    "Servisní náklad – Kolový bagr",
+    "0x1.3880000000000p+12"
+   ],
+   [
+    "Servisní náklad – Silniční válec",
+    "0x1.f400000000000p+11"
+   ]
+  ],
+  "sim_1": {
+   "daily_price": {
+    "dtype": "float64",
+    "sha256": "4781207dd29bc02f7640668abdced5db768535be12ac3e55be0ba122cd15b5de",
+    "shape": [
+     2000
+    ]
+   },
+   "failure_days": {
+    "dtype": "int64",
+    "sha256": "2751423651b753c65f51f8d3990b666b261c6c5524e6d50ecc2b6805a3b2aa37",
+    "shape": [
+     2000
+    ]
+   },
+   "profit": {
+    "dtype": "float64",
+    "sha256": "cead9a6c77c4ca4b286457226a3e6843e28d926eb33d397f612c5ceb1c8966c9",
+    "shape": [
+     2000
+    ]
+   },
+   "real_days": {
+    "dtype": "float64",
+    "sha256": "4dcaafa0397dff29891c22eec85a21d9cc295773c455dc006f7f6b1478d6b4c5",
+    "shape": [
+     2000
+    ]
+   },
+   "revenue": {
+    "dtype": "float64",
+    "sha256": "91210ac8115e4df318472927955633da84f84b0c067ca419eecb8b238d3b82f7",
+    "shape": [
+     2000
+    ]
+   },
+   "service_cost": {
+    "dtype": "float64",
+    "sha256": "b35da40611d42e9d915668f0270117a37a6d40bd3a4fea5e42006480598a40a1",
+    "shape": [
+     2000
+    ]
+   },
+   "util_days": {
+    "dtype": "float64",
+    "sha256": "9e03bba5d4625a20b5ba2b0a2d2a1102aee026dbd27a252ad545eacbe2cae647",
+    "shape": [
+     2000
+    ]
+   }
+  },
+  "sim_2": {
+   "daily_price": {
+    "dtype": "float64",
+    "sha256": "3cbd0929d08fa72a8d3b3bda0e2754ed5c4f22cdcaa5ffa6a87ed9de5ca23632",
+    "shape": [
+     2000
+    ]
+   },
+   "failure_days": {
+    "dtype": "int64",
+    "sha256": "ad6441e763f7f7a634901df24cd38378306e0f8463949852f5a887f64c7ca5ee",
+    "shape": [
+     2000
+    ]
+   },
+   "profit": {
+    "dtype": "float64",
+    "sha256": "a876780583cf8ef1e75118653deeb589ddedd7ac1d2ef0fc8362977983f81979",
+    "shape": [
+     2000
+    ]
+   },
+   "real_days": {
+    "dtype": "float64",
+    "sha256": "086c11a61e1b3572948ff704b5d8771d18b4551e33adb3b55bcb95ec1f8bdf85",
+    "shape": [
+     2000
+    ]
+   },
+   "revenue": {
+    "dtype": "float64",
+    "sha256": "3e4762c56e50cbaba104fa33a2a46829094f949123b07b99ef4be9a3a7e574da",
+    "shape": [
+     2000
+    ]
+   },
+   "service_cost": {
+    "dtype": "float64",
+    "sha256": "2fdfaae9ff17884ee14715af5e82a32a27ab5aea9592a48a1a8dc93262e81e12",
+    "shape": [
+     2000
+    ]
+   },
+   "util_days": {
+    "dtype": "float64",
+    "sha256": "56319a85382f7d423562d221352f2c594a9511dce171d516301ea887f3cfffc6",
+    "shape": [
+     2000
+    ]
+   }
+  },
+  "values": [
+   "0x1.d4c0000000008p+15",
+   "0x1.d4c0000000008p+15",
+   "0x1.7318000000004p+15",
+   "0x1.7318000000000p+15",
+   "0x1.7700000000000p+13",
+   "0x1.7700000000000p+13",
+   "0x1.3880000000000p+12",
+   "0x1.f400000000000p+11"
+  ],
+  "var95_dumper": "0x1.b149acb30e43bp+16",
+  "var95_mini": "0x1.290fe671efe45p+17",
+  "verdict_score_dumper": 1,
+  "verdict_score_mini": 4,
+  "x1_opt": "0x1.e000000000000p+4",
+  "x2_opt": "-0x0.0p+0"
+ },
+ "pesimisticky": {
+  "best_d1": 0,
+  "best_d2": 30,
+  "best_dp_profit": "0x1.9a28000000000p+16",
+  "better_machine": "Pásový dumper",
+  "break_even_dumper": "0x1.e000000000000p+3",
+  "break_even_mini": "0x1.2762762762762p+4",
+  "ci_dumper": [
+   "-0x1.c13aa144686fcp+15",
+   "-0x1.adc5d03a980e4p+13"
+  ],
+  "ci_mini": [
+   "-0x1.1601592ebbda2p+16",
+   "-0x1.12744e4993be0p+15"
+  ],
+  "days_grid": {
+   "dtype": "int64",
+   "sha256": "bcc9bcfc670935c6018dc26a74956a373b655f8930dd55ab074d816d7d233780",
+   "shape": [
+    32
+   ]
+  },
+  "days_range": {
+   "dtype": "int64",
+   "sha256": "f0163ff82df800a0cae0f53996b37f2ea2ed6943c7e76ac608ba9729bf78cc05",
+   "shape": [
+    26
+   ]
+  },
+  "dp_better": "Pásový dumper",
+  "drivers": [
+   [
+    "Denní cena",
+    "price"
+   ],
+   [
+    "Vytížení (dny/měsíc)",
+    "days"
+   ],
+   [
+    "Fixní náklad",
+    "fixed"
+   ],
+   [
+    "Servisní náklad",
+    "service"
+   ]
+  ],
+  "expected_profit_dumper": "-0x1.134521628173bp+15",
+  "expected_profit_dumper_real": "0x1.1940000000000p+13",
+  "expected_profit_mini": "-0x1.954c03d23e208p+15",
+  "expected_profit_mini_real": "-0x1.d4c0000000000p+13",
+  "investment_cost_dumper": 1200000,
+  "investment_cost_mini": 850000,
+  "labels": [
+   "Denní cena – Pásový dumper",
+   "Vytížení (dny/měsíc) – Pásový dumper",
+   "Fixní náklad – Mini bagr",
+   "Fixní náklad – Pásový dumper",
+   "Denní cena – Mini bagr",
+   "Vytížení (dny/měsíc) – Mini bagr",
+   "Servisní náklad – Pásový dumper",
+   "Servisní náklad – Mini bagr"
+  ],
+  "lp_better": "Pásový dumper",
+  "lp_profit": "0x1.9a28000000000p+16",
+  "mc_better": "Pásový dumper",
+  "p10_dumper": "-0x1.c13aa144686fcp+15",
+  "p10_mini": "-0x1.1601592ebbda2p+16",
+  "p50_dumper": "-0x1.0c36b6e46c057p+15",
+  "p50_mini": "-0x1.88831b4aa4dd1p+15",
+  "p90_dumper": "-0x1.adc5d03a980e4p+13",
+  "p90_mini": "-0x1.12744e4993be0p+15",
+  "price_range": {
+   "dtype": "float64",
+   "sha256": "5dca761473f27619863a54f56db8d17582391089f7d48495c03f30f1fc128eaf",
+   "shape": [
+    16
+   ]
+  },
+  "prob_dumper_better": "0x1.89ba5e353f7cfp-1",
+  "prob_loss_dumper": "0x1.fb645a1cac083p-1",
+  "prob_loss_mini": "0x1.0000000000000p+0",
+  "profit_curve_dumper": {
+   "dtype": "float64",
+   "sha256": "d850fd0af3c30e30ecc294b4f6c7b9a2673c0c0917b52c35161b80dd69b9c30d",
+   "shape": [
+    32
+   ]
+  },
+  "profit_curve_mini": {
+   "dtype": "float64",
+   "sha256": "e1b87c5036714f8de1a0e4d2e12060ee3bd3b8b175de3b64ce3e81ace8e06079",
+   "shape": [
+    32
+   ]
+  },
+  "profit_diff": "0x1.040dc4df7959ap+14",
+  "profit_dumper": {
+   "dtype": "float64",
+   "sha256": "7314c6746a16c23a15eca3103eea588c33195b1a33659d051bc2ef96ad4b334f",
+   "shape": [
+    1000
+   ]
+  },
+  "profit_dumper_day": "0x1.b580000000000p+11",
+  "profit_matrix": {
+   "dtype": "float64",
+   "sha256": "e2f525277ca4d58ec9efebd6ab8942378221e35b0b146d5b7835bbdca633cefc",
+   "shape": [
+    16,
+    26
+   ]
+  },
+  "profit_mini": {
+   "dtype": "float64",
+   "sha256": "5d59878baf8fcd6fe2a588e33d05ae74b04a0b3e48b8bd1c3e286ec164c547ee",
+   "shape": [
+    1000
+   ]
+  },
+  "profit_mini_day": "0x1.0680000000000p+11",
+  "required_price_1": "0x1.ca55555555555p+12",
+  "required_price_2": "0x1.d4c0000000000p+12",
+  "risk_diff": "0x1.cccccccccccd4p-1",
+  "risk_loss_dumper": "0x1.8c66666666666p+6",
+  "risk_loss_mini": "0x1.9000000000000p+6",
+  "roi_dumper": null,
+  "roi_mini": null,
+  "rr_x1": "0x1.9000000000000p+6",
+  "rr_x2": "0x1.8c66666666666p+6",
+  "rr_y1": "-0x1.954c03d23e208p+15",
+  "rr_y2": "-0x1.134521628173bp+15",
+  "score_rows": [
+   [
+    "profit",
+    "-0x1.954c03d23e208p+15",
+    "-0x1.134521628173bp+15",
+    1
+   ],
+   [
+    "loss",
+    "0x1.0000000000000p+0",
+    "0x1.fb645a1cac083p-1",
+    1
+   ],
+   [
+    "var95",
+    "-0x1.23da8406eb1d3p+16",
+    "-0x1.f54ddd5186285p+15",
+    1
+   ],
+   [
+    "payback",
+    null,
+    null,
+    null
+   ]
+  ],
+  "scorecard_dumper": 3,
+  "scorecard_mini": 0,
+  "sensitivity_data": [
+   [
+    "Denní cena – Pásový dumper",
+    "0x1.c200000000000p+14"
+   ],
+   [
+    "Vytížení (dny/měsíc) – Pásový dumper",
+    "0x1.c200000000000p+14"
+   ],
+   [
+    "Fixní náklad – Mini bagr",
+    "0x1.7700000000000p+14"
+   ],
+   [
+    "Fixní náklad – Pásový dumper",
+    "0x1.7700000000000p+14"
+   ],
+   [
+    "Denní cena – Mini bagr",
+    "0x1.6da0000000004p+14"
+   ],
+   [
+    "Vytížení (dny/měsíc) – Mini bagr",
+    "0x1.6da0000000000p+14"
+   ],
+   [
+    "Servisní náklad – Pásový dumper",
+    "0x1.7700000000000p+11"
+   ],
+   [
+    "Servisní náklad – Mini bagr",
+    "0x1.2c00000000004p+11"
+   ]
+  ],
+  "sim_1": {
+   "daily_price": {
+    "dtype": "float64",
+    "sha256": "0547a06cd668b11050f7c1a39cbaf6a2d5730e49859989081eaad34b607ffa36",
+    "shape": [
+     1000
+    ]
+   },
+   "failure_days": {
+    "dtype": "int64",
+    "sha256": "4339d3e79095ff9a033b9b766490d776f9e9440bf75f4ed12d9a7ea75ddef3e9",
+    "shape": [
+     1000
+    ]
+   },
+   "profit": {
+    "dtype": "float64",
+    "sha256": "5d59878baf8fcd6fe2a588e33d05ae74b04a0b3e48b8bd1c3e286ec164c547ee",
+    "shape": [
+     1000
+    ]
+   },
+   "real_days": {
+    "dtype": "float64",
+    "sha256": "159e91a20ca71637fbdf584ff254bcb3f2ea96d29abb8f7825a1a3983deed75e",
+    "shape": [
+     1000
+    ]
+   },
+   "revenue": {
+    "dtype": "float64",
+    "sha256": "ca562fa03e756aa520d8a2765efb52fbd53805a61d57e8097e7293e6ddff07b4",
+    "shape": [
+     1000
+    ]
+   },
+   "service_cost": {
+    "dtype": "float64",
+    "sha256": "29ac4ea70f22e383c0014cf9776f0e59ecd23648a156fe6b361c424aa152aeb3",
+    "shape": [
+     1000
+    ]
+   },
+   "util_days": {
+    "dtype": "float64",
+    "sha256": "7b9aa0ce69b2ec3a03b06837d49c7bcfc44113dc33c7d07696f59a65a1fab658",
+    "shape": [
+     1000
+    ]
+   }
+  },
+  "sim_2": {
+   "daily_price": {
+    "dtype": "float64",
+    "sha256": "87bae385f47a2be3fa4a5eec3ccd873fd33546e356a2f642c7e19ad9703891b5",
+    "shape": [
+     1000
+    ]
+   },
+   "failure_days": {
+    "dtype": "int64",
+    "sha256": "a1763e4c1b09d0996d43cd3468b0637df763fefa4c00241f649c83744209c527",
+    "shape": [
+     1000
+    ]
+   },
+   "profit": {
+    "dtype": "float64",
+    "sha256": "7314c6746a16c23a15eca3103eea588c33195b1a33659d051bc2ef96ad4b334f",
+    "shape": [
+     1000
+    ]
+   },
+   "real_days": {
+    "dtype": "float64",
+    "sha256": "18e7926138c03833d4fc2cce7aeecb5d675c08e51ca906de563be535357a1475",
+    "shape": [
+     1000
+    ]
+   },
+   "revenue": {
+    "dtype": "float64",
+    "sha256": "ba0fb45833441d79d9fac0a502b5280baae981e6703c830ebbba4cd0491a5a94",
+    "shape": [
+     1000
+    ]
+   },
+   "service_cost": {
+    "dtype": "float64",
+    "sha256": "35548a6e0e7936077aa234e0258681b8fcde7d0344b4dc76d2cce39090e15a16",
+    "shape": [
+     1000
+    ]
+   },
+   "util_days": {
+    "dtype": "float64",
+    "sha256": "92c9589b67edc2d529e4aa3f86200ad33aaf9c887816e03c94766e5020298790",
+    "shape": [
+     1000
+    ]
+   }
+  },
+  "values": [
+   "0x1.c200000000000p+14",
+   "0x1.c200000000000p+14",
+   "0x1.7700000000000p+14",
+   "0x1.7700000000000p+14",
+   "0x1.6da0000000004p+14",
+   "0x1.6da0000000000p+14",
+   "0x1.7700000000000p+11",
+   "0x1.2c00000000004p+11"
+  ],
+  "var95_dumper": "-0x1.f54ddd5186285p+15",
+  "var95_mini": "-0x1.23da8406eb1d3p+16",
+  "verdict_score_dumper": 4,
+  "verdict_score_mini": 0,
+  "x1_opt": "0x0.0p+0",
+  "x2_opt": "0x1.e000000000000p+4"
+ },
+ "vychozi": {
+  "best_d1": 0,
+  "best_d2": 30,
+  "best_dp_profit": "0x1.e847fffffffffp+16",
+  "better_machine": "Pásový dumper",
+  "break_even_dumper": "0x1.9000000000000p+3",
+  "break_even_mini": "0x1.ec4ec4ec4ec4fp+3",
+  "ci_dumper": [
+   "0x1.f7a862f070777p+13",
+   "0x1.16a778e767320p+16"
+  ],
+  "ci_mini": [
+   "-0x1.72afb2a430100p+13",
+   "0x1.0fe4312a9859fp+15"
+  ],
+  "days_grid": {
+   "dtype": "int64",
+   "sha256": "bcc9bcfc670935c6018dc26a74956a373b655f8930dd55ab074d816d7d233780",
+   "shape": [
+    32
+   ]
+  },
+  "days_range": {
+   "dtype": "int64",
+   "sha256": "f0163ff82df800a0cae0f53996b37f2ea2ed6943c7e76ac608ba9729bf78cc05",
+   "shape": [
+    26
+   ]
+  },
+  "dp_better": "Pásový dumper",
+  "drivers": [
+   [
+    "Denní cena",
+    "price"
+   ],
+   [
+    "Vytížení (dny/měsíc)",
+    "days"
+   ],
+   [
+    "Fixní náklad",
+    "fixed"
+   ],
+   [
+    "Servisní náklad",
+    "service"
+   ]
+  ],
+  "expected_profit_dumper": "0x1.5141a245582bep+15",
+  "expected_profit_dumper_real": "0x1.c520000000000p+14",
+  "expected_profit_mini": "0x1.5ea33baf9ab37p+13",
+  "expected_profit_mini_real": "0x1.3880000000000p+12",
+  "investment_cost_dumper": 1200000,
+  "investment_cost_mini": 850000,
+  "labels": [
+   "Denní cena – Pásový dumper",
+   "Vytížení (dny/měsíc) – Pásový dumper",
+   "Denní cena – Mini bagr",
+   "Vytížení (dny/měsíc) – Mini bagr",
+   "Fixní náklad – Mini bagr",
+   "Fixní náklad – Pásový dumper",
+   "Servisní náklad – Pásový dumper",
+   "Servisní náklad – Mini bagr"
+  ],
+  "lp_better": "Pásový dumper",
+  "lp_profit": "0x1.e847fffffffffp+16",
+  "mc_better": "Pásový dumper",
+  "p10_dumper": "0x1.f7a862f070777p+13",
+  "p10_mini": "-0x1.72afb2a430100p+13",
+  "p50_dumper": "0x1.4b256a846bed7p+15",
+  "p50_mini": "0x1.55de4e6b34f2cp+13",
+  "p90_dumper": "0x1.16a778e767320p+16",
+  "p90_mini": "0x1.0fe4312a9859fp+15",
+  "price_range": {
+   "dtype": "float64",
+   "sha256": "5dca761473f27619863a54f56db8d17582391089f7d48495c03f30f1fc128eaf",
+   "shape": [
+    16
+   ]
+  },
+  "prob_dumper_better": "0x1.c000000000000p-1",
+  "prob_loss_dumper": "0x1.0624dd2f1a9fcp-6",
+  "prob_loss_mini": "0x1.178d4fdf3b646p-2",
+  "profit_curve_dumper": {
+   "dtype": "float64",
+   "sha256": "bf8560a6ababffac7a56e2c875e32e433cfb1563a06fccb9e099aaa6bb47b225",
+   "shape": [
+    32
+   ]
+  },
+  "profit_curve_mini": {
+   "dtype": "float64",
+   "sha256": "d926c5e89bcea04e2f9d070bd80698221187e7a1cdcaf5a924cc88503254bc6e",
+   "shape": [
+    32
+   ]
+  },
+  "profit_diff": "0x1.f331a6b2e2fe0p+14",
+  "profit_dumper": {
+   "dtype": "float64",
+   "sha256": "d0373f30aaace45a73ce604b83969db2a495defd04b5beee2576e11289c1f826",
+   "shape": [
+    1000
+   ]
+  },
+  "profit_dumper_day": "0x1.046aaaaaaaaaap+12",
+  "profit_matrix": {
+   "dtype": "float64",
+   "sha256": "1a40d0c41513fb92eb3a9c534b2a108325653b81f0a37618a6ca794880847d41",
+   "shape": [
+    16,
+    26
+   ]
+  },
+  "profit_mini": {
+   "dtype": "float64",
+   "sha256": "b0306481ccdc985ca3c4eabf56484d4a1fc87747a96a23bb4af5ad19b2f2454e",
+   "shape": [
+    1000
+   ]
+  },
+  "profit_mini_day": "0x1.59d5555555555p+11",
+  "required_price_1": "0x1.84e38e38e38e4p+12",
+  "required_price_2": "0x1.8f4e38e38e38ep+12",
+  "risk_diff": "0x1.9b33333333333p+4",
+  "risk_loss_dumper": "0x1.999999999999ap+0",
+  "risk_loss_mini": "0x1.b4ccccccccccdp+4",
+  "roi_dumper": "0x1.bcc3f7207cdb3p+4",
+  "roi_mini": "0x1.2f04f6a19e88ap+6",
+  "rr_x1": "0x1.b4ccccccccccdp+4",
+  "rr_x2": "0x1.999999999999ap+0",
+  "rr_y1": "0x1.5ea33baf9ab37p+13",
+  "rr_y2": "0x1.5141a245582bep+15",
+  "score_rows": [
+   [
+    "profit",
+    "0x1.5ea33baf9ab37p+13",
+    "0x1.5141a245582bep+15",
+    1
+   ],
+   [
+    "loss",
+    "0x1.178d4fdf3b646p-2",
+    "0x1.0624dd2f1a9fcp-6",
+    1
+   ],
+   [
+    "var95",
+    "-0x1.f2edf0450277bp+13",
+    "0x1.d22e228e10316p+12",
+    1
+   ],
+   [
+    "payback",
+    "0x1.2f04f6a19e88ap+6",
+    "0x1.bcc3f7207cdb3p+4",
+    1
+   ]
+  ],
+  "scorecard_dumper": 4,
+  "scorecard_mini": 0,
+  "sensitivity_data": [
+   [
+    "Denní cena – Pásový dumper",
+    "0x1.c200000000000p+14"
+   ],
+   [
+    "Vytížení (dny/měsíc) – Pásový dumper",
+    "0x1.c200000000000p+14"
+   ],
+   [
+    "Denní cena – Mini bagr",
+    "0x1.6da0000000004p+14"
+   ],
+   [
+    "Vytížení (dny/měsíc) – Mini bagr",
+    "0x1.6da0000000000p+14"
+   ],
+   [
+    "Fixní náklad – Mini bagr",
+    "0x1.3880000000004p+14"
+   ],
+   [
+    "Fixní náklad – Pásový dumper",
+    "0x1.3880000000004p+14"
+   ],
+   [
+    "Servisní náklad – Pásový dumper",
+    "0x1.7700000000000p+11"
+   ],
+   [
+    "Servisní náklad – Mini bagr",
+    "0x1.2c00000000004p+11"
+   ]
+  ],
+  "sim_1": {
+   "daily_price": {
+    "dtype": "float64",
+    "sha256": "0547a06cd668b11050f7c1a39cbaf6a2d5730e49859989081eaad34b607ffa36",
+    "shape": [
+     1000
+    ]
+   },
+   "failure_days": {
+    "dtype": "int64",
+    "sha256": "4339d3e79095ff9a033b9b766490d776f9e9440bf75f4ed12d9a7ea75ddef3e9",
+    "shape": [
+     1000
+    ]
+   },
+   "profit": {
+    "dtype": "float64",
+    "sha256": "b0306481ccdc985ca3c4eabf56484d4a1fc87747a96a23bb4af5ad19b2f2454e",
+    "shape": [
+     1000
+    ]
+   },
+   "real_days": {
+    "dtype": "float64",
+    "sha256": "43e5496bb881f8e4f4099d1498222e5e3789d95c6d3d9b7e62f586f5ec8c805e",
+    "shape": [
+     1000
+    ]
+   },
+   "revenue": {
+    "dtype": "float64",
+    "sha256": "81decafa2805c8c3d68ff0fbfe31465c8e69ba5183315b92cde9b9a58bd08391",
+    "shape": [
+     1000
+    ]
+   },
+   "service_cost": {
+    "dtype": "float64",
+    "sha256": "29ac4ea70f22e383c0014cf9776f0e59ecd23648a156fe6b361c424aa152aeb3",
+    "shape": [
+     1000
+    ]
+   },
+   "util_days": {
+    "dtype": "float64",
+    "sha256": "f105b4b630be051a5c2c4bd14e43155aa7c55a89ec983c6196ac8a92ac600cde",
+    "shape": [
+     1000
+    ]
+   }
+  },
+  "sim_2": {
+   "daily_price": {
+    "dtype": "float64",
+    "sha256": "87bae385f47a2be3fa4a5eec3ccd873fd33546e356a2f642c7e19ad9703891b5",
+    "shape": [
+     1000
+    ]
+   },
+   "failure_days": {
+    "dtype": "int64",
+    "sha256": "a1763e4c1b09d0996d43cd3468b0637df763fefa4c00241f649c83744209c527",
+    "shape": [
+     1000
+    ]
+   },
+   "profit": {
+    "dtype": "float64",
+    "sha256": "d0373f30aaace45a73ce604b83969db2a495defd04b5beee2576e11289c1f826",
+    "shape": [
+     1000
+    ]
+   },
+   "real_days": {
+    "dtype": "float64",
+    "sha256": "6efa594724d413cb5ecc8c50a7c65027e5a020cabfcd2d2f79cf5c77f05e70bb",
+    "shape": [
+     1000
+    ]
+   },
+   "revenue": {
+    "dtype": "float64",
+    "sha256": "5bbd8d1f627a21ba5d2780e29c1eef61e2f028422789dfe0b8bcf83f088e632e",
+    "shape": [
+     1000
+    ]
+   },
+   "service_cost": {
+    "dtype": "float64",
+    "sha256": "35548a6e0e7936077aa234e0258681b8fcde7d0344b4dc76d2cce39090e15a16",
+    "shape": [
+     1000
+    ]
+   },
+   "util_days": {
+    "dtype": "float64",
+    "sha256": "8535cc588603a4e58f4ac5a01af0693eb64173a3b487f469fa9c9219732b0b57",
+    "shape": [
+     1000
+    ]
+   }
+  },
+  "values": [
+   "0x1.c200000000000p+14",
+   "0x1.c200000000000p+14",
+   "0x1.6da0000000004p+14",
+   "0x1.6da0000000000p+14",
+   "0x1.3880000000004p+14",
+   "0x1.3880000000004p+14",
+   "0x1.7700000000000p+11",
+   "0x1.2c00000000004p+11"
+  ],
+  "var95_dumper": "0x1.d22e228e10316p+12",
+  "var95_mini": "-0x1.f2edf0450277bp+13",
+  "verdict_score_dumper": 5,
+  "verdict_score_mini": 0,
+  "x1_opt": "0x0.0p+0",
+  "x2_opt": "0x1.e000000000000p+4"
+ }
+}

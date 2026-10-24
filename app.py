@@ -2,33 +2,34 @@ import hashlib
 import html
 import importlib
 import os
-from io import BytesIO
 
 import numpy as np
 import pandas as pd
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
-from docx import Document
 from docx.shared import Inches
-from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from scipy.optimize import linprog
 
 import auth
 import capacity as cp
 import capacity_view as cv
 import datamodel as dm
 import econ_formula as ef
+import formatting
+import investice as inv
 import planner as pl
 import planner_view as pv
 import portfolio as pf
+import report_docx as rd
 import scheduling as sch
 import ui_theme as ui
 
 # Streamlit při novém nasazení spustí app.py znovu, ale už načtené moduly (ui_theme, auth,
-# datamodel, portfolio, scheduling) ponechá v paměti ve staré verzi. Explicitní reload zajistí, že se vždy
-# použije aktuální soubor (jinak hrozí AttributeError u nově přidaných funkcí).
+# datamodel, portfolio, scheduling, investice, report_docx…) ponechá v paměti ve staré verzi.
+# Explicitní reload zajistí, že se vždy použije aktuální soubor (jinak hrozí AttributeError
+# u nově přidaných funkcí).
+formatting = importlib.reload(formatting)   # dřív než ui_theme a report_docx, které z něj importují
 ui = importlib.reload(ui)
 auth = importlib.reload(auth)
 dm = importlib.reload(dm)
@@ -39,6 +40,8 @@ cv = importlib.reload(cv)
 pl = importlib.reload(pl)
 ef = importlib.reload(ef)
 pv = importlib.reload(pv)
+inv = importlib.reload(inv)
+rd = importlib.reload(rd)
 from ui_theme import fmt_czk, fmt_days, fmt_num, fmt_pct
 
 # ==================================================
@@ -51,13 +54,8 @@ def format_czk(value) -> str:
     return fmt_czk(value)
 
 
-def risk_light(prob_loss: float) -> str:
-    """Vrátí textový semafor podle pravděpodobnosti ztráty."""
-    if prob_loss < 0.05:
-        return "🟢 Nízké riziko"
-    if prob_loss < 0.15:
-        return "🟡 Střední riziko"
-    return "🔴 Vysoké riziko"
+# Semafor rizika (hranice 5 % a 15 %) – výpočetní pravidlo je v modulu investice.
+risk_light = inv.risk_light
 
 
 def build_mgmt_text(machine_1, machine_2, expected_profit_mini, expected_profit_dumper) -> str:
@@ -420,14 +418,12 @@ scenario = sb_market.selectbox(
     "Pesimistický 8–15 dní, realistický 15–25 dní, optimistický 22–30 dní.",
 )
 
+min_days, max_days = inv.scenario_days(scenario)          # rozsah dní pronájmu měsíčně
 if scenario == "Pesimistický":
-    min_days, max_days = 8, 15
     scenario_note = "Slabší poptávka, opatrný scénář."
 elif scenario == "Realistický":
-    min_days, max_days = 15, 25
     scenario_note = "Běžný provoz firmy."
 else:
-    min_days, max_days = 22, 30
     scenario_note = "Silná poptávka a vysoké vytížení."
 
 sb_market.caption(
@@ -458,134 +454,51 @@ ui.sidebar_amount(sb_budget, fmt_czk(budget), "k dispozici na nákup strojů")
 
 
 # ==================================================
-# MONTE CARLO SIMULACE
+# INVESTIČNÍ VÝPOČTY (záložky 1–4) – modul investice.py
 # ==================================================
+# Simulace Monte Carlo, metriky, LP/DP, bodové hodnocení, citlivost, mapa ziskovosti a minimální
+# cena se počítají v modulu investice (beze změny vzorců i pořadí losování). Zde se výsledky jen
+# převezmou pod stejnými názvy, s jakými pracují záložky a export.
+SIMULATION_SEED = inv.SIMULATION_SEED
+_inv = inv.evaluate(row_1, row_2, machine_1, machine_2, fixed_cost, min_days, max_days, expected_days, n,
+                    seed=SIMULATION_SEED)
 
-# Pevný náhodný základ: stejné vstupy dají vždy stejné výsledky. Pro řízený přepočet
-# s jiným základem stačí změnit tuto konstantu (případně ji později nabídnout v panelu).
-SIMULATION_SEED = 42
-rng = np.random.RandomState(SIMULATION_SEED)
+# Simulace a základní metriky
+profit_mini, profit_dumper = _inv["profit_mini"], _inv["profit_dumper"]
+expected_profit_mini_real = _inv["expected_profit_mini_real"]
+expected_profit_dumper_real = _inv["expected_profit_dumper_real"]
+prob_loss_mini, prob_loss_dumper = _inv["prob_loss_mini"], _inv["prob_loss_dumper"]
+risk_loss_mini, risk_loss_dumper = _inv["risk_loss_mini"], _inv["risk_loss_dumper"]
+break_even_mini, break_even_dumper = _inv["break_even_mini"], _inv["break_even_dumper"]
+expected_profit_mini, expected_profit_dumper = _inv["expected_profit_mini"], _inv["expected_profit_dumper"]
+p10_mini, p10_dumper = _inv["p10_mini"], _inv["p10_dumper"]
+p50_mini, p50_dumper = _inv["p50_mini"], _inv["p50_dumper"]
+p90_mini, p90_dumper = _inv["p90_mini"], _inv["p90_dumper"]
+var95_mini, var95_dumper = _inv["var95_mini"], _inv["var95_dumper"]
+ci_mini, ci_dumper = _inv["ci_mini"], _inv["ci_dumper"]
+prob_dumper_better = _inv["prob_dumper_better"]
+roi_mini, roi_dumper = _inv["roi_mini"], _inv["roi_dumper"]
+profit_diff, risk_diff = _inv["profit_diff"], _inv["risk_diff"]
+better_machine = _inv["better_machine"]
 
-# --- Stroj 1 ---
-demand_mean_1 = row_1["demand_days_mean"]
-mode_days_1 = np.clip(demand_mean_1, min_days, max_days)
-util_days_1 = rng.triangular(min_days, mode_days_1, max_days, n)
+# LP a DP, shoda modelů
+x1_opt, x2_opt, lp_profit = _inv["x1_opt"], _inv["x2_opt"], _inv["lp_profit"]
+best_d1, best_d2, best_dp_profit = _inv["best_d1"], _inv["best_d2"], _inv["best_dp_profit"]
+mc_better, lp_better, dp_better = _inv["mc_better"], _inv["lp_better"], _inv["dp_better"]
 
-service_cost_1 = rng.normal(
-    row_1["service_cost_mean"],
-    row_1["service_cost_std"],
-    n,
-)
-service_cost_1 = np.clip(service_cost_1, 0, None)
+# Doplňkové bodové hodnocení
+scorecard_mini, scorecard_dumper = _inv["scorecard_mini"], _inv["scorecard_dumper"]
 
-failure_happens_1 = rng.rand(n) < row_1["failure_prob"]
-failure_days_1 = np.where(
-    failure_happens_1,
-    rng.poisson(row_1["failure_days_mean"], n),
-    0,
-)
-real_days_1 = np.maximum(util_days_1 - failure_days_1, 0)
+# Citlivost, bod zvratu, riziko × výnos, mapa ziskovosti, minimální cena
+days_grid = _inv["days_grid"]
+profit_curve_mini, profit_curve_dumper = _inv["profit_curve_mini"], _inv["profit_curve_dumper"]
+drivers = _inv["drivers"]
+sensitivity_data, labels, values = _inv["sensitivity_data"], _inv["labels"], _inv["values"]
+rr_x1, rr_x2, rr_y1, rr_y2 = _inv["rr_x1"], _inv["rr_x2"], _inv["rr_y1"], _inv["rr_y2"]
+days_range, price_range, profit_matrix = _inv["days_range"], _inv["price_range"], _inv["profit_matrix"]
+required_price_1, required_price_2 = _inv["required_price_1"], _inv["required_price_2"]
 
-price_std_1 = avg_daily_mini * 0.08
-daily_price_1 = rng.normal(avg_daily_mini, price_std_1, n)
-daily_price_1 = np.clip(daily_price_1, avg_daily_mini * 0.8, avg_daily_mini * 1.2)
-
-rev_mini = real_days_1 * daily_price_1
-profit_mini = rev_mini - fixed_cost - service_cost_1
-
-# --- Stroj 2 ---
-demand_mean_2 = row_2["demand_days_mean"]
-mode_days_2 = np.clip(demand_mean_2, min_days, max_days)
-util_days_2 = rng.triangular(min_days, mode_days_2, max_days, n)
-
-service_cost_2 = rng.normal(
-    row_2["service_cost_mean"],
-    row_2["service_cost_std"],
-    n,
-)
-service_cost_2 = np.clip(service_cost_2, 0, None)
-
-failure_happens_2 = rng.rand(n) < row_2["failure_prob"]
-failure_days_2 = np.where(
-    failure_happens_2,
-    rng.poisson(row_2["failure_days_mean"], n),
-    0,
-)
-real_days_2 = np.maximum(util_days_2 - failure_days_2, 0)
-
-price_std_2 = avg_daily_dumper * 0.08
-daily_price_2 = rng.normal(avg_daily_dumper, price_std_2, n)
-daily_price_2 = np.clip(daily_price_2, avg_daily_dumper * 0.8, avg_daily_dumper * 1.2)
-
-rev_dumper = real_days_2 * daily_price_2
-profit_dumper = rev_dumper - fixed_cost - service_cost_2
-
-
-# ==================================================
-# ODVOZENÉ METRIKY A ROZHODOVACÍ LOGIKA
-# ==================================================
-
-# --- Realistický scénář při očekávané poptávce ---
-expected_profit_mini_real = (
-    avg_daily_mini * expected_days - fixed_cost - row_1["service_cost_mean"]
-)
-expected_profit_dumper_real = (
-    avg_daily_dumper * expected_days - fixed_cost - row_2["service_cost_mean"]
-)
-
-# --- Základní metriky ---
-prob_loss_mini = float(np.mean(profit_mini < 0))
-prob_loss_dumper = float(np.mean(profit_dumper < 0))
-
-risk_loss_mini = prob_loss_mini * 100
-risk_loss_dumper = prob_loss_dumper * 100
-
-break_even_mini = fixed_cost / avg_daily_mini if avg_daily_mini > 0 else np.nan
-break_even_dumper = fixed_cost / avg_daily_dumper if avg_daily_dumper > 0 else np.nan
-
-expected_profit_mini = float(np.mean(profit_mini))
-expected_profit_dumper = float(np.mean(profit_dumper))
-
-# --- Percentily / VaR / intervaly ---
-p10_mini = float(np.percentile(profit_mini, 10))
-p10_dumper = float(np.percentile(profit_dumper, 10))
-p50_mini = float(np.percentile(profit_mini, 50))
-p50_dumper = float(np.percentile(profit_dumper, 50))
-p90_mini = float(np.percentile(profit_mini, 90))
-p90_dumper = float(np.percentile(profit_dumper, 90))
-
-var95_mini = float(np.percentile(profit_mini, 5))
-var95_dumper = float(np.percentile(profit_dumper, 5))
-
-ci_mini = (p10_mini, p90_mini)
-ci_dumper = (p10_dumper, p90_dumper)
-
-prob_dumper_better = float(np.mean(profit_dumper > profit_mini))
-
-# --- ROI ---
-investment_cost_mini = row_1["purchase_price"]
-investment_cost_dumper = row_2["purchase_price"]
-
-roi_mini = (
-    investment_cost_mini / expected_profit_mini if expected_profit_mini > 0 else None
-)
-roi_dumper = (
-    investment_cost_dumper / expected_profit_dumper
-    if expected_profit_dumper > 0
-    else None
-)
-
-# --- Executive summary metriky ---
-profit_diff = expected_profit_dumper - expected_profit_mini
-risk_diff = (prob_loss_mini - prob_loss_dumper) * 100
-risk_diff_pp = risk_diff
-be_diff = break_even_mini - break_even_dumper
-risk_adv_pct = risk_diff
-
-better_machine = (
-    machine_2 if expected_profit_dumper > expected_profit_mini else machine_1
-)
-
+# --- Texty shrnutí (jen prezentace výsledků výše) ---
 mgmt_text = build_mgmt_text(machine_1, machine_2, expected_profit_mini, expected_profit_dumper)
 
 if (prob_loss_dumper < prob_loss_mini) and (break_even_dumper < break_even_mini):
@@ -606,112 +519,21 @@ else:
     risk_text = f"{machine_1} má o {abs(risk_diff):.1f} p.b. nižší riziko ztráty"
 
 
-# ==================================================
-# OPTIMALIZAČNÍ MODELY – LP A DP
-# ==================================================
-
-profit_mini_day = avg_daily_mini - row_1["service_cost_mean"] / 30 - fixed_cost / 30
-profit_dumper_day = avg_daily_dumper - row_2["service_cost_mean"] / 30 - fixed_cost / 30
-
-c = [-profit_mini_day, -profit_dumper_day]
-A = [[1, 1]]
-b = [30]
-bounds = [(0, 30), (0, 30)]
-
-lp_result = linprog(c, A_ub=A, b_ub=b, bounds=bounds, method="highs")
-if lp_result.success:
-    x1_opt, x2_opt = lp_result.x
-    lp_profit = -lp_result.fun
-else:
-    x1_opt, x2_opt = 0, 0
-    lp_profit = 0
-
-best_dp_profit = -np.inf
-best_d1, best_d2 = 0, 0
-
-for d1 in range(31):
-    d2 = 30 - d1
-    dp_profit = d1 * profit_mini_day + d2 * profit_dumper_day
-
-    if dp_profit > best_dp_profit:
-        best_dp_profit = dp_profit
-        best_d1, best_d2 = d1, d2
-
-mc_better = machine_2 if expected_profit_dumper > expected_profit_mini else machine_1
-lp_better = (
-    machine_1
-    if x1_opt > x2_opt
-    else machine_2 if x2_opt > x1_opt else "oba stroje podobně"
-)
-dp_better = (
-    machine_1
-    if best_d1 > best_d2
-    else machine_2 if best_d2 > best_d1 else "oba stroje podobně"
-)
-
-
-# ==================================================
-# SCORE MODELY
-# ==================================================
-
-# --- Finální investiční verdikt ---
-verdict_score_mini = 0
-verdict_score_dumper = 0
-
-if expected_profit_mini > expected_profit_dumper:
-    verdict_score_mini += 1
-else:
-    verdict_score_dumper += 1
-
-if prob_loss_mini < prob_loss_dumper:
-    verdict_score_mini += 1
-else:
-    verdict_score_dumper += 1
-
-if roi_mini is not None and roi_dumper is not None:
-    if roi_mini < roi_dumper:
-        verdict_score_mini += 1
-    else:
-        verdict_score_dumper += 1
-
-if x1_opt > x2_opt:
-    verdict_score_mini += 1
-elif x2_opt > x1_opt:
-    verdict_score_dumper += 1
-
-if best_d1 > best_d2:
-    verdict_score_mini += 1
-elif best_d2 > best_d1:
-    verdict_score_dumper += 1
-
-# --- Investiční scorecard (doplňkové bodové hodnocení) ---
-# Bod získá jen stroj, který je v ukazateli skutečně lepší; při shodě nezíská bod nikdo.
-# Hlavní doporučení (better_machine) určuje vyšší očekávaný zisk – body ho jen doplňují.
-
-
-def _better_index(a, b, higher_is_better: bool):
-    if a == b:
-        return None
-    return (0 if a > b else 1) if higher_is_better else (0 if a < b else 1)
-
-
+# --- Bodové hodnocení: popisky a formát hodnot (body počítá investice.score_rows) ---
 def _payback_text(months) -> str:
     return f"{fmt_num(months, 1)} měsíce" if months is not None else "nelze určit (ztráta)"
 
 
+_SCORE_LABEL = {
+    "profit": ("Očekávaný měsíční zisk", fmt_czk),
+    "loss": ("Šance ztrátového měsíce", lambda p: fmt_pct(p * 100)),
+    "var95": ("Velmi nepříznivý měsíc (VaR 5 %)", fmt_czk),
+    "payback": ("Prostá návratnost investice", _payback_text),
+}
 score_items = [
-    ("Očekávaný měsíční zisk", fmt_czk(expected_profit_mini), fmt_czk(expected_profit_dumper),
-     _better_index(expected_profit_mini, expected_profit_dumper, True)),
-    ("Šance ztrátového měsíce", fmt_pct(prob_loss_mini * 100), fmt_pct(prob_loss_dumper * 100),
-     _better_index(prob_loss_mini, prob_loss_dumper, False)),
-    ("Velmi nepříznivý měsíc (VaR 5 %)", fmt_czk(var95_mini), fmt_czk(var95_dumper),
-     _better_index(var95_mini, var95_dumper, True)),
-    ("Prostá návratnost investice", _payback_text(roi_mini), _payback_text(roi_dumper),
-     _better_index(roi_mini, roi_dumper, False)
-     if roi_mini is not None and roi_dumper is not None else None),
+    (_SCORE_LABEL[code][0], _SCORE_LABEL[code][1](v1), _SCORE_LABEL[code][1](v2), best)
+    for code, v1, v2, best in _inv["score_rows"]
 ]
-scorecard_mini = sum(1 for *_, best in score_items if best == 0)
-scorecard_dumper = sum(1 for *_, best in score_items if best == 1)
 
 # --- Vysvětlení doporučení (stejné pravidlo jako hlavní karta v záložce Doporučení) ---
 _names = (machine_1, machine_2)
@@ -768,143 +590,6 @@ ai_text = f"""
 """
 
 
-# ==================================================
-# CITLIVOST A PORTFOLIO – VÝPOČTY
-# ==================================================
-
-# --- Citlivost: break-even křivka ---
-days_grid = np.arange(0, 32)
-profit_curve_mini = avg_daily_mini * days_grid - fixed_cost
-profit_curve_dumper = avg_daily_dumper * days_grid - fixed_cost
-
-# --- Citlivost vstupů ---
-base_profit_1 = avg_daily_mini * expected_days - fixed_cost - row_1["service_cost_mean"]
-base_profit_2 = (
-    avg_daily_dumper * expected_days - fixed_cost - row_2["service_cost_mean"]
-)
-
-sensitivity_data = []
-drivers = [
-    ("Denní cena", "price"),
-    ("Vytížení (dny/měsíc)", "days"),
-    ("Fixní náklad", "fixed"),
-    ("Servisní náklad", "service"),
-]
-
-for label, driver in drivers:
-    if driver == "price":
-        low_1 = (
-            (avg_daily_mini * 0.9) * expected_days
-            - fixed_cost
-            - row_1["service_cost_mean"]
-        )
-        high_1 = (
-            (avg_daily_mini * 1.1) * expected_days
-            - fixed_cost
-            - row_1["service_cost_mean"]
-        )
-        low_2 = (
-            (avg_daily_dumper * 0.9) * expected_days
-            - fixed_cost
-            - row_2["service_cost_mean"]
-        )
-        high_2 = (
-            (avg_daily_dumper * 1.1) * expected_days
-            - fixed_cost
-            - row_2["service_cost_mean"]
-        )
-    elif driver == "days":
-        low_1 = (
-            avg_daily_mini * (expected_days * 0.9)
-            - fixed_cost
-            - row_1["service_cost_mean"]
-        )
-        high_1 = (
-            avg_daily_mini * (expected_days * 1.1)
-            - fixed_cost
-            - row_1["service_cost_mean"]
-        )
-        low_2 = (
-            avg_daily_dumper * (expected_days * 0.9)
-            - fixed_cost
-            - row_2["service_cost_mean"]
-        )
-        high_2 = (
-            avg_daily_dumper * (expected_days * 1.1)
-            - fixed_cost
-            - row_2["service_cost_mean"]
-        )
-    elif driver == "fixed":
-        low_1 = (
-            avg_daily_mini * expected_days
-            - (fixed_cost * 0.9)
-            - row_1["service_cost_mean"]
-        )
-        high_1 = (
-            avg_daily_mini * expected_days
-            - (fixed_cost * 1.1)
-            - row_1["service_cost_mean"]
-        )
-        low_2 = (
-            avg_daily_dumper * expected_days
-            - (fixed_cost * 0.9)
-            - row_2["service_cost_mean"]
-        )
-        high_2 = (
-            avg_daily_dumper * expected_days
-            - (fixed_cost * 1.1)
-            - row_2["service_cost_mean"]
-        )
-    else:
-        low_1 = (
-            avg_daily_mini * expected_days
-            - fixed_cost
-            - (row_1["service_cost_mean"] * 0.9)
-        )
-        high_1 = (
-            avg_daily_mini * expected_days
-            - fixed_cost
-            - (row_1["service_cost_mean"] * 1.1)
-        )
-        low_2 = (
-            avg_daily_dumper * expected_days
-            - fixed_cost
-            - (row_2["service_cost_mean"] * 0.9)
-        )
-        high_2 = (
-            avg_daily_dumper * expected_days
-            - fixed_cost
-            - (row_2["service_cost_mean"] * 1.1)
-        )
-
-    sensitivity_data.append((f"{label} – {machine_1}", abs(high_1 - low_1)))
-    sensitivity_data.append((f"{label} – {machine_2}", abs(high_2 - low_2)))
-
-sensitivity_data = sorted(sensitivity_data, key=lambda x: x[1], reverse=True)
-labels = [x[0] for x in sensitivity_data]
-values = [x[1] for x in sensitivity_data]
-
-# --- Risk vs Return ---
-rr_x1 = prob_loss_mini * 100
-rr_x2 = prob_loss_dumper * 100
-rr_y1 = expected_profit_mini
-rr_y2 = expected_profit_dumper
-
-# --- Heatmapa ---
-days_range = np.arange(5, 31, 1)
-price_range = np.arange(
-    avg_daily_mini * 0.6, avg_daily_mini * 1.4, avg_daily_mini * 0.05
-)
-profit_matrix = np.zeros((len(price_range), len(days_range)))
-
-for i, price in enumerate(price_range):
-    for j, days in enumerate(days_range):
-        profit_matrix[i, j] = price * days - fixed_cost
-
-# --- Minimální cena pronájmu ---
-required_price_1 = (fixed_cost + row_1["service_cost_mean"]) / max(expected_days, 1)
-required_price_2 = (fixed_cost + row_2["service_cost_mean"]) / max(expected_days, 1)
-
 # --- Nákup strojů: nejlepší sestava v rámci rozpočtu (výpočet v portfolio.py) ---
 # Prohledají se všechny kombinace 0–2 kusů u všech typů strojů včetně „nic nekupovat“.
 # Používají se individuální náklady strojů z dat, ne fixní náklad z postranního panelu.
@@ -923,163 +608,36 @@ os.makedirs("outputs", exist_ok=True)
 
 
 def build_docx_report() -> bytes:
-    doc = Document()
-
-    # Základní písmo dokumentu
-    normal_style = doc.styles["Normal"]
-    normal_style.font.name = "Aptos"
-    normal_style.font.size = Pt(10.5)
-
-    for style_name, size in (("Heading 1", 16), ("Heading 2", 13), ("Heading 3", 11)):
-        heading = doc.styles[style_name]
-        heading.font.name = "Aptos Display"
-        heading.font.size = Pt(size)
-        heading.font.bold = True
-        heading.font.color.rgb = RGBColor(20, 48, 79)
-
-    title = doc.add_heading("Decision Engine – investiční report", level=1)
-    title_run = title.runs[0]
-    title_run.font.size = Pt(20)
-
-    doc.add_paragraph(f"Porovnání strojů: {machine_1} a {machine_2}")
-    demo = doc.add_paragraph()
-    demo_run = demo.add_run(
-        "Ukázkový výstup pilotního prototypu. Všechny vstupy i výsledky vycházejí "
-        "z fiktivních demonstračních dat."
+    """Investiční report DOCX – obsah sestavuje modul report_docx (beze změny dokumentu)."""
+    return rd.build_report(
+        avg_daily_dumper=avg_daily_dumper,
+        avg_daily_mini=avg_daily_mini,
+        better_machine=better_machine,
+        break_even_dumper=break_even_dumper,
+        break_even_mini=break_even_mini,
+        expected_days=expected_days,
+        expected_profit_dumper=expected_profit_dumper,
+        expected_profit_mini=expected_profit_mini,
+        fixed_cost=fixed_cost,
+        machine_1=machine_1,
+        machine_2=machine_2,
+        max_days=max_days,
+        min_days=min_days,
+        n=n,
+        p10_dumper=p10_dumper,
+        p10_mini=p10_mini,
+        p50_dumper=p50_dumper,
+        p50_mini=p50_mini,
+        p90_dumper=p90_dumper,
+        p90_mini=p90_mini,
+        required_price_1=required_price_1,
+        required_price_2=required_price_2,
+        risk_loss_dumper=risk_loss_dumper,
+        risk_loss_mini=risk_loss_mini,
+        scenario=scenario,
+        scorecard_dumper=scorecard_dumper,
+        scorecard_mini=scorecard_mini,
     )
-    demo_run.italic = True
-    demo_run.font.color.rgb = RGBColor(122, 74, 6)
-
-    doc.add_heading("Zadané předpoklady", level=1)
-    doc.add_paragraph(f"Fixní náklad na stroj: {fmt_czk(fixed_cost)} měsíčně")
-    doc.add_paragraph(f"Scénář trhu: {scenario} ({min_days}–{max_days} dní pronájmu měsíčně)")
-    doc.add_paragraph(f"Počet simulovaných měsíců: {fmt_num(n)}")
-    doc.add_paragraph(f"Odhad poptávky pro rychlý výpočet: {expected_days} dní/měsíc")
-
-    doc.add_heading("Klíčové investiční ukazatele", level=1)
-    table = doc.add_table(rows=1, cols=3)
-    table.style = "Table Grid"
-    hdr = table.rows[0].cells
-    hdr[0].text = "Ukazatel"
-    hdr[1].text = machine_1
-    hdr[2].text = machine_2
-
-    rows = [
-        ("Denní cena pronájmu", fmt_czk(avg_daily_mini), fmt_czk(avg_daily_dumper)),
-        ("Bod zvratu (jen fixní náklady)", fmt_days(break_even_mini, 2), fmt_days(break_even_dumper, 2)),
-        ("Šance ztrátového měsíce", fmt_pct(risk_loss_mini), fmt_pct(risk_loss_dumper)),
-        ("Očekávaný měsíční zisk (simulace)", fmt_czk(expected_profit_mini), fmt_czk(expected_profit_dumper)),
-    ]
-    for metric, v1, v2 in rows:
-        cells = table.add_row().cells
-        cells[0].text = metric
-        cells[1].text = v1
-        cells[2].text = v2
-
-    # Stejné tři případy jako hlavní karta v záložce Doporučení.
-    doc.add_heading("Doporučení", level=1)
-    verdict_p = doc.add_paragraph()
-    if expected_profit_mini < 0 and expected_profit_dumper < 0:
-        verdict_p.add_run("Žádný stroj není ziskový. ").bold = True
-        verdict_p.add_run(
-            f"Relativně lépe vychází {better_machine}, ale při zadaném nastavení jsou obě "
-            "varianty v průměru ztrátové. Investici nedoporučujeme realizovat bez zvýšení ceny "
-            "pronájmu, vyššího vytížení nebo snížení nákladů."
-        )
-    elif expected_profit_mini == expected_profit_dumper:
-        verdict_p.add_run("Stroje vycházejí stejně. ").bold = True
-        verdict_p.add_run("Oba mají stejný očekávaný zisk – rozhodněte podle rizika a ceny.")
-    else:
-        verdict_p.add_run(f"Doporučený stroj: {better_machine}. ").bold = True
-        verdict_p.add_run(
-            "Má vyšší očekávaný měsíční zisk v simulaci. Podrobné srovnání rizika a bodu "
-            "zvratu je v tabulce výše."
-        )
-    doc.add_paragraph(
-        f"Doplňkové bodové hodnocení (zisk, šance ztráty, velmi nepříznivý měsíc, návratnost; "
-        f"při shodě bez bodu): {machine_1} {scorecard_mini} / 4, {machine_2} {scorecard_dumper} / 4."
-    )
-
-    doc.add_heading("Rozpětí možných výsledků (simulace)", level=1)
-    doc.add_paragraph(
-        f"Simulace vytváří {fmt_num(n)} možných měsíců s různou poptávkou, servisními náklady, "
-        "poruchami a cenou. Následující hodnoty shrnují rozpětí měsíčního výsledku."
-    )
-    doc.add_paragraph(
-        f"Slabý měsíc (P10 – jen 1 z 10 měsíců je horší): {machine_1} {fmt_czk(p10_mini)}, "
-        f"{machine_2} {fmt_czk(p10_dumper)}"
-    )
-    doc.add_paragraph(
-        f"Typický měsíc (medián): {machine_1} {fmt_czk(p50_mini)}, {machine_2} {fmt_czk(p50_dumper)}"
-    )
-    doc.add_paragraph(
-        f"Dobrý měsíc (P90 – jen 1 z 10 měsíců je lepší): {machine_1} {fmt_czk(p90_mini)}, "
-        f"{machine_2} {fmt_czk(p90_dumper)}"
-    )
-
-    price_heading = doc.add_heading("Doporučená minimální cena pronájmu", level=1)
-    price_heading.paragraph_format.page_break_before = True
-
-    price_table = doc.add_table(rows=1, cols=3)
-    price_table.style = "Table Grid"
-    header_cells = price_table.rows[0].cells
-    header_cells[0].text = "Stroj"
-    header_cells[1].text = "Minimální cena"
-    header_cells[2].text = "Hodnocení aktuální ceny"
-
-    for name, required, actual in (
-        (machine_1, required_price_1, avg_daily_mini),
-        (machine_2, required_price_2, avg_daily_dumper),
-    ):
-        row = price_table.add_row().cells
-        row[0].text = str(name)
-        row[1].text = f"{fmt_czk(required)}/den"
-        row[2].text = "Cena je dostačující" if actual >= required else "Cena je pod minimem pro zisk"
-
-    doc.add_paragraph(
-        f"Minimální cena ukazuje, při jaké denní sazbě se při poptávce {expected_days} dní "
-        "měsíčně pokryjí fixní a servisní náklady."
-    )
-
-    doc.add_heading("Interpretace výsledků", level=1)
-    doc.add_paragraph(
-        "Model simuluje možné scénáře poptávky po strojích a zohledňuje náklady na servis, "
-        "fixní náklady a pravděpodobnost poruch. Výsledkem je odhad očekávaného měsíčního "
-        "zisku a rizika ztráty."
-    )
-    doc.add_paragraph(
-        "Výběr nákupní sestavy (záložka Nákup strojů) a plán zakázek (záložka Plán zakázek) "
-        "jsou v aplikaci samostatné analýzy na ukázkových datech. Tento report je nezahrnuje "
-        "a navzájem zatím propojené nejsou."
-    )
-    doc.add_paragraph(
-        "Doporučení jsou sestavena pevně danými pravidly z vypočtených ukazatelů."
-    )
-
-    doc.add_heading("Doporučený další postup", level=1)
-    for step in [
-        f"Ověřit skutečnou měsíční poptávku po stroji {better_machine}.",
-        "Porovnat aktuální cenu pronájmu s vypočtenou minimální denní sazbou.",
-        "Doplnit reálné servisní náklady, odstávky, pojištění a sezónnost.",
-        "Znovu vyhodnotit investici v realistickém scénáři.",
-    ]:
-        doc.add_paragraph(step, style="List Number")
-
-    doc.add_heading("Podmínky ziskovosti", level=1)
-    doc.add_paragraph(
-        "Investice by byla výrazně atraktivnější při splnění některých z následujících podmínek:"
-    )
-    for item in [
-        "zvýšení denní ceny pronájmu",
-        "vyšší vytížení strojů (více dní pronájmu za měsíc)",
-        "snížení fixních nebo servisních nákladů",
-    ]:
-        doc.add_paragraph(item, style="List Bullet")
-
-    out = BytesIO()
-    doc.save(out)
-    out.seek(0)
-    return out.read()
 
 
 # ==================================================
