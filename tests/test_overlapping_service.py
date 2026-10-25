@@ -120,14 +120,15 @@ from streamlit.testing.v1 import AppTest
 at = AppTest.from_file(os.path.join(app_dir, "app.py"), default_timeout=300)
 at.secrets["password"] = password
 at.run(); at.text_input[0].set_value(password).run()
-t = at.tabs[6]
+at.switch_page("stranky/stranka_kapacita.py").run()       # stránka Plánování kapacity (dříve záložka 7)
+t = at.main
 out = dict(kpi=[m.value for m in t.markdown if "Dny s konfliktem" in m.value],
            conflicts=[d.value["Stroj"].tolist() for d in t.dataframe if "Konflikt" in d.value.columns],
            info=[m.value for m in t.markdown if "Načtená data" in m.value],
            exc=[e.value for e in at.exception])
 at.selectbox(key="cap_detail_type").set_value("REZACKA_ASFALTU")
 at.number_input(key="cap_detail_day").set_value(11).run()
-out["detail"] = [m.value for m in at.tabs[6].markdown if m.value.startswith("**Řezačka")]
+out["detail"] = [m.value for m in at.main.markdown if m.value.startswith("**Řezačka")]
 print("VYSLEDEK" + json.dumps(out, ensure_ascii=False))
 '''
 

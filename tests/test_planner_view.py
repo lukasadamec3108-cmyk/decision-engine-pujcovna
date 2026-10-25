@@ -209,11 +209,13 @@ def app():
     at.run()
     at.text_input[0].set_value(PASSWORD).run()
     assert not at.exception, [e.value for e in at.exception]
+    at.switch_page("stranky/stranka_rozhodovaci_centrum.py").run()   # dříve záložka 8
+    assert not at.exception, [e.value for e in at.exception]
     return at
 
 
 def click(at, label):
-    [b for b in at.tabs[7].button if b.label == label][0].click().run()
+    [b for b in at.main.button if b.label == label][0].click().run()
     assert not at.exception, [e.value for e in at.exception]
 
 
@@ -221,7 +223,7 @@ def badges(at):
     """[(provozní štítek, ekonomický štítek nebo None)] pro každou kartu (E2.5c krok 4B)."""
     import re
     out = []
-    html_text = " ".join(m.value for m in at.tabs[7].markdown)
+    html_text = " ".join(m.value for m in at.main.markdown)
     for chunk in html_text.split('<div class="dp-card">')[1:]:              # jen karty, ne panel
         chunk = chunk.split('<div class="dp-panel')[0]
         found = dict(re.findall(r'dp-badge (op|ec)-[\w-]+"><small>[^<]*</small>([^<]+)<', chunk))
@@ -232,7 +234,7 @@ def badges(at):
 def panels(at):
     """Ekonomické štítky panelů „Ekonomické porovnání“ (E2.5c krok 4C)."""
     import re
-    html_text = " ".join(m.value for m in at.tabs[7].markdown)
+    html_text = " ".join(m.value for m in at.main.markdown)
     return [re.search(r'dp-badge ec-[\w-]+"><small>[^<]*</small>([^<]+)<', c).group(1)
             for c in html_text.split('<div class="dp-panel')[1:]]
 
@@ -240,8 +242,8 @@ def panels(at):
 def test_tab_in_app_full_flow_without_changing_data():
     before = files_hash()
     at = app()
-    assert [t.label for t in at.tabs][-1] == "🧭 Rozhodovací plánovač" and len(at.tabs) == 8
-    text = " ".join(m.value for m in at.tabs[7].markdown)
+    assert len(at.tabs) == 0 and any("### Rozhodovací plánovač" in m.value for m in at.main.markdown)
+    text = " ".join(m.value for m in at.main.markdown)
     assert "Ukázková data" in text and "nikam neukládají" in text
     # 1) samostatný pronájem ve volném termínu
     at.number_input(key="dp_r_from").set_value(21); at.number_input(key="dp_r_to").set_value(24)
@@ -251,7 +253,7 @@ def test_tab_in_app_full_flow_without_changing_data():
     at.number_input(key="dp_r_from").set_value(13); at.number_input(key="dp_r_to").set_value(16)
     click(at, "Vyhodnotit samostatně")
     assert badges(at) == [(pv.OP_NO, None)]                               # nevejde se → ekonomika se nehodnotí
-    blocking = [d.value for d in at.tabs[7].dataframe if "Co stroj drží" in d.value.columns][0]
+    blocking = [d.value for d in at.main.dataframe if "Co stroj drží" in d.value.columns][0]
     assert set(blocking["Co stroj drží"]) == {"pronájem FIKT-P01"}
     # 3) soupeření s předběžnou rezervací – nelze rozhodnout, rezervace zůstává
     at.selectbox(key="dp_r_type").set_value("PASOVY_DUMPER")
@@ -261,12 +263,12 @@ def test_tab_in_app_full_flow_without_changing_data():
     # NP-2 (2 dny á 8 000) nevychází nejlépe při žádné výši nákladu, FIKT-P06 (5 dní) do 8 000 Kč/den
     assert badges(at) == [(pv.OP_NO, None), (pv.OP_FITS, pv.EC_WORSE), (pv.OP_FITS, pv.EC_COND)]
     assert any("Hranice zlomu" in m.value and "8 000 Kč/den" in m.value.replace("\u00a0", " ")
-               for m in at.tabs[7].markdown)
-    assert any("předběžná rezervace z dat – neruší se" in m.value for m in at.tabs[7].markdown)
+               for m in at.main.markdown)
+    assert any("předběžná rezervace z dat – neruší se" in m.value for m in at.main.markdown)
     # 4) odebrání a vymazání
     at.button(key="dp_rm_NP-1").click().run()
     assert badges(at) == [(pv.OP_FITS, pv.EC_WORSE), (pv.OP_FITS, pv.EC_COND)]
-    shown = " ".join(m.value for m in at.tabs[7].markdown).replace("\u00a0", " ")
+    shown = " ".join(m.value for m in at.main.markdown).replace("\u00a0", " ")
     assert "nezamítá" in shown and "pod 8 000 Kč/den" in shown and "přesně 8 000 Kč/den" in shown
     assert panels(at) == [pv.EC_COND] and "Ekonomické porovnání" in shown            # E2.5c 4C: panel nad kartami
     assert shown.index("dp-panel") < shown.index('<div class="dp-card">')
@@ -290,7 +292,7 @@ def test_tab_in_app_full_flow_without_changing_data():
     at.number_input(key="dp_j_revenue").set_value(None)
     at.selectbox(key="dp_j_type0").set_value("MINI_BAGR")
     click(at, "Vyhodnotit samostatně")
-    shown = " ".join(m.value for m in at.tabs[7].markdown)
+    shown = " ".join(m.value for m in at.main.markdown)
     assert "](https://example.com)" not in shown and "\\[Ověřte účet\\]" in shown
     assert files_hash() == before                                            # CSV beze změny
 
@@ -301,7 +303,7 @@ def test_tab_limits_number_of_compared_requests():
         at.number_input(key="dp_r_from").set_value(30 + 3 * i); at.number_input(key="dp_r_to").set_value(31 + 3 * i)
         click(at, "Přidat k porovnání")
     click(at, "Přidat k porovnání")
-    assert any("nejvýš" in w.value for w in at.tabs[7].warning)
+    assert any("nejvýš" in w.value for w in at.main.warning)
     assert len(at.session_state["dp_requests"]) == pv.MAX_REQUESTS
 
 

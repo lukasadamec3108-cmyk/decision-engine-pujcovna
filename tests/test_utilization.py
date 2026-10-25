@@ -217,6 +217,7 @@ def overview_app():
     at.secrets["password"] = PASSWORD
     at.run()
     at.text_input[0].set_value(PASSWORD).run()
+    at.switch_page("stranky/stranka_kapacita.py").run()             # dříve záložka 7
     assert at.radio(key="cap_view").value == "Kalendář dostupnosti"   # výchozí zůstává kalendář
     at.radio(key="cap_view").set_value("Přehled využití").run()
     assert not at.exception, [e.value for e in at.exception]
@@ -224,32 +225,32 @@ def overview_app():
 
 
 def capacity_line(at):
-    return [m.value for m in at.tabs[6].markdown if "Kapacita flotily" in m.value][0]
+    return [m.value for m in at.main.markdown if "Kapacita flotily" in m.value][0]
 
 
 def test_overview_in_app_follows_period_and_type_filters():
     at = overview_app()
     assert "225 strojodnů" in capacity_line(at)
-    kpis = " ".join(m.value for m in at.tabs[6].markdown if "de-kpi" in m.value)
+    kpis = " ".join(m.value for m in at.main.markdown if "de-kpi" in m.value)
     assert "61,8–62,2 %" in kpis and "77 strojodnů" in kpis and "Ukázková data" in " ".join(
-        m.value for m in at.tabs[6].markdown)
+        m.value for m in at.main.markdown)
     at.slider(key="cap_period").set_value((1, 10)).run()
     assert "90 strojodnů" in capacity_line(at)                     # 9 kusů × 10 dní
     at.multiselect(key="cap_types").set_value(["SILNICNI_VALEC"]).run()
     assert "10 strojodnů" in capacity_line(at)
-    shown = [d.value for d in at.tabs[6].dataframe][0]
+    shown = [d.value for d in at.main.dataframe][0]
     assert shown["Stroj"].tolist() == ["Silniční válec"]
     assert not at.exception
 
 
 def test_audit_occupancy_vs_productive_use_and_orientation_thresholds_are_explicit():
     at = overview_app()
-    texts = " ".join(m.value for m in at.tabs[6].markdown)
+    texts = " ".join(m.value for m in at.main.markdown)
     assert "servis se nepočítá" in texts and "orientační" in texts
-    expl = " ".join(m.value for m in at.tabs[6].expander[0].markdown) if at.tabs[6].expander else ""
+    expl = " ".join(m.value for m in at.main.expander[0].markdown) if at.main.expander else ""
     assert "Hodnocení" in expl and "orientační" in expl and "obsazenost" in expl.lower()
     at.radio(key="cap_view").set_value("Kalendář dostupnosti").run()
-    kal = [m.value for m in at.tabs[6].markdown if "Nejvytíženější stroj" in m.value][0]
+    kal = [m.value for m in at.main.markdown if "Nejvytíženější stroj" in m.value][0]
     assert "vč. servisu" in kal                                      # obsazenost ≠ využití
 
 
@@ -260,7 +261,7 @@ def test_overview_button_opens_type_in_calendar():
     assert at.radio(key="cap_view").value == "Kalendář dostupnosti"
     assert at.multiselect(key="cap_types").value == ["KOLOVY_BAGR"]
     assert at.selectbox(key="cap_detail_type").value == "KOLOVY_BAGR"
-    html_text = [m.value for m in at.tabs[6].markdown if "cc-table" in m.value][0]
+    html_text = [m.value for m in at.main.markdown if "cc-table" in m.value][0]
     assert "Kolový bagr" in html_text and "Mini bagr" not in html_text
     assert not at.exception
 
@@ -275,9 +276,10 @@ from streamlit.testing.v1 import AppTest
 at = AppTest.from_file(os.path.join(app_dir, "app.py"), default_timeout=300)
 at.secrets["password"] = password
 at.run(); at.text_input[0].set_value(password).run()
+at.switch_page("stranky/stranka_kapacita.py").run()
 at.radio(key="cap_view").set_value("Přehled využití").run()
 def kpis():
-    return " ".join(m.value for m in at.tabs[6].markdown if "de-kpi" in m.value)
+    return " ".join(m.value for m in at.main.markdown if "de-kpi" in m.value)
 out = {"start": kpis()}
 path = os.path.join(app_dir, "data", "model", "rental_bookings.csv")
 lines = open(path, encoding="utf-8").read().splitlines()
