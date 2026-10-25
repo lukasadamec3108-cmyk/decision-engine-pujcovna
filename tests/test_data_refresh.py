@@ -31,14 +31,23 @@ at = AppTest.from_file(os.path.join(app_dir, "app.py"), default_timeout=300)
 at.secrets["password"] = password
 at.run(); at.text_input[0].set_value(password).run()
 
+def page(key):
+    at.switch_page("stranky/stranka_%s.py" % key).run()
+    return at.main
+
 def snapshot():
-    md = [m.value for m in at.tabs[6].markdown] if len(at.tabs) >= 7 else []
+    # stránka Plánování kapacity (dříve záložka 7) a Vlastní zakázky (dříve záložka 6)
+    cap = page("kapacita")
+    md = [m.value for m in cap.markdown] if not at.exception else []
+    exc = [e.value for e in at.exception]
+    plan_page = page("zakazky")
+    exc += [e.value for e in at.exception]
     return dict(kpi=[m for m in md if "Dny s konfliktem" in m],
                 new_code=any("NOVÁ VERZE KÓDU" in m for m in md if "cc-table" in m),
                 info=[m for m in md if "Načtená data" in m],
-                plan=[d.value["Konec (den)"].tolist() for d in at.tabs[5].dataframe
+                plan=[d.value["Konec (den)"].tolist() for d in plan_page.dataframe
                       if "Konec (den)" in d.value.columns],
-                exceptions=[e.value for e in at.exception])
+                exceptions=exc)
 
 def edit(name, keep):
     path = os.path.join(app_dir, "data", "model", name)

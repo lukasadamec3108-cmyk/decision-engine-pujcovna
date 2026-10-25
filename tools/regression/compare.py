@@ -17,6 +17,10 @@ import argparse
 import collections
 import json
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import extract  # noqa: E402
 
 
 def _diff_keys(a: dict, b: dict) -> list:
@@ -35,6 +39,14 @@ def compare(a: dict, b: dict, allow_added=(), strict_text=False) -> tuple:
 
     # výchozí stav záložek
     ua, ub = a["ui"], b["ui"]
+    if "pages" in ub and "pages" not in ua:          # záložky (main) × stránky (M2): jen schválené rozdíly
+        info.append("M2: záložky 6–8 jsou samostatné stránky, investiční vstupy mají klíče, správa účtů je "
+                    "na stránce Nastavení")
+        moved = [w for w in ua["sidebar"]["widgets"] if w["key"] in extract.M2_MOVED_TO_SETTINGS]
+        if moved != [w for w in ub["pages"]["nastaveni"]["main"]["widgets"]
+                     if w["key"] in extract.M2_MOVED_TO_SETTINGS]:
+            strict.append("správa účtů: widgety na stránce Nastavení neodpovídají původním")
+        ua = extract.m2_expected(ua)
     if ua["tab_labels"] != ub["tab_labels"]:
         strict.append(f"popisky záložek: {ua['tab_labels']} → {ub['tab_labels']}")
     areas = {**{f"záložka {k}": (ua["tabs"].get(k), ub["tabs"].get(k)) for k in sorted(set(ua["tabs"]) | set(ub["tabs"]))},

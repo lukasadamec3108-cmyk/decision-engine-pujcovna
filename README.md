@@ -42,7 +42,23 @@ předpoklady a okamžitě vidí dopad na očekávaný zisk, riziko a výsledné 
 
 ## Funkce aplikace
 
-Vstupy se nastavují v postranním panelu:
+Aplikace má **levé menu** se sekcemi (etapa M2):
+
+| Sekce | Obsah |
+|---|---|
+| **Dashboard** | Přehled existujících výsledků (kapacita, plán zakázek, rozpracované požadavky, doporučený stroj a nákupní sestava) s odkazy do sekcí. Nic nového nepočítá. |
+| **Pronájem strojů** | Formulář nového požadavku na pronájem a jeho vyhodnocení (stejný plánovač jako Rozhodovací centrum, sdílený seznam požadavků). |
+| **Vlastní zakázky** | Dřívější záložka 🗓️ Plán zakázek. |
+| **Strojový park** | Počty kusů ve flotile a ekonomika jednoho kusu podle dat (stejná tabulka jako v Nákupu strojů). |
+| **Plánování kapacity** | Dřívější záložka 📅 Kapacita strojů. |
+| **Rozhodovací centrum** | Dřívější záložka 🧭 Rozhodovací plánovač (ekonomické porovnání, hranice zlomu, Co kdyby, konflikty). |
+| **Investice** | Dřívější záložky 1–5 (jako záložky uvnitř sekce), investiční vstupy v postranním panelu a export DOCX. |
+| **Nastavení** | Přihlášený uživatel, odhlášení, správa účtů (jen administrátor) a informace o datech. |
+
+Investiční vstupy se zobrazují jen v sekci Investice; jejich hodnoty se při přechodu mezi sekcemi
+zachovají (do odhlášení) a Dashboard počítá ze stejných hodnot.
+
+Vstupy se nastavují v postranním panelu sekce Investice:
 - výběr dvou porovnávaných strojů,
 - fixní měsíční náklad,
 - scénář trhu (pesimistický / realistický / optimistický),
@@ -52,7 +68,7 @@ Vstupy se nastavují v postranním panelu:
 
 Výchozí hodnoty tvoří **ukázkový scénář** s fiktivními čísly (realistický trh, fixní náklad 100 000 Kč).
 
-Výsledky jsou rozděleny do osmi záložek:
+Výsledky byly původně rozděleny do osmi záložek; jejich obsah je beze změny v sekcích uvedených výše:
 
 | Záložka | Obsah |
 |---|---|
@@ -146,7 +162,9 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 ### Struktura projektu
 
 ```
-├── app.py                           # Streamlit aplikace: vstupy, záložky a zobrazení; výpočty volá z modulů
+├── app.py                           # Streamlit aplikace: přihlášení, menu, vstupy a obsah sekcí; výpočty volá z modulů
+├── navigace.py                      # registr sekcí levého menu (pořadí, názvy, ikony, skupiny, adresy)
+├── stranky/                         # značkové soubory sekcí pro st.navigation (obsah vykresluje app.py)
 ├── investice.py                     # investiční výpočty záložek 1–4 (Monte Carlo, metriky, LP/DP, citlivost)
 ├── report_docx.py                   # investiční report DOCX (export z první záložky)
 ├── formatting.py                    # české formátování čísel (bez závislosti na Streamlitu)

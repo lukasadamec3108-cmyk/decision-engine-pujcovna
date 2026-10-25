@@ -9,6 +9,7 @@ Co snímek obsahuje:
   calc     … výpočty záložek 1–6 ve 4 scénářích postranního panelu (simulace, plán, nákupní sestava)
   docx     … otisky všech částí exportu DOCX (pro každý scénář)
   ui       … výchozí stav všech 8 záložek: popisky záložek, viditelná čísla, widgety, otisk textu
+             (vícestránková aplikace: záložky hledá tam, kam se přesunuly – navigace.ORIGINAL_TABS)
   tab7     … souhrnné ukazatele a tabulky záložky 7 pro několik kombinací filtrů
   planner  … otisky verdiktů rozhodovacího plánovače pro vzorové požadavky
 
@@ -73,6 +74,9 @@ def calc_snapshot(root: Path) -> dict:
             at.secrets["password"] = password
             at.run()
             at.text_input[0].set_value(password).run()
+            pages = (root / "navigace.py").exists()          # vícestránková aplikace (etapa M2)
+            if pages:                                        # investiční vstupy jsou jen na stránce Investice
+                at.switch_page(_page_path(root, "investice")).run()
             sb = at.sidebar
             _find(sb.selectbox, "Stroj 1").set_value(p["m1"])
             _find(sb.selectbox, "Stroj 2").set_value(p["m2"])
@@ -85,7 +89,20 @@ def calc_snapshot(root: Path) -> dict:
             if at.exception:
                 raise RuntimeError(f"{name}: " + "; ".join(e.value[:200] for e in at.exception))
             out[name] = json.load(open(os.environ["DE_REG_OUT"], encoding="utf-8"))
+            if pages:                    # po přechodu na jiné stránky a zpět musí vyjít totéž (zachované vstupy)
+                for key in ("dashboard", "zakazky", "kapacita", "investice"):
+                    at.switch_page(_page_path(root, key)).run()
+                    again = json.load(open(os.environ["DE_REG_OUT"], encoding="utf-8"))
+                    if at.exception or again != out[name]:
+                        raise RuntimeError(f"{name}: po přechodu na stránku {key} se výpočet liší")
     return out
+
+
+def _page_path(root: Path, key: str) -> str:
+    """Cesta stránky relativně k obalu _app_wrapper.py (AppTest ji bere vůči spouštěnému skriptu)."""
+    sys.path.insert(0, str(root))
+    import navigace
+    return os.path.relpath(root / navigace.page_relpath(key), HERE)
 
 
 def tab7_snapshot(at) -> list:
@@ -96,9 +113,11 @@ def tab7_snapshot(at) -> list:
         at.date_input(key="cap_plan_start").set_value(f.get("start")).run()
         at.slider(key="cap_period").set_value(f.get("period", (1, 25))).run()
         at.radio(key="cap_view").set_value(f.get("view", "Kalendář dostupnosti")).run()
-        t = at.tabs[6]
-        kpis = [m.value for m in t.markdown if "de-kpis" in m.value and "<style>" not in m.value]
-        tables = [d.value.to_csv() for d in t.dataframe]
+        page_mode = extract.is_page_app(at)             # M2: obsah stránky Plánování kapacity bez hlavičky
+        t = extract.page_body(at) if page_mode else at.tabs[6]
+        main = at.main if page_mode else t
+        kpis = [m.value for m in main.markdown if "de-kpis" in m.value and "<style>" not in m.value]
+        tables = [d.value.to_csv() for d in main.dataframe]
         rows.append(dict(filters={k: str(v) for k, v in f.items()}, kpis=kpis, tables=tables,
                          numbers=extract.visible_numbers(t),
                          exceptions=[e.value[:200] for e in at.exception]))
@@ -155,6 +174,8 @@ def main(argv):
     snap["calc"] = calc_snapshot(root)
     at = extract.logged_in_app(root)
     snap["ui"] = extract.ui_state(at)
+    if extract.is_page_app(at):
+        extract.open_page(at, "kapacita")
     snap["tab7"] = tab7_snapshot(at)
     snap["planner"] = planner_snapshot(root)
     target.write_text(json.dumps(snap, ensure_ascii=False, indent=1, sort_keys=True), encoding="utf-8")

@@ -273,7 +273,7 @@ def test_sim_html_escapes():
 # ---------------------------------------------------------------------------
 
 def _sim_inputs(at):
-    return [n for n in at.tabs[7].number_input if str(n.key).startswith(pv.SIM_KEY_PREFIX)]
+    return [n for n in at.main.number_input if str(n.key).startswith(pv.SIM_KEY_PREFIX)]
 
 
 def test_tab_simulation_flow_and_reset():
@@ -284,10 +284,10 @@ def test_tab_simulation_flow_and_reset():
     click(at, "Přidat k porovnání")
     (box,) = _sim_inputs(at)
     assert box.value is None                                               # výchozí stav prázdný
-    shown = " ".join(m.value for m in at.tabs[7].markdown)
+    shown = " ".join(m.value for m in at.main.markdown)
     assert "hypotetický výpočet" not in shown
     box.set_value(6000.0).run()
-    shown = " ".join(m.value for m in at.tabs[7].markdown).replace(NBSP, " ").replace("\u2011", "-")
+    shown = " ".join(m.value for m in at.main.markdown).replace(NBSP, " ").replace("\u2011", "-")
     assert "Co kdyby – hypotetický výpočet &#40;není doporučení&#41;" in shown
     assert "Při tomto předpokladu vychází nejlépe FIKT-P06." in shown and "▼ předpoklad 6 000 Kč/den" in shown
     assert "Skutečné doporučení: ⇄ Záleží na nákladech" in shown
@@ -299,7 +299,7 @@ def test_tab_simulation_flow_and_reset():
     click(at, "Přidat k porovnání")
     (box2,) = _sim_inputs(at)
     assert box2.key != old_key and box2.value is None and old_key not in at.session_state
-    assert "hypotetický výpočet" not in " ".join(m.value for m in at.tabs[7].markdown)
+    assert "hypotetický výpočet" not in " ".join(m.value for m in at.main.markdown)
     assert files_hash() == before
 
 

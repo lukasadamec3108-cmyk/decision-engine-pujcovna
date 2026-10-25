@@ -13,6 +13,8 @@ from streamlit.testing.v1 import AppTest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+from app_pages import open_page  # noqa: E402
 PASSWORD = secrets.token_urlsafe(12)
 
 
@@ -23,11 +25,14 @@ def logged_in_app():
     at.run()
     at.text_input[0].set_value(PASSWORD).run()
     assert not at.exception, [e.value for e in at.exception]
+    open_page(at, "kapacita")
+    assert not at.exception, [e.value for e in at.exception]
     return at
 
 
 def tab(at):
-    return at.tabs[6]
+    """Stránka Plánování kapacity (dříve 7. záložka „Kapacita strojů“)."""
+    return at.main
 
 
 def grid_html(at):
@@ -38,11 +43,13 @@ def chip(at):
     return [m.value for m in tab(at).markdown if "de-status" in m.value]
 
 
-def test_capacity_tab_is_seventh_and_original_tabs_unchanged():
+def test_capacity_page_and_original_investment_tabs_unchanged():
     at = logged_in_app()
-    assert [t.label for t in at.tabs] == ["🏆 Doporučení", "📈 Možné výsledky", "⚠️ Riziko",
-                                          "🎯 Co ovlivňuje zisk", "🛒 Nákup strojů", "🗓️ Plán zakázek",
-                                          "📅 Kapacita strojů", "🧭 Rozhodovací plánovač"]
+    assert len(at.tabs) == 0                                       # kalendář je samostatná stránka
+    assert any("Kapacita strojů po dnech" in m.value for m in tab(at).markdown)   # původní nadpis obsahu
+    inv = open_page(logged_in_app(), "investice")
+    assert [t.label for t in inv.tabs] == ["🏆 Doporučení", "📈 Možné výsledky", "⚠️ Riziko",
+                                           "🎯 Co ovlivňuje zisk", "🛒 Nákup strojů"]
     html_text = grid_html(at)
     for name in ("Mini bagr", "Pásový dumper", "Silniční válec", "Nákladní auto"):
         assert name in html_text

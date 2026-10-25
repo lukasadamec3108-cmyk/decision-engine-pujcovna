@@ -102,16 +102,93 @@ def logged_in_app(root, app_file: str = "app.py", timeout: int = 300):
     return at
 
 
+class Area:
+    """Část plochy aplikace (vybrané prvky hlavní plochy) – chová se pro funkce výše jako uzel AppTest."""
+
+    def __init__(self, nodes):
+        self.children = list(nodes)
+        self.expander = [e for c in self.children
+                         for e in ([c] if c.type == "expander" else []) + list(getattr(c, "expander", []))]
+
+
+def page_body(at) -> Area:
+    """Obsah stránky bez společné hlavičky aplikace a bloků stylů (odpovídá dřívějšímu obsahu záložky)."""
+    kids = at.main.children
+    nodes = [kids[k] for k in sorted(kids)]
+    return Area(n for n in nodes if not (n.type == "markdown" and isinstance(n.value, str) and (
+        "<style>" in n.value or 'class="de-header' in n.value)))
+
+
+def area_state(node) -> dict:
+    return dict(numbers=visible_numbers(node), widgets=widgets(node), elements=element_counts(node),
+                expanders=expander_labels(node), text=text_fingerprint(node))
+
+
+def is_page_app(at) -> bool:
+    """Vícestránková aplikace (etapa M2) – odhlášení v panelu a žádné hlavní záložky na výchozí stránce."""
+    return len(at.tabs) == 0 and any(b.key == "logout" for b in at.sidebar.button)
+
+
+def open_page(at, key: str):
+    import navigace
+    at.switch_page(navigace.page_relpath(key)).run()
+    if at.exception:
+        raise RuntimeError(f"Stránka {key} skončila výjimkou: " + "; ".join(e.value[:200] for e in at.exception))
+    return at
+
+
 def ui_state(at) -> dict:
-    """Výchozí stav všech záložek a postranního panelu: popisky, čísla, widgety, prvky a otisk textu."""
-    tabs = at.tabs
-    return dict(
-        tab_labels=[t.label for t in tabs],
-        tabs={str(i + 1): dict(numbers=visible_numbers(tabs[i]), widgets=widgets(tabs[i]),
-                               elements=element_counts(tabs[i]), expanders=expander_labels(tabs[i]),
-                               text=text_fingerprint(tabs[i]))
-              for i in range(len(tabs))},
-        sidebar=dict(numbers=visible_numbers(at.sidebar), widgets=widgets(at.sidebar),
-                     elements=element_counts(at.sidebar), expanders=expander_labels(at.sidebar),
-                     text=text_fingerprint(at.sidebar)),
-    )
+    """Výchozí stav aplikace: popisky, čísla, widgety, prvky a otisk textu každé oblasti.
+
+    Původní aplikace se záložkami: oblasti „1“–„8“ = záložky, „sidebar“ = postranní panel.
+    Vícestránková aplikace (M2): oblasti „1“–„8“ = místo, kam se původní záložka přesunula
+    (navigace.ORIGINAL_TABS; Investice po záložkách), „sidebar“ = panel na stránce Investice
+    (tam jsou investiční vstupy) a navíc „pages“ = každá stránka (obsah a panel) zvlášť.
+    """
+    if not is_page_app(at):
+        tabs = at.tabs
+        return dict(
+            tab_labels=[t.label for t in tabs],
+            tabs={str(i + 1): area_state(tabs[i]) for i in range(len(tabs))},
+            sidebar=area_state(at.sidebar),
+        )
+    import navigace
+    pages, bodies = {}, {}
+    for key in navigace.KEYS:
+        open_page(at, key)
+        bodies[key] = page_body(at)
+        pages[key] = dict(main=area_state(bodies[key]), sidebar=area_state(at.sidebar),
+                          tab_labels=[t.label for t in at.tabs])
+        if key == "investice":
+            inv_tabs = {t.label: area_state(t) for t in at.tabs}
+            inv_sidebar = area_state(at.sidebar)
+    tabs = {}
+    for number, (key, tab_label) in navigace.ORIGINAL_TABS.items():
+        tabs[str(number)] = inv_tabs[tab_label] if tab_label else pages[key]["main"]
+    return dict(tab_labels=navigace.INVESTICE_TABS, tabs=tabs, sidebar=inv_sidebar, pages=pages)
+
+
+# Schválené rozdíly vícestránkové aplikace (M2) proti původní verzi se záložkami – jen v postranním panelu:
+#   investiční vstupy dostaly klíče (zachování hodnot mezi stránkami) a správa účtů se přesunula na Nastavení.
+M2_ADDED_KEYS = {"Stroj 1": "inv_machine_1", "Stroj 2": "inv_machine_2",
+                 "Měsíční fixní náklady na jeden stroj": "inv_fixed_cost", "Scénář trhu": "inv_scenario",
+                 "Investiční rozpočet": "inv_budget",
+                 "Odhad poptávky pro rychlý výpočet (dny/měsíc)": "inv_expected_days",
+                 "Počet simulací (měsíců)": "inv_n"}
+M2_MOVED_TO_SETTINGS = ("admin_pw1", "admin_pw2")
+
+
+def m2_expected(state: dict) -> dict:
+    """Stav původní aplikace (se záložkami) převedený o schválené rozdíly M2 – s ním se porovnává nová verze."""
+    import copy
+    out = copy.deepcopy(state)
+    side = []
+    for w in out["sidebar"]["widgets"]:
+        if w["key"] in M2_MOVED_TO_SETTINGS:
+            continue
+        if w["key"] is None and w["label"] in M2_ADDED_KEYS:
+            w = dict(w, key=M2_ADDED_KEYS[w["label"]])
+        side.append(w)
+    out["sidebar"]["widgets"] = side
+    out["tab_labels"] = state["tab_labels"][:5]
+    return out
