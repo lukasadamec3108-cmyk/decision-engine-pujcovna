@@ -140,6 +140,16 @@ def inject_css() -> None:
         [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ opacity: 1; color: {UI_MUTED}; }}
         [data-testid="stSidebar"] [data-testid="stSliderTickBar"],
         [data-testid="stSidebar"] [data-testid="stSliderTickBar"] p {{ color: {UI_MUTED} !important; }}
+        /* Panel „Nastavení investičního scénáře“ na stránce Investice (stejné nadpisy skupin jako dřív v panelu) */
+        .st-key-de_inv_inputs h3 {{
+            font-size: .74rem !important; text-transform: uppercase; letter-spacing: .06em;
+            color: {UI_MUTED} !important; padding-top: .3rem !important; margin-top: .2rem !important;
+        }}
+        .st-key-de_inv_inputs [data-testid="stCaptionContainer"] {{ opacity: 1; color: {UI_MUTED}; }}
+        .st-key-de_inv_inputs [data-testid="stSliderTickBar"],
+        .st-key-de_inv_inputs [data-testid="stSliderTickBar"] p {{ color: {UI_MUTED} !important; }}
+        .de-inv-summary {{ font-size: .85rem; color: {UI_MUTED}; margin: -.4rem 0 .4rem .1rem; }}
+        .de-inv-summary b {{ color: {INK}; }}
         .de-amount {{ font-size: .85rem; color: {UI_MUTED}; margin: -.55rem 0 .3rem .1rem; }}
         .de-amount b {{ color: {INK}; font-variant-numeric: tabular-nums; }}
         .de-soon {{

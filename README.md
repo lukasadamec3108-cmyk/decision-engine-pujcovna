@@ -52,13 +52,14 @@ Aplikace má **levé menu** se sekcemi (etapa M2):
 | **Strojový park** | Počty kusů ve flotile a ekonomika jednoho kusu podle dat (stejná tabulka jako v Nákupu strojů). |
 | **Plánování kapacity** | Dřívější záložka 📅 Kapacita strojů. |
 | **Rozhodovací centrum** | Dřívější záložka 🧭 Rozhodovací plánovač (ekonomické porovnání, hranice zlomu, Co kdyby, konflikty). |
-| **Investice** | Dřívější záložky 1–5 (jako záložky uvnitř sekce), investiční vstupy v postranním panelu a export DOCX. |
+| **Investice** | Dřívější záložky 1–5 (jako záložky uvnitř sekce), investiční vstupy v panelu „Nastavení investičního scénáře“ nad výsledky a export DOCX. |
 | **Nastavení** | Přihlášený uživatel, odhlášení, správa účtů (jen administrátor) a informace o datech. |
 
 Investiční vstupy se zobrazují jen v sekci Investice; jejich hodnoty se při přechodu mezi sekcemi
 zachovají (do odhlášení) a Dashboard počítá ze stejných hodnot.
 
-Vstupy se nastavují v postranním panelu sekce Investice:
+Vstupy se nastavují na stránce Investice ve sbalovacím panelu **Nastavení investičního scénáře** nad výsledky
+(pod panelem je stručné shrnutí zvolených hodnot; postranní panel obsahuje jen menu a přihlášeného uživatele):
 - výběr dvou porovnávaných strojů,
 - fixní měsíční náklad,
 - scénář trhu (pesimistický / realistický / optimistický),
@@ -125,7 +126,7 @@ aplikace to uvede. Pro srovnání zobrazuje i původní plán podle rozhodovací
 
 Provozovatel zvažuje, zda dokoupit **mini bagr**, nebo **pásový dumper**.
 
-1. **Nastavení vstupů:** v postranním panelu vybere oba stroje, zadá fixní měsíční náklad,
+1. **Nastavení vstupů:** v sekci Investice v panelu „Nastavení investičního scénáře“ vybere oba stroje, zadá fixní měsíční náklad,
    zvolí scénář trhu (např. realistický) a odhad poptávky v dnech za měsíc.
 2. **Shrnutí:** aplikace porovná očekávaný měsíční zisk, pravděpodobnost ztráty a bod zvratu
    a označí relativně výhodnější variantu. Pokud jsou při daném nastavení obě varianty ztrátové,

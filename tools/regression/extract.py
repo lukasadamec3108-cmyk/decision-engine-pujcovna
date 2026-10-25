@@ -119,6 +119,24 @@ def page_body(at) -> Area:
         "<style>" in n.value or 'class="de-header' in n.value)))
 
 
+def investment_panel(body: Area) -> tuple:
+    """Investiční vstupy na stránce Investice (panel „Nastavení investičního scénáře“ nad záložkami).
+
+    Vrací (prvky panelu, text shrnutí). Dříve byly vstupy v postranním panelu – pro porovnání s původní
+    verzí se oblast „sidebar“ skládá z tohoto panelu a postranního panelu (pořadí vstupů je stejné).
+    Shrnutí pod panelem je jen opis zvolených hodnot, proto se vede zvlášť.
+    """
+    panel, summary = [], []
+    for n in body.children:
+        if n.type == "tab_container":
+            continue
+        if n.type == "markdown" and isinstance(n.value, str) and "de-inv-summary" in n.value:
+            summary.append(n.value)
+            continue
+        panel.append(n)
+    return panel, " ".join(summary)
+
+
 def area_state(node) -> dict:
     return dict(numbers=visible_numbers(node), widgets=widgets(node), elements=element_counts(node),
                 expanders=expander_labels(node), text=text_fingerprint(node))
@@ -142,8 +160,9 @@ def ui_state(at) -> dict:
 
     Původní aplikace se záložkami: oblasti „1“–„8“ = záložky, „sidebar“ = postranní panel.
     Vícestránková aplikace (M2): oblasti „1“–„8“ = místo, kam se původní záložka přesunula
-    (navigace.ORIGINAL_TABS; Investice po záložkách), „sidebar“ = panel na stránce Investice
-    (tam jsou investiční vstupy) a navíc „pages“ = každá stránka (obsah a panel) zvlášť.
+    (navigace.ORIGINAL_TABS; Investice po záložkách), „sidebar“ = investiční vstupy (panel nad
+    záložkami Investic) spolu s postranním panelem stránky Investice a navíc „pages“ = každá
+    stránka (obsah a postranní panel) zvlášť.
     """
     if not is_page_app(at):
         tabs = at.tabs
@@ -161,7 +180,9 @@ def ui_state(at) -> dict:
                           tab_labels=[t.label for t in at.tabs])
         if key == "investice":
             inv_tabs = {t.label: area_state(t) for t in at.tabs}
-            inv_sidebar = area_state(at.sidebar)
+            panel, summary = investment_panel(bodies[key])
+            inv_sidebar = area_state(Area(panel + list(at.sidebar.children.values())))
+            pages[key]["inv_summary"] = summary
     tabs = {}
     for number, (key, tab_label) in navigace.ORIGINAL_TABS.items():
         tabs[str(number)] = inv_tabs[tab_label] if tab_label else pages[key]["main"]

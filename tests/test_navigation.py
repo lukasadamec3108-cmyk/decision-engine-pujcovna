@@ -81,8 +81,13 @@ def test_every_section_renders_and_has_expected_content():
             for snippet in expect[key]:
                 assert snippet in text(at), (key, snippet)
             assert any(b.key == "logout" for b in at.sidebar.button), key     # odhlášení na každé stránce
-            has_inputs = bool([w for w in at.sidebar.number_input if w.key == "inv_fixed_cost"])
+            sidebar_inputs = [w for kind in (at.sidebar.selectbox, at.sidebar.number_input, at.sidebar.slider)
+                              for w in kind]
+            assert not sidebar_inputs, key                                     # v panelu jen navigace a uživatel
+            has_inputs = bool([w for w in at.main.number_input if w.key == "inv_fixed_cost"])
             assert has_inputs == (key == "investice"), key                    # vstupy jen v Investicích
+            has_panel = any(e.label == "Nastavení investičního scénáře" for e in at.main.expander)
+            assert has_panel == (key == "investice"), key
             if key == "investice":
                 assert [t.label for t in at.tabs] == navigace.INVESTICE_TABS
             else:
@@ -170,3 +175,50 @@ def test_rental_page_shares_requests_with_decision_centre():
     assert "Rozpracované požadavky" in text(at)
     kpi = [m.value for m in at.main.markdown if "Rozpracované požadavky" in m.value][0]
     assert ">1<" in kpi.replace(" ", "")
+
+
+def all_widget_keys(at):
+    kinds = ("selectbox", "number_input", "slider", "multiselect", "radio", "text_input", "checkbox", "button",
+             "date_input", "toggle")
+    return [w.key for kind in kinds for w in at.get(kind) if w.key]
+
+
+def test_investment_panel_holds_each_input_exactly_once():
+    at = app()
+    for key in navigace.KEYS:
+        open_page(at, key)
+        keys = all_widget_keys(at)
+        assert len(keys) == len(set(keys)), (key, keys)                  # žádný duplicitní ovládací prvek
+        found = sorted(k for k in keys if k in INV_KEYS)        # pořadí v panelu hlídá test_ui_regression
+        assert found == (sorted(INV_KEYS) if key == "investice" else []), (key, found)
+    open_page(at, "investice")
+    panel = [e for e in at.main.expander if e.label == "Nastavení investičního scénáře"][0]
+    assert sorted(w.key for kind in (panel.selectbox, panel.number_input, panel.slider) for w in kind) == \
+        sorted(INV_KEYS)                                                  # všech 7 vstupů je v panelu
+    groups = [m.value for m in panel.markdown if m.value.startswith("### ")]
+    assert groups == ["### 1 · Porovnávané stroje", "### 2 · Náklady", "### 3 · Trh", "### 4 · Investiční rozpočet",
+                      "### Pokročilé nastavení"]
+    assert not [w for w in at.sidebar.button if w.key != "logout"]
+
+
+def test_investment_summary_follows_inputs():
+    at = app()
+    open_page(at, "investice")
+    summary = [m.value for m in at.main.markdown if 'class="de-inv-summary"' in m.value]
+    assert len(summary) == 1
+    plain = summary[0].replace("\u00a0", " ")
+    assert "Mini bagr" in plain and "Pásový dumper" in plain and "trh realistický" in plain
+    assert "100 000 Kč měsíčně" in plain and "rozpočet 3 000 000 Kč" in plain
+    at.selectbox(key="inv_scenario").set_value("Pesimistický")
+    at.number_input(key="inv_budget").set_value(2000000).run()
+    plain = [m.value for m in at.main.markdown if 'class="de-inv-summary"' in m.value][0].replace("\u00a0", " ")
+    assert "trh pesimistický" in plain and "rozpočet 2 000 000 Kč" in plain
+
+
+def test_equal_machines_warning_points_to_panel():
+    at = app()
+    open_page(at, "investice")
+    at.selectbox(key="inv_machine_2").set_value(at.selectbox(key="inv_machine_1").value).run()
+    assert any("Nastavení investičního scénáře" in w.value and "různé" in w.value for w in at.warning)
+    assert len(at.tabs) == 0                                          # výsledky se jako dřív nezobrazí
+    assert at.selectbox(key="inv_machine_1") and at.selectbox(key="inv_machine_2")   # stroje jdou změnit

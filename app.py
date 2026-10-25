@@ -263,22 +263,28 @@ def _inv_input(container, widget: str, key: str, label: str, default_value, defa
 # DATA A SIDEBAR VSTUPY
 # ==================================================
 
-# Sekce postranního panelu se vytvoří dopředu, aby šly plnit na místech,
-# kde je kód potřebuje – pořadí výpočtů tak zůstává beze změny.
+# Postranní panel: jen označení aplikace, ukázková data, navigace a přihlášený uživatel.
+# Investiční vstupy jsou na stránce Investice v panelu „Nastavení investičního scénáře“ nad výsledky.
+# Jeho části se vytvoří dopředu, aby šly plnit na místech, kde je kód potřebuje – pořadí výpočtů
+# tak zůstává beze změny. Každý vstup existuje jen jednou (stejné klíče jako dosud).
 ui.sidebar_brand(APP_TITLE, APP_FOCUS)
 st.sidebar.markdown(
     '<div class="de-demo"><b>Ukázková data</b> · všechny hodnoty jsou fiktivní</div>',
     unsafe_allow_html=True,
 )
+INV_PANEL_TITLE = "Nastavení investičního scénáře"
 if SHOW_INV_INPUTS:
-    sb_machines = st.sidebar.container()
-    sb_costs = st.sidebar.container()
-    sb_market = st.sidebar.container()
-    sb_budget = st.sidebar.container()
-    sb_jobs = st.sidebar.container()
-    sb_advanced = st.sidebar.expander("Pokročilé nastavení")
+    with st.expander(INV_PANEL_TITLE, icon=":material/tune:"):
+        with st.container(key="de_inv_inputs"):
+            _row_1 = st.columns(2, gap="medium")
+            sb_machines, sb_costs = _row_1[0].container(), _row_1[1].container()
+            _row_2 = st.columns(2, gap="medium")
+            sb_market, sb_budget = _row_2[0].container(), _row_2[1].container()
+            sb_advanced = st.container()
+            sb_jobs = st.container()
+    inv_summary_slot = st.empty()        # shrnutí zvolených hodnot – vidět i při sbaleném panelu
 else:
-    sb_machines = sb_costs = sb_market = sb_budget = sb_jobs = sb_advanced = None
+    sb_machines = sb_costs = sb_market = sb_budget = sb_jobs = sb_advanced = inv_summary_slot = None
 sb_user = st.sidebar.container()
 
 # --- Přihlášený uživatel, odhlášení a nástroj správce (jen role admin) ---
@@ -328,7 +334,7 @@ available_machines = set(df["machine_type"].tolist())
 extra_dumper = False
 if SHOW_INV_INPUTS:
     sb_jobs.markdown(
-        '<div class="de-soon">Plán zakázek používá pevnou ukázkovou flotilu – vstupy v panelu '
+        '<div class="de-soon">Plán zakázek používá pevnou ukázkovou flotilu – tato nastavení '
         "ho zatím neovlivňují.</div>", unsafe_allow_html=True
     )
 
@@ -425,7 +431,7 @@ machine_2 = _inv_input(
 if machine_1 == machine_2 and PAGE in ("investice", "dashboard"):
     # Ostatní sekce investiční výsledky nezobrazují – nemají se kvůli tomu zablokovat.
     st.warning(
-        "Pro porovnání vyberte v postranním panelu dva **různé** stroje."
+        f"Pro porovnání vyberte v panelu „{INV_PANEL_TITLE}“ dva **různé** stroje."
     )
     if PAGE != "investice":
         page_link("investice", "Otevřít sekci Investice a změnit stroje")
@@ -474,6 +480,8 @@ if SHOW_INV_INPUTS:
         f"{scenario_note} Simulace počítá s {min_days}–{max_days} dny pronájmu měsíčně."
     )
 
+if SHOW_INV_INPUTS:
+    sb_advanced.markdown("### Pokročilé nastavení")
 expected_days = _inv_input(
     sb_advanced, "slider", "inv_expected_days",
     "Odhad poptávky pro rychlý výpočet (dny/měsíc)", 18, dict(value=18), min_value=0, max_value=31,
@@ -499,6 +507,12 @@ budget = _inv_input(
 )
 if SHOW_INV_INPUTS:
     ui.sidebar_amount(sb_budget, fmt_czk(budget), "k dispozici na nákup strojů")
+    inv_summary_slot.markdown(
+        f'<div class="de-inv-summary"><b>{html.escape(machine_1)}</b> × <b>{html.escape(machine_2)}</b> · '
+        f"trh {html.escape(scenario.lower())} · fixní náklad {fmt_czk(fixed_cost)} měsíčně · "
+        f"rozpočet {fmt_czk(budget)}</div>",
+        unsafe_allow_html=True,
+    )
 
 
 # ==================================================
@@ -640,7 +654,7 @@ ai_text = f"""
 
 # --- Nákup strojů: nejlepší sestava v rámci rozpočtu (výpočet v portfolio.py) ---
 # Prohledají se všechny kombinace 0–2 kusů u všech typů strojů včetně „nic nekupovat“.
-# Používají se individuální náklady strojů z dat, ne fixní náklad z postranního panelu.
+# Používají se individuální náklady strojů z dat, ne fixní náklad z nastavení investičního scénáře.
 purchase_options = pf.all_portfolios(df)
 purchase_best = pf.best_portfolio(purchase_options, budget)
 purchase_frontier = pf.budget_frontier(purchase_options)
@@ -814,7 +828,7 @@ if PAGE == "investice":
         )
         ui.hint(
             "Zisk stroje nezahrnuje společné náklady půjčovny (prostory, mzdy, administrativa) ani daně. "
-            "Náklady jsou <b>ukázkové</b> – fixní náklad z postranního panelu, servis z ukázkových dat; "
+            "Náklady jsou <b>ukázkové</b> – fixní náklad z nastavení investičního scénáře, servis z ukázkových dat; "
             "nejde o ověřené náklady firmy."
         )
 
@@ -934,7 +948,7 @@ if PAGE == "investice":
                 f"Jiný výpočet než očekávaný zisk výše: ceníková cena × {expected_days} dní − fixní náklad "
                 "− průměrný servis. Nepočítá s poruchami, kolísáním ceny a servisu ani s rozpětím dní podle "
                 f"scénáře trhu (simulace: {min_days}–{max_days} dní), proto vychází jinak. "
-                "Počet dní změníte v postranním panelu v „Pokročilém nastavení“."
+                f"Počet dní změníte v panelu „{INV_PANEL_TITLE}“ v části „Pokročilé nastavení“."
             )
             if expected_profit_mini_real < 0 and expected_profit_dumper_real < 0:
                 st.warning("Při tomto počtu dní jsou oba stroje ztrátové.")
@@ -1498,7 +1512,7 @@ if PAGE == "investice":
             "rozpočtu, a vybere tu s nejvyšším očekávaným měsíčním provozním ziskem. Pokud se "
             "žádný nákup nevyplatí, doporučí nic nekupovat. <b>Jiný výpočet než záložky 1–4:</b> "
             "počítá s fixními náklady jednotlivých strojů z ukázkových dat (ne s fixním nákladem "
-            "z postranního panelu) a s průměrnou poptávkou bez simulace – částky za stejný stroj "
+            "z nastavení investičního scénáře) a s průměrnou poptávkou bez simulace – částky za stejný stroj "
             "se proto liší.</div>",
             unsafe_allow_html=True,
         )
@@ -1632,7 +1646,7 @@ if PAGE == "investice":
                      "(pravděpodobnost × průměrná délka)."),
                     ("Náklady",
                      "Individuální měsíční fixní náklad a průměrný servis každého stroje z dat. "
-                     "Fixní náklad z postranního panelu se zde nepoužívá – ostatní záložky s ním "
+                     "Fixní náklad z nastavení investičního scénáře se zde nepoužívá – ostatní záložky s ním "
                      "počítají, proto se jejich částky liší. Data neuvádějí, zda fixní náklad "
                      "zahrnuje splátky."),
                     ("Co model nezahrnuje",
