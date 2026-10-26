@@ -58,7 +58,8 @@ Aplikace má **levé menu** se sekcemi (etapa M2):
 Investiční vstupy se zobrazují jen v sekci Investice; jejich hodnoty se při přechodu mezi sekcemi
 zachovají (do odhlášení) a Dashboard počítá ze stejných hodnot.
 
-Vstupy se nastavují na stránce Investice ve sbalovacím panelu **Nastavení investičního scénáře** nad výsledky
+Vstupy se nastavují na stránce Investice ve sbalovacím panelu **Nastavení investičního scénáře** – pod lištou
+záložek Investic a nad obsahem vybrané záložky
 (pod panelem je stručné shrnutí zvolených hodnot; postranní panel obsahuje jen menu a přihlášeného uživatele):
 - výběr dvou porovnávaných strojů,
 - fixní měsíční náklad,

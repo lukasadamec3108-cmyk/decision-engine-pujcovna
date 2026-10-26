@@ -119,6 +119,36 @@ def page_body(at) -> Area:
         "<style>" in n.value or 'class="de-header' in n.value)))
 
 
+INV_CONTENT_KEY = "de_inv_obsah"     # kontejner obsahu záložek Investic pod panelem nastavení
+
+
+def keyed_blocks(node, prefix: str) -> list:
+    """Bloky (kontejnery) s klíčem začínajícím `prefix`, v pořadí ve stromu."""
+    out = []
+    kids = getattr(node, "children", None) or {}
+    for k in (sorted(kids) if isinstance(kids, dict) else range(len(kids))):
+        child = kids[k]
+        if str(getattr(child, "key", None) or "").startswith(prefix):
+            out.append(child)
+        else:
+            out += keyed_blocks(child, prefix)
+    return out
+
+
+def investment_tabs(at) -> dict:
+    """Obsah záložek Investic podle popisku: {popisek: uzel}.
+
+    Od úpravy rozmístění je lišta záložek (st.tabs) nad panelem nastavení jen přepínačem a obsah
+    každé záložky je v kontejneru „de_inv_obsah_<číslo>_on/off“ pod panelem (vykreslený je vždy celý,
+    neaktivní skrývá CSS). Starší verze mají obsah přímo v st.tabs.
+    """
+    import navigace
+    blocks = keyed_blocks(at.main, INV_CONTENT_KEY + "_")
+    if blocks:
+        return dict(zip(navigace.INVESTICE_TABS, blocks))
+    return {t.label: t for t in at.tabs}
+
+
 def investment_panel(body: Area) -> tuple:
     """Investiční vstupy na stránce Investice (panel „Nastavení investičního scénáře“ nad záložkami).
 
@@ -128,8 +158,8 @@ def investment_panel(body: Area) -> tuple:
     """
     panel, summary = [], []
     for n in body.children:
-        if n.type == "tab_container":
-            continue
+        if n.type == "tab_container" or getattr(n, "key", None) == INV_CONTENT_KEY:
+            continue                          # záložky Investic (lišta a jejich obsah) se vedou zvlášť
         if n.type == "markdown" and isinstance(n.value, str) and "de-inv-summary" in n.value:
             summary.append(n.value)
             continue
@@ -179,7 +209,7 @@ def ui_state(at) -> dict:
         pages[key] = dict(main=area_state(bodies[key]), sidebar=area_state(at.sidebar),
                           tab_labels=[t.label for t in at.tabs])
         if key == "investice":
-            inv_tabs = {t.label: area_state(t) for t in at.tabs}
+            inv_tabs = {label: area_state(node) for label, node in investment_tabs(at).items()}
             panel, summary = investment_panel(bodies[key])
             inv_sidebar = area_state(Area(panel + list(at.sidebar.children.values())))
             pages[key]["inv_summary"] = summary

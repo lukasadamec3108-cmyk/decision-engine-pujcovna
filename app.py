@@ -273,7 +273,16 @@ st.sidebar.markdown(
     unsafe_allow_html=True,
 )
 INV_PANEL_TITLE = "Nastavení investičního scénáře"
+INV_TAB = navreg.INVESTICE_TABS[0]       # aktivní záložka sekce Investice
 if SHOW_INV_INPUTS:
+    # Pořadí na stránce: lišta záložek → panel nastavení → obsah aktivní záložky.
+    # Lišta (st.tabs) slouží jen k přepínání; obsah všech záložek se počítá a vykresluje jako dřív
+    # do kontejnerů pod panelem a viditelný je jen ten aktivní (ostatní skryje CSS – jako u st.tabs).
+    # Při dvou stejných strojích se výsledky ani záložky nezobrazují (viz kontrola níže).
+    _m1, _m2 = (st.session_state.get(k, st.session_state.get(INV_KEEP + k)) for k in ("inv_machine_1", "inv_machine_2"))
+    if _m1 is None or _m1 != _m2:
+        _inv_tab_bar = st.tabs(navreg.INVESTICE_TABS, key="inv_tab", on_change="rerun")
+        INV_TAB = next((label for label, t in zip(navreg.INVESTICE_TABS, _inv_tab_bar) if t.open), INV_TAB)
     with st.expander(INV_PANEL_TITLE, icon=":material/tune:"):
         with st.container(key="de_inv_inputs"):
             _row_1 = st.columns(2, gap="medium")
@@ -283,6 +292,7 @@ if SHOW_INV_INPUTS:
             sb_advanced = st.container()
             sb_jobs = st.container()
     inv_summary_slot = st.empty()        # shrnutí zvolených hodnot – vidět i při sbaleném panelu
+    inv_tab_area = st.container(key="de_inv_obsah")      # obsah záložek (pod panelem)
 else:
     sb_machines = sb_costs = sb_market = sb_budget = sb_jobs = sb_advanced = inv_summary_slot = None
 sb_user = st.sidebar.container()
@@ -750,7 +760,11 @@ def chart(fig) -> None:
 # ==================================================
 
 if PAGE == "investice":
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(navreg.INVESTICE_TABS)
+    with inv_tab_area:                   # jeden kontejner na záložku; viditelný jen aktivní („_on“)
+        tab1, tab2, tab3, tab4, tab5 = [
+            st.container(key=f"de_inv_obsah_{i}_{'on' if label == INV_TAB else 'off'}")
+            for i, label in enumerate(navreg.INVESTICE_TABS, start=1)
+        ]
 
 
     # ==================================================

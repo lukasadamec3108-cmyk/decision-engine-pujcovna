@@ -121,7 +121,12 @@ def shoot(url: str, width: int, out: Path, tag: str, password: str, chromium: st
             if area == "[data-testid=stSidebar]" and width < 500:
                 p.locator("[data-testid=stExpandSidebarButton]").first.click()
                 _idle(p)
-            p.locator(area).first.screenshot(path=str(f), animations="disabled")
+            target = p.locator(area).first
+            if area == "[role=tabpanel]:visible":
+                inv = p.locator('[class*="st-key-de_inv_obsah_"][class*="_on"]')
+                if inv.count():                   # Investice: obsah záložky je pod panelem nastavení
+                    target = inv.first
+            target.screenshot(path=str(f), animations="disabled")
             files.append((name, (f, comparable, area)))
         b.close()
     return files
