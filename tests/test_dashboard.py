@@ -21,7 +21,7 @@ def plain(value: str) -> str:
 def dash_kpi(at, label: str) -> str:
     """Hodnota hlavní KPI karty Dashboardu podle popisku (bez HTML)."""
     html_all = " ".join(m.value for m in at.main.markdown if "dd-kpis" in m.value and "<style>" not in m.value)
-    found = re.search(r'dd-lbl">' + re.escape(label) + r'</span></div><div class="dd-val">(.*?)</div>', html_all)
+    found = re.search(r'dd-lbl">' + re.escape(label) + r'</span></div><div class="dd-val[^"]*">(.*?)</div>', html_all)
     assert found, label
     return plain(found.group(1))
 
@@ -64,7 +64,8 @@ def test_dashboard_is_transparent_about_partial_data():
 def test_dashboard_recommendation_and_conflicts_match_sections():
     at = app()
     shown = plain(" ".join(m.value for m in at.main.markdown if "<style>" not in m.value))
-    assert "Doporučený stroj: Pásový dumper" in shown
+    kv = " ".join(m.value for m in at.main.markdown if 'class="dd-kv"' in m.value)
+    assert '<div class="k">Doporučený stroj</div><div class="val">Pásový dumper</div>' in kv
     assert "Kolový bagr – den 11" in shown and "Silniční válec – den 15 – den 18" in shown
     assert "2 konflikty k řešení" in shown
     open_page(at, "kapacita")

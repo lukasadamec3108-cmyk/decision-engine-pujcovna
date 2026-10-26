@@ -621,11 +621,14 @@ def dash_chip(text: str, tone: str) -> str:
 
 
 def dash_kpis(cards: list) -> None:
-    """Hlavní KPI karty. cards = [dict(icon, label, value, sub, chip)] – value/sub/chip jsou hotové HTML."""
+    """Hlavní KPI karty. cards = [dict(icon, label, value, sub, chip, tone)] – value/sub/chip jsou hotové HTML.
+
+    tone (barva ikony): "accent" (výchozí), "neutral", "good", "bad" – barva jen tam, kde nese význam.
+    """
     items = "".join(
-        f'<div class="dd-kpi"><div class="dd-kpi-top">{dash_icon(c["icon"])}'
-        f'<span class="dd-lbl">{html.escape(c["label"])}</span></div>'
-        f'<div class="dd-val">{c["value"]}</div>{c.get("chip", "")}'
+        f'<div class="dd-kpi"><div class="dd-kpi-top"><span class="dd-ico-box {c.get("tone", "accent")}">'
+        f'{dash_icon(c["icon"])}</span><span class="dd-lbl">{html.escape(c["label"])}</span></div>'
+        f'<div class="dd-val{" pair" if c.get("pair") else ""}">{c["value"]}</div>{c.get("chip", "")}'
         f'<div class="dd-sub">{c.get("sub", "")}</div></div>'
         for c in cards
     )
@@ -633,7 +636,10 @@ def dash_kpis(cards: list) -> None:
 
 
 def dash_section(slug: str):
-    """Ohraničená sekce Dashboardu (uvnitř se smějí použít i odkazy st.page_link)."""
+    """Ohraničená sekce Dashboardu (uvnitř se smějí použít i odkazy st.page_link).
+
+    Přípona klíče _good/_bad/_accent/_neutral určuje barvu proužku u karet upozornění (viz CSS).
+    """
     return st.container(border=True, key=f"de_dash_{slug}")
 
 
@@ -642,91 +648,138 @@ def dash_links(slug: str):
     return st.container(key=f"dd_links_{slug}")
 
 
-def dash_section_head(icon: str, title: str, caption: str = "") -> None:
+def dash_section_head(icon: str, title: str, caption: str = "", tone: str = "accent") -> None:
     st.markdown(
-        f'<div class="dd-head">{dash_icon(icon)}<div><div class="dd-title" role="heading" aria-level="3">'
-        f'{html.escape(title)}</div>' + (f'<div class="dd-cap">{caption}</div>' if caption else "")
+        f'<div class="dd-head"><span class="dd-ico-box {tone}">{dash_icon(icon)}</span><div>'
+        f'<div class="dd-title" role="heading" aria-level="3">{html.escape(title)}</div>'
+        + (f'<div class="dd-cap">{caption}</div>' if caption else "")
         + "</div></div>",
         unsafe_allow_html=True,
     )
 
 
 def dash_rows(rows: list) -> None:
-    """Řádky „popisek – hodnota“: rows = [(popisek, hodnota HTML, poznámka HTML nebo "")]."""
+    """Řádky „popisek – hodnota“: rows = [(popisek, hodnota HTML, poznámka HTML nebo ""[, zvýraznit])]."""
     body = "".join(
-        f'<div class="dd-row"><span class="l">{html.escape(label)}'
-        + (f'<small>{note}</small>' if note else "")
-        + f'</span><span class="v">{value}</span></div>'
-        for label, value, note in rows
+        f'<div class="dd-row{" key" if len(r) > 3 and r[3] else ""}"><span class="l">{html.escape(r[0])}'
+        + (f'<small>{r[2]}</small>' if r[2] else "")
+        + f'</span><span class="v">{r[1]}</span></div>'
+        for r in rows
     )
     st.markdown(f'<div class="dd-rows">{body}</div>', unsafe_allow_html=True)
+
+
+def dash_kv(label: str, value_html: str, sub_html: str = "") -> None:
+    """Popisek nad výraznou hodnotou (karty doporučení)."""
+    st.markdown(
+        f'<div class="dd-kv"><div class="k">{html.escape(label)}</div><div class="val">{value_html}</div>'
+        + (f'<div class="s">{sub_html}</div>' if sub_html else "") + "</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def dash_text(text_html: str, muted: bool = False) -> None:
     st.markdown(f'<div class="dd-text{" muted" if muted else ""}">{text_html}</div>', unsafe_allow_html=True)
 
 
+_TONES = {"accent": (ACCENT, ACCENT_SOFT), "good": ("#166534", "#E8F5EC"), "bad": (BAD_TEXT, BAD_BG),
+          "neutral": ("#334155", "#EEF2F7")}
+_TONE_CSS = "\n".join(
+    f"{_DASH} .dd-ico-box.{name} {{{{ color: {fg}; background: {bg}; }}}}\n"
+    f'{_DASH} [class*="st-key-de_dash_"][class*="_{name}"] {{{{ border-left: 4px solid {fg} !important; }}}}'
+    for name, (fg, bg) in _TONES.items()
+).replace("{{", "{").replace("}}", "}")
+
 DASHBOARD_CSS = f"""
 <style>
-{_DASH} .de-tab-title {{ font-size: 1.35rem; }}
-{_DASH} .dd-kpis {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .9rem; margin: .2rem 0 1.3rem 0; }}
-{_DASH} .dd-kpi {{ background: #fff; border: 1px solid {UI_LINE}; border-radius: 14px; padding: 1rem 1.1rem .95rem 1.1rem;
-                 box-shadow: 0 1px 2px rgba(16,24,40,.04); display: flex; flex-direction: column; gap: .35rem; min-width: 0; }}
-{_DASH} .dd-kpi-top {{ display: flex; align-items: center; gap: .55rem; color: {UI_MUTED}; }}
-{_DASH} .dd-ico {{ width: 1.25rem; height: 1.25rem; flex: 0 0 auto; color: {ACCENT}; }}
-{_DASH} .dd-lbl {{ font-size: .8rem; font-weight: 700; letter-spacing: .03em; color: {UI_MUTED}; line-height: 1.25; }}
-{_DASH} .dd-val {{ font-size: 1.75rem; font-weight: 800; color: {INK}; line-height: 1.15; font-variant-numeric: tabular-nums;
-                 overflow-wrap: anywhere; }}
-{_DASH} .dd-val small {{ font-size: .95rem; font-weight: 600; color: {UI_MUTED}; margin-left: .15rem; }}
-{_DASH} .dd-sub {{ font-size: .84rem; color: {UI_MUTED}; line-height: 1.45; }}
-{_DASH} .dd-chip {{ align-self: flex-start; font-size: .75rem; font-weight: 700; padding: .14rem .55rem; border-radius: 999px;
+{_DASH} .de-tab-title {{ font-size: 1.4rem; margin-bottom: .1rem; }}
+{_DASH} .de-tab-intro {{ color: {UI_MUTED}; font-size: .92rem; margin-bottom: .9rem; }}
+/* KPI karty */
+{_DASH} .dd-kpis {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin: .1rem 0 1.4rem 0; }}
+{_DASH} .dd-kpi {{ background: #fff; border: 1px solid {UI_LINE}; border-radius: 14px; padding: 1rem 1.15rem;
+                 box-shadow: 0 1px 3px rgba(16,24,40,.06); display: flex; flex-direction: column; gap: .45rem; min-width: 0; }}
+{_DASH} .dd-kpi-top {{ display: flex; align-items: center; gap: .6rem; }}
+{_DASH} .dd-ico-box {{ display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+                     width: 2.1rem; height: 2.1rem; border-radius: 10px; }}
+{_DASH} .dd-ico {{ width: 1.2rem; height: 1.2rem; }}
+{_DASH} .dd-lbl {{ font-size: .76rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+                 color: {UI_MUTED}; line-height: 1.25; }}
+{_DASH} .dd-val {{ font-size: 2.15rem; font-weight: 800; color: {INK}; line-height: 1.1; letter-spacing: -.01em;
+                 font-variant-numeric: tabular-nums; overflow-wrap: anywhere; margin-top: .15rem; }}
+{_DASH} .dd-val.pair {{ font-size: 1.75rem; display: flex; flex-wrap: wrap; column-gap: .45rem; row-gap: .1rem; }}
+{_DASH} .dd-val.pair > span {{ white-space: nowrap; }}
+{_DASH} .dd-val small {{ font-size: 1rem; font-weight: 600; color: {UI_MUTED}; margin-left: .2rem; letter-spacing: 0; }}
+{_DASH} .dd-sub {{ font-size: .8rem; color: {UI_MUTED}; line-height: 1.45; margin-top: auto; padding-top: .55rem;
+                 border-top: 1px solid {UI_LINE}; }}
+{_DASH} .dd-chip {{ align-self: flex-start; font-size: .74rem; font-weight: 700; padding: .16rem .6rem; border-radius: 999px;
                   white-space: nowrap; }}
 {_DASH} .dd-chip.good {{ color: #166534; background: #E8F5EC; }}
 {_DASH} .dd-chip.warn {{ color: {WARN_TEXT}; background: {WARN_BG}; }}
 {_DASH} .dd-chip.bad {{ color: {BAD_TEXT}; background: {BAD_BG}; }}
 {_DASH} .dd-chip.info {{ color: #334155; background: #EEF2F7; }}
+/* Sekce a karty */
 {_DASH} [class*="st-key-de_dash_"] {{ border-radius: 14px !important; border-color: {UI_LINE} !important; background: #fff;
-                                    box-shadow: 0 1px 2px rgba(16,24,40,.04); }}
-{_DASH} .dd-head {{ display: flex; gap: .6rem; align-items: flex-start; margin-bottom: .15rem; }}
-{_DASH} .dd-head .dd-ico {{ margin-top: .15rem; }}
-{_DASH} .dd-title {{ font-size: 1.05rem; font-weight: 700; color: {INK}; line-height: 1.3; }}
-{_DASH} .dd-cap {{ font-size: .84rem; color: {UI_MUTED}; line-height: 1.4; }}
-{_DASH} .dd-rows {{ margin: .1rem 0 .2rem 0; }}
-{_DASH} .dd-row {{ display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: .5rem 0;
-                 border-top: 1px solid {UI_LINE}; font-size: .93rem; }}
+                                    box-shadow: 0 1px 3px rgba(16,24,40,.06); padding: 1.1rem 1.2rem !important; }}
+{_DASH} [data-testid="stHorizontalBlock"] {{ align-items: stretch; }}
+{_DASH} [data-testid="stColumn"] > [data-testid="stVerticalBlock"] {{ height: 100%; }}
+{_DASH} [data-testid="stColumn"] [data-testid="stLayoutWrapper"]:has(> [class*="st-key-de_dash_"]),
+{_DASH} [data-testid="stColumn"] [class*="st-key-de_dash_"] {{ height: 100%; }}
+{_DASH} .dd-head {{ display: flex; gap: .7rem; align-items: center; padding-bottom: .75rem;
+                  border-bottom: 1px solid {UI_LINE}; margin-bottom: .1rem; }}
+{_DASH} .dd-title {{ font-size: 1.06rem; font-weight: 700; color: {INK}; line-height: 1.3; }}
+{_DASH} .dd-cap {{ font-size: .82rem; color: {UI_MUTED}; line-height: 1.4; }}
+{_DASH} .dd-rows {{ margin: 0; }}
+{_DASH} .dd-row {{ display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: .55rem .1rem;
+                 border-top: 1px solid {UI_LINE}; font-size: .94rem; }}
 {_DASH} .dd-row:first-child {{ border-top: none; }}
-{_DASH} .dd-row .l {{ color: {INK}; }}
-{_DASH} .dd-row .l small {{ display: block; color: {UI_MUTED}; font-size: .78rem; margin-top: .05rem; }}
-{_DASH} .dd-row .v {{ color: {INK}; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }}
-{_DASH} .dd-row .v.neg {{ color: {BAD_TEXT}; }}
-{_DASH} .dd-text {{ font-size: .93rem; color: {INK}; line-height: 1.5; margin: .1rem 0 .2rem 0; }}
-{_DASH} .dd-text.muted {{ color: {UI_MUTED}; font-size: .86rem; }}
+{_DASH} .dd-row .l {{ color: {INK}; font-weight: 500; }}
+{_DASH} .dd-row .l small {{ display: block; color: {UI_MUTED}; font-size: .78rem; font-weight: 400; margin-top: .05rem; }}
+{_DASH} .dd-row .v {{ color: {INK}; font-weight: 700; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }}
+{_DASH} .dd-row .v .neg, {_DASH} .dd-row .v.neg {{ color: {BAD_TEXT}; }}
+{_DASH} .dd-row.key {{ background: {UI_BG}; border-radius: 8px; border-top-color: transparent; padding: .6rem .6rem; margin: .15rem 0; }}
+{_DASH} .dd-row.key + .dd-row {{ border-top-color: transparent; }}
+{_DASH} .dd-row.key .l, {_DASH} .dd-row.key .v {{ font-weight: 800; font-size: 1rem; }}
+{_DASH} .dd-kv {{ margin: .1rem 0 .55rem 0; }}
+{_DASH} .dd-kv .k {{ font-size: .74rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: {UI_MUTED}; }}
+{_DASH} .dd-kv .val {{ font-size: 1.12rem; font-weight: 800; color: {INK}; line-height: 1.3; margin: .1rem 0 .1rem 0; }}
+{_DASH} .dd-kv .s {{ font-size: .82rem; color: {UI_MUTED}; line-height: 1.45; }}
+{_DASH} .dd-text {{ font-size: .92rem; color: {INK}; line-height: 1.5; margin: .1rem 0 .2rem 0; }}
+{_DASH} .dd-text.muted {{ color: {UI_MUTED}; font-size: .84rem; }}
 {_DASH} .dd-text b {{ color: {INK}; }}
-{_DASH} .dd-list {{ margin: .2rem 0 .1rem 0; padding: 0; list-style: none; }}
-{_DASH} .dd-list li {{ padding: .4rem 0; border-top: 1px solid {UI_LINE}; font-size: .9rem; color: {INK}; line-height: 1.4; }}
-{_DASH} .dd-list li:first-child {{ border-top: none; }}
-{_DASH} .dd-list li small {{ display: block; color: {UI_MUTED}; font-size: .78rem; }}
-{_DASH} .dd-group {{ font-size: .8rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: {UI_MUTED};
-                   margin: .6rem 0 .1rem 0; }}
-{_DASH} [class*="st-key-dd_links_"] {{ flex-direction: row !important; flex-wrap: wrap; gap: .1rem 1.1rem !important;
-                                     margin-top: .2rem; }}
+{_DASH} ul.dd-list {{ margin: .45rem 0 .1rem 0 !important; padding-left: 0 !important; list-style: none; }}
+{_DASH} ul.dd-list li {{ margin-left: 0 !important; padding: .45rem 0; border-top: 1px solid {UI_LINE};
+                       font-size: .92rem; color: {INK}; line-height: 1.4; }}
+{_DASH} ul.dd-list li:first-child {{ border-top: none; }}
+{_DASH} ul.dd-list li small {{ display: block; color: {UI_MUTED}; font-size: .78rem; }}
+{_DASH} .dd-group {{ font-size: .78rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: {UI_MUTED};
+                   margin: .9rem 0 .2rem 0; }}
+/* Odkazy do sekcí */
+{_DASH} [class*="st-key-dd_links_"] {{ flex-direction: row !important; flex-wrap: wrap; gap: .1rem 1.2rem !important;
+                                     margin-top: auto; padding-top: .55rem; border-top: 1px solid {UI_LINE}; }}
 {_DASH} [class*="st-key-dd_links_"] > div {{ width: auto !important; flex: 0 0 auto; }}
-{_DASH} ul.dd-list {{ padding-left: 0 !important; margin-left: 0 !important; }}
-{_DASH} ul.dd-list li {{ margin-left: 0 !important; }}
+{_DASH} [data-testid="stLayoutWrapper"]:has(> [class*="st-key-dd_links_"]) {{ margin-top: auto; }}
 {_DASH} [data-testid="stPageLink"] a {{ padding: .15rem .3rem; border-radius: 8px; }}
 {_DASH} [data-testid="stPageLink"] p {{ font-size: .88rem; font-weight: 600; color: {ACCENT}; }}
+{_TONE_CSS}
 @media (max-width: 1100px) {{
   {_DASH} .dd-kpis {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
 }}
+@media (max-width: 1000px) {{
+  {_DASH} .st-key-dd_alerts [data-testid="stHorizontalBlock"] {{ flex-direction: column; gap: .9rem !important; }}
+  {_DASH} .st-key-dd_alerts [data-testid="stColumn"] {{ width: 100% !important; flex: 1 1 auto !important; }}
+}}
 @media (max-width: 640px) {{
-  {_DASH} .dd-kpis {{ gap: .55rem; margin-bottom: 1rem; }}
-  {_DASH} .dd-kpi {{ padding: .75rem .8rem; border-radius: 12px; gap: .25rem; }}
-  {_DASH} .dd-lbl {{ font-size: .72rem; }}
-  {_DASH} .dd-ico {{ width: 1.05rem; height: 1.05rem; }}
-  {_DASH} .dd-val {{ font-size: 1.3rem; }}
+  {_DASH} .dd-kpis {{ gap: .6rem; margin-bottom: 1rem; }}
+  {_DASH} .dd-kpi {{ padding: .8rem .8rem; border-radius: 12px; gap: .3rem; }}
+  {_DASH} .dd-kpi-top {{ gap: .45rem; }}
+  {_DASH} .dd-ico-box {{ width: 1.7rem; height: 1.7rem; border-radius: 8px; }}
+  {_DASH} .dd-ico {{ width: 1rem; height: 1rem; }}
+  {_DASH} .dd-lbl {{ font-size: .66rem; letter-spacing: .03em; }}
+  {_DASH} .dd-val, {_DASH} .dd-val.pair {{ font-size: 1.45rem; }}
   {_DASH} .dd-val small {{ font-size: .8rem; }}
-  {_DASH} .dd-sub {{ font-size: .76rem; }}
+  {_DASH} .dd-sub {{ font-size: .74rem; padding-top: .4rem; }}
   {_DASH} .dd-chip {{ font-size: .68rem; white-space: normal; }}
+  {_DASH} [class*="st-key-de_dash_"] {{ padding: .9rem .95rem !important; }}
 }}
 </style>
 """
