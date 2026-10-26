@@ -148,6 +148,8 @@ def inject_css() -> None:
         .st-key-de_inv_inputs [data-testid="stCaptionContainer"] {{ opacity: 1; color: {UI_MUTED}; }}
         .st-key-de_inv_inputs [data-testid="stSliderTickBar"],
         .st-key-de_inv_inputs [data-testid="stSliderTickBar"] p {{ color: {UI_MUTED} !important; }}
+        /* Investice: obsah neaktivních záložek je skrytý (lišta záložek je nad panelem nastavení) */
+        [class*="st-key-de_inv_obsah_"][class*="_off"] {{ display: none; }}
         .de-inv-summary {{ font-size: .85rem; color: {UI_MUTED}; margin: -.4rem 0 .4rem .1rem; }}
         .de-inv-summary b {{ color: {INK}; }}
         .de-amount {{ font-size: .85rem; color: {UI_MUTED}; margin: -.55rem 0 .3rem .1rem; }}

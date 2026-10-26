@@ -222,3 +222,56 @@ def test_equal_machines_warning_points_to_panel():
     assert any("Nastavení investičního scénáře" in w.value and "různé" in w.value for w in at.warning)
     assert len(at.tabs) == 0                                          # výsledky se jako dřív nezobrazí
     assert at.selectbox(key="inv_machine_1") and at.selectbox(key="inv_machine_2")   # stroje jdou změnit
+
+
+def _investice_layout(at):
+    """Typy a klíče prvků hlavní plochy stránky Investice v pořadí (bez stylů a hlavičky)."""
+    out = []
+    for k in sorted(at.main.children):
+        n = at.main.children[k]
+        if n.type == "markdown" and ("<style>" in n.value or 'class="de-header' in n.value):
+            continue
+        out.append((n.type, getattr(n, "key", None), getattr(n, "label", None)))
+    return out
+
+
+def test_investment_tabs_are_above_settings_panel():
+    at = app()
+    open_page(at, "investice")
+    layout = _investice_layout(at)
+    kinds = [(t, k) for t, k, _ in layout]
+    tabs_i = kinds.index(("tab_container", "inv_tab"))
+    panel_i = [i for i, (t, k, label) in enumerate(layout) if t == "expander"
+               and label == "Nastavení investičního scénáře"][0]
+    content_i = kinds.index(("flex_container", "de_inv_obsah"))
+    assert tabs_i < panel_i < content_i                       # záložky → panel → obsah záložky
+    assert tabs_i == 0                                        # hned pod hlavičkou aplikace
+    assert [t.label for t in at.tabs] == navigace.INVESTICE_TABS
+    for t in at.tabs:                                         # lišta je jen přepínač – obsah je pod panelem
+        assert not list(t.children.values()), t.label
+
+
+def _content_keys(at):
+    area = [n for n in at.main.children.values() if getattr(n, "key", None) == "de_inv_obsah"][0]
+    return [area.children[k].key for k in sorted(area.children)]
+
+
+def test_switching_investment_tab_keeps_inputs_and_shows_one_content():
+    at = app()
+    open_page(at, "investice")
+    assert _content_keys(at) == ["de_inv_obsah_1_on"] + [f"de_inv_obsah_{i}_off" for i in range(2, 6)]
+    at.number_input(key="inv_fixed_cost").set_value(130000).run()
+    first = text(at)
+    for i, label in enumerate(navigace.INVESTICE_TABS, start=1):
+        at.session_state["inv_tab"] = label                   # klik na záložku
+        at.run()
+        ok(at)
+        keys = _content_keys(at)
+        assert [k for k in keys if k.endswith("_on")] == [f"de_inv_obsah_{i}_on"], (label, keys)
+        assert len(keys) == 5                                 # obsah všech záložek se dál vykresluje
+        assert at.number_input(key="inv_fixed_cost").value == 130000
+        assert [t.label for t in at.tabs] == navigace.INVESTICE_TABS
+    at.session_state["inv_tab"] = navigace.INVESTICE_TABS[0]
+    at.run()
+    assert text(at) == first                                  # stejné výsledky jako před přepínáním
+    assert [d.proto.label for d in at.get("download_button")] == ["Stáhnout report (DOCX)"]
