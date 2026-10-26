@@ -46,7 +46,7 @@ Aplikace má **levé menu** se sekcemi (etapa M2):
 
 | Sekce | Obsah |
 |---|---|
-| **Dashboard** | Přehled existujících výsledků (kapacita, plán zakázek, rozpracované požadavky, doporučený stroj a nákupní sestava) s odkazy do sekcí. Nic nového nepočítá. |
+| **Dashboard** | Manažerský přehled: čtyři KPI karty (vytížení strojového parku, ekonomický výsledek – zatím jen zisk vlastních zakázek po penále, pronájmy a zakázky, kapacitní konflikty), sekce Provoz a Ekonomika a blok Doporučení a upozornění (investiční doporučení, konflikty, požadavky z Rozhodovacího centra) s odkazy do sekcí. Nic nového nepočítá – zobrazuje existující výsledky. |
 | **Pronájem strojů** | Formulář nového požadavku na pronájem a jeho vyhodnocení (stejný plánovač jako Rozhodovací centrum, sdílený seznam požadavků). |
 | **Vlastní zakázky** | Dřívější záložka 🗓️ Plán zakázek. |
 | **Strojový park** | Počty kusů ve flotile a ekonomika jednoho kusu podle dat (stejná tabulka jako v Nákupu strojů). |

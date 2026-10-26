@@ -587,3 +587,146 @@ def style_fig(fig, height: int = 380, legend: bool = True):
     fig.update_xaxes(gridcolor="#EEF1F5", linecolor=BORDER, zerolinecolor=BORDER)
     fig.update_yaxes(gridcolor="#EEF1F5", linecolor=BORDER, zerolinecolor=BORDER)
     return fig
+
+
+# ---------------------------------------------------------------------------
+# Dashboard (etapa M3 – první fáze): KPI karty, sekce a upozornění.
+# Jen zobrazení – hodnoty dodává app.py z existujících výpočtů. Styl platí jen uvnitř Dashboardu.
+# ---------------------------------------------------------------------------
+
+DASH_KEY = TAB_KEY_PREFIX + "dashboard"
+_DASH = f".st-key-{DASH_KEY}"
+
+# Jednoduché obrysové ikony (24×24, barva podle textu) – bez externích zdrojů
+DASH_ICONS = {
+    "gauge": '<path d="M4 15a8 8 0 1 1 16 0"/><path d="M12 15l4-5"/><circle cx="12" cy="15" r="1.4"/>',
+    "coins": '<ellipse cx="12" cy="6.5" rx="7" ry="2.8"/><path d="M5 6.5v5c0 1.6 3.1 2.8 7 2.8s7-1.2 7-2.8v-5"/>'
+             '<path d="M5 11.5v5c0 1.6 3.1 2.8 7 2.8s7-1.2 7-2.8v-5"/>',
+    "truck": '<path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.8"/>'
+             '<circle cx="17" cy="17.5" r="1.8"/>',
+    "alert": '<path d="M12 4l9 16H3z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.2" r=".6"/>',
+    "spark": '<path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><circle cx="12" cy="12" r="3"/>',
+    "route": '<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h6a4 4 0 0 0 0-8H10a4 4 0 0 1 0-8h6"/>',
+}
+
+
+def dash_icon(name: str) -> str:
+    return (f'<svg class="dd-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" '
+            f'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">{DASH_ICONS[name]}</svg>')
+
+
+def dash_chip(text: str, tone: str) -> str:
+    """Stavový štítek: barva vždy se symbolem a textem (význam nenese jen barva)."""
+    return f'<span class="dd-chip {tone}">{html.escape(status_text(text, tone))}</span>'
+
+
+def dash_kpis(cards: list) -> None:
+    """Hlavní KPI karty. cards = [dict(icon, label, value, sub, chip)] – value/sub/chip jsou hotové HTML."""
+    items = "".join(
+        f'<div class="dd-kpi"><div class="dd-kpi-top">{dash_icon(c["icon"])}'
+        f'<span class="dd-lbl">{html.escape(c["label"])}</span></div>'
+        f'<div class="dd-val">{c["value"]}</div>{c.get("chip", "")}'
+        f'<div class="dd-sub">{c.get("sub", "")}</div></div>'
+        for c in cards
+    )
+    st.markdown(f'<div class="dd-kpis">{items}</div>', unsafe_allow_html=True)
+
+
+def dash_section(slug: str):
+    """Ohraničená sekce Dashboardu (uvnitř se smějí použít i odkazy st.page_link)."""
+    return st.container(border=True, key=f"de_dash_{slug}")
+
+
+def dash_links(slug: str):
+    """Řádek odkazů do sekcí (zalamuje se; na mobilu pod sebou podle šířky)."""
+    return st.container(key=f"dd_links_{slug}")
+
+
+def dash_section_head(icon: str, title: str, caption: str = "") -> None:
+    st.markdown(
+        f'<div class="dd-head">{dash_icon(icon)}<div><div class="dd-title" role="heading" aria-level="3">'
+        f'{html.escape(title)}</div>' + (f'<div class="dd-cap">{caption}</div>' if caption else "")
+        + "</div></div>",
+        unsafe_allow_html=True,
+    )
+
+
+def dash_rows(rows: list) -> None:
+    """Řádky „popisek – hodnota“: rows = [(popisek, hodnota HTML, poznámka HTML nebo "")]."""
+    body = "".join(
+        f'<div class="dd-row"><span class="l">{html.escape(label)}'
+        + (f'<small>{note}</small>' if note else "")
+        + f'</span><span class="v">{value}</span></div>'
+        for label, value, note in rows
+    )
+    st.markdown(f'<div class="dd-rows">{body}</div>', unsafe_allow_html=True)
+
+
+def dash_text(text_html: str, muted: bool = False) -> None:
+    st.markdown(f'<div class="dd-text{" muted" if muted else ""}">{text_html}</div>', unsafe_allow_html=True)
+
+
+DASHBOARD_CSS = f"""
+<style>
+{_DASH} .de-tab-title {{ font-size: 1.35rem; }}
+{_DASH} .dd-kpis {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .9rem; margin: .2rem 0 1.3rem 0; }}
+{_DASH} .dd-kpi {{ background: #fff; border: 1px solid {UI_LINE}; border-radius: 14px; padding: 1rem 1.1rem .95rem 1.1rem;
+                 box-shadow: 0 1px 2px rgba(16,24,40,.04); display: flex; flex-direction: column; gap: .35rem; min-width: 0; }}
+{_DASH} .dd-kpi-top {{ display: flex; align-items: center; gap: .55rem; color: {UI_MUTED}; }}
+{_DASH} .dd-ico {{ width: 1.25rem; height: 1.25rem; flex: 0 0 auto; color: {ACCENT}; }}
+{_DASH} .dd-lbl {{ font-size: .8rem; font-weight: 700; letter-spacing: .03em; color: {UI_MUTED}; line-height: 1.25; }}
+{_DASH} .dd-val {{ font-size: 1.75rem; font-weight: 800; color: {INK}; line-height: 1.15; font-variant-numeric: tabular-nums;
+                 overflow-wrap: anywhere; }}
+{_DASH} .dd-val small {{ font-size: .95rem; font-weight: 600; color: {UI_MUTED}; margin-left: .15rem; }}
+{_DASH} .dd-sub {{ font-size: .84rem; color: {UI_MUTED}; line-height: 1.45; }}
+{_DASH} .dd-chip {{ align-self: flex-start; font-size: .75rem; font-weight: 700; padding: .14rem .55rem; border-radius: 999px;
+                  white-space: nowrap; }}
+{_DASH} .dd-chip.good {{ color: #166534; background: #E8F5EC; }}
+{_DASH} .dd-chip.warn {{ color: {WARN_TEXT}; background: {WARN_BG}; }}
+{_DASH} .dd-chip.bad {{ color: {BAD_TEXT}; background: {BAD_BG}; }}
+{_DASH} .dd-chip.info {{ color: #334155; background: #EEF2F7; }}
+{_DASH} [class*="st-key-de_dash_"] {{ border-radius: 14px !important; border-color: {UI_LINE} !important; background: #fff;
+                                    box-shadow: 0 1px 2px rgba(16,24,40,.04); }}
+{_DASH} .dd-head {{ display: flex; gap: .6rem; align-items: flex-start; margin-bottom: .15rem; }}
+{_DASH} .dd-head .dd-ico {{ margin-top: .15rem; }}
+{_DASH} .dd-title {{ font-size: 1.05rem; font-weight: 700; color: {INK}; line-height: 1.3; }}
+{_DASH} .dd-cap {{ font-size: .84rem; color: {UI_MUTED}; line-height: 1.4; }}
+{_DASH} .dd-rows {{ margin: .1rem 0 .2rem 0; }}
+{_DASH} .dd-row {{ display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: .5rem 0;
+                 border-top: 1px solid {UI_LINE}; font-size: .93rem; }}
+{_DASH} .dd-row:first-child {{ border-top: none; }}
+{_DASH} .dd-row .l {{ color: {INK}; }}
+{_DASH} .dd-row .l small {{ display: block; color: {UI_MUTED}; font-size: .78rem; margin-top: .05rem; }}
+{_DASH} .dd-row .v {{ color: {INK}; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }}
+{_DASH} .dd-row .v.neg {{ color: {BAD_TEXT}; }}
+{_DASH} .dd-text {{ font-size: .93rem; color: {INK}; line-height: 1.5; margin: .1rem 0 .2rem 0; }}
+{_DASH} .dd-text.muted {{ color: {UI_MUTED}; font-size: .86rem; }}
+{_DASH} .dd-text b {{ color: {INK}; }}
+{_DASH} .dd-list {{ margin: .2rem 0 .1rem 0; padding: 0; list-style: none; }}
+{_DASH} .dd-list li {{ padding: .4rem 0; border-top: 1px solid {UI_LINE}; font-size: .9rem; color: {INK}; line-height: 1.4; }}
+{_DASH} .dd-list li:first-child {{ border-top: none; }}
+{_DASH} .dd-list li small {{ display: block; color: {UI_MUTED}; font-size: .78rem; }}
+{_DASH} .dd-group {{ font-size: .8rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: {UI_MUTED};
+                   margin: .6rem 0 .1rem 0; }}
+{_DASH} [class*="st-key-dd_links_"] {{ flex-direction: row !important; flex-wrap: wrap; gap: .1rem 1.1rem !important;
+                                     margin-top: .2rem; }}
+{_DASH} [class*="st-key-dd_links_"] > div {{ width: auto !important; flex: 0 0 auto; }}
+{_DASH} ul.dd-list {{ padding-left: 0 !important; margin-left: 0 !important; }}
+{_DASH} ul.dd-list li {{ margin-left: 0 !important; }}
+{_DASH} [data-testid="stPageLink"] a {{ padding: .15rem .3rem; border-radius: 8px; }}
+{_DASH} [data-testid="stPageLink"] p {{ font-size: .88rem; font-weight: 600; color: {ACCENT}; }}
+@media (max-width: 1100px) {{
+  {_DASH} .dd-kpis {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+}}
+@media (max-width: 640px) {{
+  {_DASH} .dd-kpis {{ gap: .55rem; margin-bottom: 1rem; }}
+  {_DASH} .dd-kpi {{ padding: .75rem .8rem; border-radius: 12px; gap: .25rem; }}
+  {_DASH} .dd-lbl {{ font-size: .72rem; }}
+  {_DASH} .dd-ico {{ width: 1.05rem; height: 1.05rem; }}
+  {_DASH} .dd-val {{ font-size: 1.3rem; }}
+  {_DASH} .dd-val small {{ font-size: .8rem; }}
+  {_DASH} .dd-sub {{ font-size: .76rem; }}
+  {_DASH} .dd-chip {{ font-size: .68rem; white-space: normal; }}
+}}
+</style>
+"""
