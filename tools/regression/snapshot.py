@@ -77,7 +77,8 @@ def calc_snapshot(root: Path) -> dict:
             pages = (root / "navigace.py").exists()          # vícestránková aplikace (etapa M2)
             if pages:                                        # investiční vstupy jsou jen na stránce Investice
                 at.switch_page(_page_path(root, "investice")).run()
-            sb = at.sidebar
+            # vstupy: postranní panel (do M2) nebo panel „Nastavení investičního scénáře“ na stránce Investice
+            sb = at.sidebar if len(at.sidebar.selectbox) else at.main
             _find(sb.selectbox, "Stroj 1").set_value(p["m1"])
             _find(sb.selectbox, "Stroj 2").set_value(p["m2"])
             _find(sb.selectbox, "Scénář").set_value(p["scen"])
