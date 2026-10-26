@@ -65,7 +65,9 @@ def test_every_section_renders_and_has_expected_content():
     assert any('class="de-header' in m.value for m in at.main.markdown)        # výchozí stránka = Dashboard
     assert "Souhrn výsledků" in text(at)
     expect = {                                   # co musí na stránce být (původní obsah záložek a nové sekce)
-        "dashboard": ("Dny s konfliktem kapacity", "Doporučená sestava"),
+        "dashboard": ("Vytížení strojového parku", "Ekonomický výsledek", "Pronájmy a zakázky", "Kapacitní konflikty",
+                      "Provoz půjčovny a vlastních zakázek", "Ekonomika a hospodaření", "Doporučení a upozornění",
+                      "Doporučená sestava"),
         "pronajem": ("Pronájem strojů – nový požadavek",),
         "zakazky": ("Plán zakázek a vytížení strojů", "Harmonogram", "Detail zakázek"),
         "strojovy_park": ("Počet kusů ve flotile", "Ekonomika jednoho kusu"),
@@ -171,10 +173,15 @@ def test_rental_page_shares_requests_with_decision_centre():
     open_page(at, "rozhodovaci_centrum")
     ok(at)
     assert len(at.session_state["dp_requests"]) == 1 and 'class="dp-card"' in text(at)
+    centre = text(at)
     open_page(at, "dashboard")
-    assert "Rozpracované požadavky" in text(at)
-    kpi = [m.value for m in at.main.markdown if "Rozpracované požadavky" in m.value][0]
-    assert ">1<" in kpi.replace(" ", "")
+    ok(at)
+    box = [m.value for m in at.main.markdown if "rozpracovaný požadavek" in m.value]
+    assert box and "1 rozpracovaný požadavek" in box[0]
+    ref = at.session_state["dp_requests"][0]["ref"]
+    assert f"<b>{ref}</b>" in box[0] and "Provoz: " in box[0]
+    op = box[0].split("Provoz: ")[1].split("<")[0].split(" · ")[0]
+    assert op in centre                                          # stejný provozní štítek jako v Rozhodovacím centru
 
 
 def all_widget_keys(at):
