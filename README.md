@@ -47,7 +47,7 @@ Aplikace má **levé menu** se sekcemi (etapa M2):
 | Sekce | Obsah |
 |---|---|
 | **Dashboard** | Manažerský přehled: čtyři KPI karty (vytížení strojového parku, ekonomický výsledek – zatím jen zisk vlastních zakázek po penále, pronájmy a zakázky, kapacitní konflikty), sekce Provoz a Ekonomika a blok Doporučení a upozornění (investiční doporučení, konflikty, požadavky z Rozhodovacího centra) s odkazy do sekcí. Nic nového nepočítá – zobrazuje existující výsledky. |
-| **Pronájem strojů** | Formulář nového požadavku na pronájem a jeho vyhodnocení (stejný plánovač jako Rozhodovací centrum, sdílený seznam požadavků). |
+| **Pronájem strojů** | Karta nového požadavku na pronájem (stroj, počet kusů, dny, nepovinná cena), po vyhodnocení čtyři karty – dostupná kapacita, ekonomický přínos (příspěvek, případně „nejvýše“ nebo „Nelze určit“ s důvodem), kapacitní konflikt a výsledné doporučení – a karty porovnávaných variant. Podrobné zdůvodnění (ekonomické porovnání, Co kdyby, kalendář, konflikty) a „Jak plánovač rozhoduje“ ve skupinách. Stejný plánovač jako Rozhodovací centrum, sdílený seznam požadavků. |
 | **Vlastní zakázky** | Dřívější záložka 🗓️ Plán zakázek. |
 | **Strojový park** | Počty kusů ve flotile a ekonomika jednoho kusu podle dat (stejná tabulka jako v Nákupu strojů). |
 | **Plánování kapacity** | Dřívější záložka 📅 Kapacita strojů. |
@@ -176,6 +176,7 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 ├── economics.py                     # ekonomický modul (E2.1): náklady flotily, příspěvky, celkový výsledek
 ├── capacity.py                      # kapacitní plánování strojů (E2.3A): dostupnost, konflikty, požadavky
 ├── planner.py                       # plánovací a rozhodovací model (E2.5a)
+├── rental_view.py                   # Pronájem strojů: výsledek plánovače v kartách (jen zobrazení)
 ├── planner_view.py                  # záložka Rozhodovací plánovač (E2.5b): formulář → požadavek, výsledek → karty
 ├── econ_formula.py                 # příspěvek jako vzorec s neznámými náklady a porovnání variant (E2.5c); základ verdiktu plánovače
 ├── capacity_view.py                 # kapacitní kalendář (E2.3B): převod výsledků capacity.py na mřížku

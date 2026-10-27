@@ -628,7 +628,8 @@ def dash_kpis(cards: list) -> None:
     items = "".join(
         f'<div class="dd-kpi"><div class="dd-kpi-top"><span class="dd-ico-box {c.get("tone", "accent")}">'
         f'{dash_icon(c["icon"])}</span><span class="dd-lbl">{html.escape(c["label"])}</span></div>'
-        f'<div class="dd-val{" pair" if c.get("pair") else ""}">{c["value"]}</div>{c.get("chip", "")}'
+        f'<div class="dd-val{" pair" if c.get("pair") else ""}{" " + c["cls"] if c.get("cls") else ""}">'
+        f'{c["value"]}</div>{c.get("chip", "")}'
         f'<div class="dd-sub">{c.get("sub", "")}</div></div>'
         for c in cards
     )
@@ -684,13 +685,19 @@ def dash_text(text_html: str, muted: bool = False) -> None:
 
 _TONES = {"accent": (ACCENT, ACCENT_SOFT), "good": ("#166534", "#E8F5EC"), "bad": (BAD_TEXT, BAD_BG),
           "neutral": ("#334155", "#EEF2F7")}
-_TONE_CSS = "\n".join(
-    f"{_DASH} .dd-ico-box.{name} {{{{ color: {fg}; background: {bg}; }}}}\n"
-    f'{_DASH} [class*="st-key-de_dash_"][class*="_{name}"] {{{{ border-left: 4px solid {fg} !important; }}}}'
-    for name, (fg, bg) in _TONES.items()
-).replace("{{", "{").replace("}}", "}")
+def _tone_css(scope: str) -> str:
+    return "\n".join(
+        f"{scope} .dd-ico-box.{name} {{ color: {fg}; background: {bg}; }}\n"
+        f'{scope} [class*="st-key-de_dash_"][class*="_{name}"] {{ border-left: 4px solid {fg} !important; }}'
+        for name, (fg, bg) in _TONES.items()
+    )
 
-DASHBOARD_CSS = f"""
+
+def dash_css(key: str) -> str:
+    """Styl karet Dashboardu (dd-*) omezený na kontejner s klíčem `key` – používá Dashboard i Pronájem strojů."""
+    _DASH = f".st-key-{key}"
+    _TONE_CSS = _tone_css(_DASH)
+    return f"""
 <style>
 {_DASH} .de-tab-title {{ font-size: 1.4rem; margin-bottom: .1rem; }}
 {_DASH} .de-tab-intro {{ color: {UI_MUTED}; font-size: .92rem; margin-bottom: .9rem; }}
@@ -783,3 +790,55 @@ DASHBOARD_CSS = f"""
 }}
 </style>
 """
+
+
+DASHBOARD_CSS = dash_css(DASH_KEY)
+
+
+
+# ---------------------------------------------------------------------------
+# Pronájem strojů (modernizace UI): stejné komponenty jako Dashboard (dd-*) + karty variant.
+# Jen zobrazení – hodnoty dodává app.py z výsledku plánovače (planner_view.evaluate).
+# ---------------------------------------------------------------------------
+
+RENT_KEY = TAB_KEY_PREFIX + "pronajem"
+_RENT = f".st-key-{RENT_KEY}"
+
+
+def dash_variants(items: list) -> None:
+    """Karty porovnávaných variant: items = [dict(title, sub, tag, rows=[(popisek, hodnota HTML)], why)]."""
+    cards = "".join(
+        f'<div class="dd-var"><div class="dd-var-head"><span class="t">{html.escape(it["title"])}</span>'
+        + (f'<span class="tag">{html.escape(it["tag"])}</span>' if it.get("tag") else "")
+        + f'</div><div class="dd-var-sub">{html.escape(it["sub"])}</div>'
+        + "".join(f'<div class="dd-var-row"><span>{html.escape(lbl)}</span><span>{val}</span></div>'
+                  for lbl, val in it["rows"])
+        + (f'<div class="dd-var-why">{it["why"]}</div>' if it.get("why") else "")
+        + "</div>"
+        for it in items
+    )
+    st.markdown(f'<div class="dd-vars">{cards}</div>', unsafe_allow_html=True)
+
+
+RENTAL_CSS = dash_css(RENT_KEY).replace("</style>", f"""
+{_RENT} .dd-section-title {{ font-size: 1.08rem; font-weight: 700; color: {INK}; margin: 1.3rem 0 .5rem 0; }}
+{_RENT} .dd-section-title small {{ font-weight: 500; color: {UI_MUTED}; font-size: .84rem; margin-left: .4rem; }}
+{_RENT} [class*="st-key-de_dash_rent_form"] [data-testid="stForm"] {{ border: none; padding: 0; }}
+{_RENT} .dd-vars {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .9rem;
+                  margin: .2rem 0 1rem 0; }}
+{_RENT} .dd-var {{ background: #fff; border: 1px solid {UI_LINE}; border-radius: 14px; padding: .9rem 1rem;
+                 box-shadow: 0 1px 3px rgba(16,24,40,.06); display: flex; flex-direction: column; gap: .3rem; }}
+{_RENT} .dd-var-head {{ display: flex; justify-content: space-between; gap: .5rem; align-items: baseline; }}
+{_RENT} .dd-var-head .t {{ font-weight: 800; color: {INK}; font-size: 1rem; }}
+{_RENT} .dd-var-head .tag {{ font-size: .72rem; color: {UI_MUTED}; background: {UI_BG}; border-radius: 999px;
+                           padding: .1rem .5rem; white-space: nowrap; }}
+{_RENT} .dd-var-sub {{ font-size: .82rem; color: {UI_MUTED}; margin-bottom: .2rem; }}
+{_RENT} .dd-var-row {{ display: flex; justify-content: space-between; align-items: center; gap: .8rem; padding: .35rem 0;
+                     border-top: 1px solid {UI_LINE}; font-size: .9rem; color: {INK}; }}
+{_RENT} .dd-var-row span:last-child {{ text-align: right; font-weight: 700; }}
+{_RENT} .dd-var-why {{ font-size: .8rem; color: {UI_MUTED}; line-height: 1.45; border-top: 1px solid {UI_LINE}; padding-top: .4rem; }}
+{_RENT} .dd-kpis .dd-val.word {{ font-size: 1.55rem; }}
+@media (max-width: 640px) {{
+  {_RENT} .dd-kpis .dd-val.word {{ font-size: 1.15rem; }}
+}}
+</style>""")
