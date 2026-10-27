@@ -48,7 +48,7 @@ Aplikace má **levé menu** se sekcemi (etapa M2):
 |---|---|
 | **Dashboard** | Manažerský přehled: čtyři KPI karty (vytížení strojového parku, ekonomický výsledek – zatím jen zisk vlastních zakázek po penále, pronájmy a zakázky, kapacitní konflikty), sekce Provoz a Ekonomika a blok Doporučení a upozornění (investiční doporučení, konflikty, požadavky z Rozhodovacího centra) s odkazy do sekcí. Nic nového nepočítá – zobrazuje existující výsledky. |
 | **Pronájem strojů** | Karta nového požadavku na pronájem (stroj, počet kusů, dny, nepovinná cena), po vyhodnocení čtyři karty – dostupná kapacita, ekonomický přínos (příspěvek, případně „nejvýše“ nebo „Nelze určit“ s důvodem), kapacitní konflikt a výsledné doporučení – a karty porovnávaných variant. Podrobné zdůvodnění (ekonomické porovnání, Co kdyby, kalendář, konflikty) a „Jak plánovač rozhoduje“ ve skupinách. Stejný plánovač jako Rozhodovací centrum, sdílený seznam požadavků. |
-| **Vlastní zakázky** | Dřívější záložka 🗓️ Plán zakázek. |
+| **Vlastní zakázky** | Dřívější záložka 🗓️ Plán zakázek v novém vzhledu: čtyři karty (zisk zakázek po penále – jen vlastní zakázky, ne čistý zisk půjčovny; zakázky v termínu; délka plánu; zlepšení proti původnímu plánu), srovnání s původním plánem včetně změn, harmonogram (včas / po termínu / termíny, ★ nejpřínosnější zakázka), detail zakázek, vytížení strojů a metodika. Plán zatím nezohledňuje pronájmy a servis. |
 | **Strojový park** | Počty kusů ve flotile a ekonomika jednoho kusu podle dat (stejná tabulka jako v Nákupu strojů). |
 | **Plánování kapacity** | Dřívější záložka 📅 Kapacita strojů. |
 | **Rozhodovací centrum** | Dřívější záložka 🧭 Rozhodovací plánovač (ekonomické porovnání, hranice zlomu, Co kdyby, konflikty). |

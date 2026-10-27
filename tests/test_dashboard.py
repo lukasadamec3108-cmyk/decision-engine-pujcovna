@@ -48,7 +48,7 @@ def test_dashboard_kpis_match_detail_sections():
     at.radio(key="cap_view").set_value("Přehled využití").run()
     assert section_kpi(at, "Využití flotily") == util                  # přehled využití ve výchozím nastavení
     open_page(at, "zakazky")
-    assert section_kpi(at, "Zisk zakázek po penále") == result
+    assert dash_kpi(at, "Zisk zakázek po penále") == result             # karta stránky Vlastní zakázky
     assert "12 naplánovaných zakázek" in " ".join(m.value for m in at.main.markdown)
 
 

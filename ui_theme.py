@@ -842,3 +842,59 @@ RENTAL_CSS = dash_css(RENT_KEY).replace("</style>", f"""
   {_RENT} .dd-kpis .dd-val.word {{ font-size: 1.15rem; }}
 }}
 </style>""")
+
+
+# ---------------------------------------------------------------------------
+# Vlastní zakázky (modernizace UI): komponenty Dashboardu (dd-*) + tabulka srovnání plánů.
+# Jen zobrazení – hodnoty dodává app.py z existujícího plánu (scheduling).
+# ---------------------------------------------------------------------------
+
+JOBS_KEY = TAB_KEY_PREFIX + "zakazky"
+_JOBS = f".st-key-{JOBS_KEY}"
+
+
+def dash_compare(head: list, rows: list) -> None:
+    """Srovnání variant: head = [popisky sloupců], rows = [(ukazatel, [hodnoty HTML], změna HTML)].
+
+    Změna je hotové HTML (štítek se symbolem a textem) – barva nenese význam sama.
+    """
+    th = "".join(f"<th>{html.escape(h)}</th>" for h in head)
+    body = "".join(
+        f'<tr><td class="l">{html.escape(label)}</td>'
+        + "".join(f'<td data-label="{html.escape(h)}">{v}</td>' for h, v in zip(head[1:], values))
+        + f'<td class="chg" data-label="{html.escape(head[-1])}">{change}</td></tr>'
+        for label, values, change in rows
+    )
+    st.markdown(f'<div class="dd-cmp-wrap"><table class="dd-cmp"><thead><tr>{th}</tr></thead>'
+                f"<tbody>{body}</tbody></table></div>", unsafe_allow_html=True)
+
+
+JOBS_CSS = dash_css(JOBS_KEY).replace("</style>", f"""
+{_JOBS} .dd-section-title {{ font-size: 1.08rem; font-weight: 700; color: {INK}; margin: 1.4rem 0 .5rem 0; }}
+{_JOBS} .dd-section-title small {{ font-weight: 500; color: {UI_MUTED}; font-size: .84rem; margin-left: .4rem; }}
+{_JOBS} .dd-cmp-wrap {{ overflow-x: auto; margin: .2rem 0 .4rem 0; }}
+{_JOBS} table.dd-cmp {{ width: 100%; border-collapse: collapse; font-size: .92rem; min-width: 460px; }}
+{_JOBS} table.dd-cmp th {{ text-align: right; font-size: .74rem; font-weight: 700; letter-spacing: .05em;
+                          text-transform: uppercase; color: {UI_MUTED}; padding: .4rem .6rem;
+                          border-bottom: 1px solid {UI_LINE}; }}
+{_JOBS} table.dd-cmp th:first-child {{ text-align: left; }}
+{_JOBS} table.dd-cmp td {{ padding: .55rem .6rem; border-bottom: 1px solid {UI_LINE}; text-align: right; color: {INK};
+                          font-variant-numeric: tabular-nums; white-space: nowrap; }}
+{_JOBS} table.dd-cmp td.l {{ text-align: left; white-space: normal; font-weight: 500; }}
+{_JOBS} table.dd-cmp td:nth-child(3) {{ font-weight: 800; }}
+{_JOBS} .dd-chip {{ white-space: normal; }}
+{_JOBS} table.dd-cmp tr:last-child td {{ border-bottom: none; }}
+{_JOBS} table.dd-cmp td.chg .dd-chip {{ font-size: .74rem; }}
+@media (max-width: 640px) {{
+  /* Na mobilu řádky pod sebou: ukazatel, pak původní → nový plán a změna (nic se neschová do strany) */
+  {_JOBS} table.dd-cmp {{ min-width: 0; font-size: .88rem; }}
+  {_JOBS} table.dd-cmp thead {{ display: none; }}
+  {_JOBS} table.dd-cmp, {_JOBS} table.dd-cmp tbody, {_JOBS} table.dd-cmp tr {{ display: block; width: 100%; }}
+  {_JOBS} table.dd-cmp tr {{ padding: .5rem 0; border-bottom: 1px solid {UI_LINE}; }}
+  {_JOBS} table.dd-cmp tr:last-child {{ border-bottom: none; }}
+  {_JOBS} table.dd-cmp td {{ display: flex; justify-content: space-between; gap: .8rem; border: none;
+                            padding: .15rem 0; white-space: normal; }}
+  {_JOBS} table.dd-cmp td.l {{ font-weight: 700; padding-bottom: .25rem; }}
+  {_JOBS} table.dd-cmp td[data-label]::before {{ content: attr(data-label); color: {UI_MUTED}; font-weight: 500; }}
+}}
+</style>""")
