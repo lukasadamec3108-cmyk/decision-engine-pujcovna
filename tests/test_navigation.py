@@ -68,7 +68,7 @@ def test_every_section_renders_and_has_expected_content():
         "dashboard": ("Vytížení strojového parku", "Ekonomický výsledek", "Pronájmy a zakázky", "Kapacitní konflikty",
                       "Provoz půjčovny a vlastních zakázek", "Ekonomika a hospodaření", "Doporučení a upozornění",
                       "Doporučená sestava"),
-        "pronajem": ("Pronájem strojů – nový požadavek",),
+        "pronajem": ("Pronájem strojů", "Nový požadavek na pronájem", "Jak plánovač rozhoduje"),
         "zakazky": ("Plán zakázek a vytížení strojů", "Harmonogram", "Detail zakázek"),
         "strojovy_park": ("Počet kusů ve flotile", "Ekonomika jednoho kusu"),
         "kapacita": ("Kapacita strojů po dnech",),

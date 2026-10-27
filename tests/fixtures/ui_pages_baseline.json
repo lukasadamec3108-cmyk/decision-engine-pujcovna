@@ -47,7 +47,7 @@
     "955 000": 2,
     "96": 2
    },
-   "text": "fbbd96f493197546",
+   "text": "427cdcc94ed40852",
    "widgets": []
   },
   "sidebar": {
@@ -620,12 +620,23 @@
     "Jak plánovač rozhoduje"
    ],
    "numbers": {
-    "0": 2,
-    "1": 4,
-    "6": 4,
-    "7": 2
+    "0": 6,
+    "1": 12,
+    "10": 2,
+    "11": 2,
+    "14": 2,
+    "17": 6,
+    "2": 2,
+    "24": 4,
+    "3": 12,
+    "4": 2,
+    "5": 4,
+    "6": 2,
+    "7": 8,
+    "8": 6,
+    "9": 2
    },
-   "text": "b2b3ee450cca3ace",
+   "text": "f42bb762a590cc38",
    "widgets": [
     {
      "key": "dp_r_type",
@@ -672,8 +683,8 @@
      "value": "None"
     },
     {
-     "key": "FormSubmitter:dp_form-Vyhodnotit samostatně",
-     "label": "Vyhodnotit samostatně",
+     "key": "FormSubmitter:dp_form-Vyhodnotit požadavek",
+     "label": "Vyhodnotit požadavek",
      "options": [],
      "type": "button",
      "value": "False"
