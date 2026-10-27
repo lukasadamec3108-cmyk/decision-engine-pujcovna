@@ -733,24 +733,33 @@ def loss_share_text(prob: float) -> str:
     return f"přibližně {max(1, round(prob * 10))} z 10 měsíců"
 
 
-def show_unit_economics() -> None:
-    """Tabulka „Ekonomika jednoho kusu podle dat“ (výpočet portfolio.type_month) – sekce Investice
-    (Nákup strojů) i Strojový park."""
-    st.markdown('<div class="de-section">Ekonomika jednoho kusu podle dat</div>',
-                unsafe_allow_html=True)
-    unit_rows = []
+UNIT_ECON_COLUMNS = ["Stroj", "Cena (Kč)", "Poptávka (dny)", "Tržby (Kč/měs.)", "Náklady (Kč/měs.)",
+                     "Provozní zisk (Kč/měs.)"]
+
+
+def unit_economics_rows() -> list:
+    """Ekonomika jednoho kusu podle dat (portfolio.type_month pro 1 kus) – zdroj tabulky v Investicích
+    (Nákup strojů) i ve Strojovém parku. Vrací nezaokrouhlené hodnoty; formátují se až při zobrazení."""
+    rows = []
     for _, row in df.iterrows():
         one = pf.type_month(row, 1)
-        unit_rows.append(
-            {
-                "Stroj": row["machine_type"],
-                "Cena (Kč)": fmt_num(row["purchase_price"]),
-                "Poptávka (dny)": fmt_num(row["demand_days_mean"], 0),
-                "Tržby (Kč/měs.)": fmt_num(one["revenue"]),
-                "Náklady (Kč/měs.)": fmt_num(one["costs"]),
-                "Provozní zisk (Kč/měs.)": fmt_num(one["profit"]),
-            }
-        )
+        rows.append(dict(machine=row["machine_type"], price=row["purchase_price"], demand=row["demand_days_mean"],
+                         revenue=one["revenue"], costs=one["costs"], profit=one["profit"]))
+    return rows
+
+
+def unit_economics_texts(r: dict) -> list:
+    """Hodnoty řádku tabulky v pořadí UNIT_ECON_COLUMNS (stejné formátování jako dosud)."""
+    return [r["machine"], fmt_num(r["price"]), fmt_num(r["demand"], 0), fmt_num(r["revenue"]),
+            fmt_num(r["costs"]), fmt_num(r["profit"])]
+
+
+def show_unit_economics() -> None:
+    """Tabulka „Ekonomika jednoho kusu podle dat“ (výpočet portfolio.type_month) – sekce Investice
+    (Nákup strojů)."""
+    st.markdown('<div class="de-section">Ekonomika jednoho kusu podle dat</div>',
+                unsafe_allow_html=True)
+    unit_rows = [dict(zip(UNIT_ECON_COLUMNS, unit_economics_texts(r))) for r in unit_economics_rows()]
     st.dataframe(pd.DataFrame(unit_rows), hide_index=True, width="stretch")
 
 
@@ -2876,23 +2885,120 @@ if PAGE == "dashboard":
 # ==================================================
 
 if PAGE == "strojovy_park":
+    # Modernizace UI: karty a sekce jako Dashboard / Vlastní zakázky. Počty kusů = data flotily
+    # (machine_capacity), ekonomika = jeden kus podle portfolio.type_month – nic nového se nepočítá.
+    st.markdown(ui.FLEET_CSS, unsafe_allow_html=True)
     with ui.tab_container("strojovy_park"):
         ui.tab_header(
             "Strojový park",
-            "Typy strojů, počty kusů ve flotile a ekonomika jednoho kusu podle <b>ukázkových dat</b>. "
-            "Údaje se zde jen zobrazují.",
+            "Typy strojů, počty kusů ve flotile a modelová ekonomika <b>jednoho kusu</b> podle "
+            "<b>ukázkových dat</b>. Údaje se zde jen zobrazují.",
         )
-        st.markdown("### Počet kusů ve flotile")
-        st.dataframe(pd.DataFrame({"Stroj": list(machine_capacity), "Kusů ve flotile": list(machine_capacity.values())}),
-                     hide_index=True, width="stretch")
-        show_unit_economics()
-        ui.hint("Ekonomika jednoho kusu používá individuální fixní náklady a servis strojů z dat – stejně jako "
-                "Investice → Nákup strojů.")
+        fleet_econ = unit_economics_rows()
+        fleet_total = sum(machine_capacity.values())
+        fleet_types = len(machine_capacity)
+        fleet_by_profit = sorted(fleet_econ, key=lambda r: r["profit"], reverse=True)
+        fleet_by_revenue = sorted(fleet_econ, key=lambda r: r["revenue"], reverse=True)
+        fleet_loss = [r for r in fleet_econ if r["profit"] < 0]
+        fleet_word = lambda n, one, few, many: cv.plural(n, one, few, many).split(" ", 1)[1]
+
+        # ---- KPI (souhrn za flotilu jen tam, kde je jednoznačný: počty kusů a typů) -------------------
+        ui.dash_kpis([
+            dict(icon="truck", label="Počet strojů ve flotile", tone="neutral",
+                 value=f"{fleet_total}<small>{fleet_word(fleet_total, 'kus', 'kusy', 'kusů')}</small>",
+                 sub="fyzické kusy z dat flotily · ukázková data"),
+            dict(icon="route", label="Počet typů strojů", tone="neutral",
+                 value=f"{fleet_types}<small>{fleet_word(fleet_types, 'typ', 'typy', 'typů')}</small>",
+                 sub="různé kategorie strojů ve flotile"),
+            dict(icon="coins", label="Měsíční tržby jednoho kusu", tone="accent",
+                 value=f"{fmt_num(fleet_by_revenue[-1]['revenue'])}–{fmt_czk(fleet_by_revenue[0]['revenue'])}",
+                 chip=ui.dash_chip("model · 1 kus", "info"),
+                 sub=f"rozpětí podle typu · nejvíc {html.escape(fleet_by_revenue[0]['machine'])}"),
+            dict(icon="spark", label="Měsíční provozní zisk jednoho kusu", tone="accent",
+                 value=f"{fmt_num(fleet_by_profit[-1]['profit'])}–{fmt_czk(fleet_by_profit[0]['profit'])}",
+                 chip=(ui.dash_chip(f"{len(fleet_loss)} z {fleet_types} typů ve ztrátě", "bad") if fleet_loss
+                       else ui.dash_chip(f"všech {fleet_types} typů v zisku", "good")),
+                 sub=f"rozpětí podle typu · nejvíc {html.escape(fleet_by_profit[0]['machine'])}"),
+        ])
+        ui.dash_text("Souhrn tržeb a zisku za celou flotilu se záměrně nezobrazuje – ekonomika je model "
+                     "<b>jednoho kusu</b> pro rozhodování o nákupu, ne výsledek stávající flotily "
+                     "(podrobnosti v části Metodika).", muted=True)
+
+        # ---- Stroje ve flotile ----------------------------------------------------------------------
+        st.markdown(f'<div class="dd-section-title">Počet kusů ve flotile<small>{fleet_total} '
+                    f'{fleet_word(fleet_total, "kus", "kusy", "kusů")} · {fleet_types} '
+                    f'{fleet_word(fleet_types, "typ", "typy", "typů")}</small></div>', unsafe_allow_html=True)
+        with ui.dash_section("flotila"):
+            ui.dash_units(list(machine_capacity.items()),
+                          f"Celkem <b>{fleet_total}</b> {fleet_word(fleet_total, 'kus', 'kusy', 'kusů')} "
+                          "ve flotile (ukázková data).")
+
+        # ---- Ekonomika jednoho kusu -----------------------------------------------------------------
+        st.markdown('<div class="dd-section-title">Ekonomika jednoho kusu podle dat<small>model na 1 kus '
+                    'a průměrný měsíc · částky v Kč</small></div>', unsafe_allow_html=True)
+        with ui.dash_section("ekonomika"):
+            ui.dash_compare(
+                UNIT_ECON_COLUMNS,
+                [(t[0], t[1:5], f'<span class="neg">{t[5]}</span>' if r["profit"] < 0 else t[5])
+                 for r, t in ((r, unit_economics_texts(r)) for r in fleet_econ)],
+            )
+            ui.dash_text("Ekonomika jednoho kusu používá individuální fixní náklady a servis strojů z dat – "
+                         "stejně jako Investice → Nákup strojů.", muted=True)
+
+        # ---- Graf provozního zisku (stejné hodnoty jako tabulka) ------------------------------------
+        st.markdown('<div class="dd-section-title">Provozní zisk jednoho kusu podle typu<small>seřazeno '
+                    'od nejvyššího · Kč za měsíc</small></div>', unsafe_allow_html=True)
+        fig_fleet = go.Figure(
+            go.Bar(
+                x=[r["profit"] for r in fleet_by_profit],
+                y=[r["machine"] for r in fleet_by_profit],
+                orientation="h",
+                marker=dict(color=[ui.BAD if r["profit"] < 0 else ui.BLUE for r in fleet_by_profit],
+                            line=dict(color="#fff", width=2)),
+                text=[fmt_czk(r["profit"]) for r in fleet_by_profit], textposition="outside", cliponaxis=False,
+                customdata=[[fmt_czk(r["revenue"]), fmt_czk(r["costs"])] for r in fleet_by_profit],
+                hovertemplate="%{y}<br>Provozní zisk 1 kusu: %{text}<br>Tržby %{customdata[0]} · "
+                              "náklady %{customdata[1]}<extra></extra>",
+            )
+        )
+        fleet_max = max(abs(r["profit"]) for r in fleet_econ) or 1
+        fig_fleet.update_yaxes(autorange="reversed", title_text="")
+        fig_fleet.update_xaxes(title_text="Kč za měsíc · jeden kus", showgrid=True, gridcolor="#EEF0F3",
+                               range=[min(0, min(r["profit"] for r in fleet_econ)) * 1.6, fleet_max * 1.6],
+                               nticks=5,
+                               tickformat=",.0f")
+        fig_fleet.update_layout(bargap=0.35, separators=", ")
+        if fleet_loss:
+            fig_fleet.add_vline(x=0, line=dict(color=ui.NAVY, width=1))
+        with ui.dash_section("graf"):
+            chart(ui.readable_axes(ui.style_fig(fig_fleet, height=max(320, 34 * len(fleet_econ) + 110),
+                                                legend=False)))
+            ui.dash_text("Graf ukazuje přesně hodnoty sloupce „Provozní zisk“ z tabulky výše – ekonomiku "
+                         "<b>jednoho kusu</b> každého typu, ne celé flotily."
+                         + (" Červeně = ztráta." if fleet_loss else ""), muted=True)
+
+        # ---- Metodika a data ------------------------------------------------------------------------
+        with st.expander("Metodika a data"):
+            ui.explain([
+                ("Zdroj", "Stejný výpočet jako Investice → Nákup strojů (modul portfolio, jeden kus): "
+                          "průměrný měsíc podle ukázkových dat o strojích."),
+                ("Tržby", "Ceníková denní cena × dny pronájmu. Dny = průměrná poptávka typu (sloupec Poptávka, "
+                          "nejvýš počet dní v měsíci) bez dní ztracených poruchami (pravděpodobnost × průměrná "
+                          "délka poruchy)."),
+                ("Náklady", "Individuální měsíční fixní náklad stroje a průměrný servis z dat (ne fixní náklad "
+                            "z nastavení investičního scénáře)."),
+                ("Provozní zisk", "Tržby − náklady jednoho kusu za průměrný měsíc. Nejde o čistý zisk: "
+                                  "společné náklady půjčovny a daně se neodečítají."),
+                ("Proč ne souhrn za flotilu",
+                 "Model popisuje očekávaný měsíc jednoho kusu pro rozhodování o nákupu. Součet za stávající "
+                 "flotilu by předpokládal, že stejná poptávka platí pro každý kus (u více kusů stejného typu "
+                 "se poptávka dělí) a nezohlednil by skutečné pronájmy, zakázky a servis z kapacitního "
+                 "kalendáře. Celkový výsledek půjčovny proto zatím není k dispozici – stejně jako na Dashboardu."),
+                ("Počty kusů", "Kusy z dat flotily – stejný údaj, se kterým počítá plán zakázek a kapacita."),
+            ])
         ui.hint(cv.data_info(data_model, data_version))
-        c1, c2 = st.columns(2)
-        with c1:
+        with ui.dash_links("strojovy_park"):
             page_link("kapacita", "Obsazenost strojů po dnech – Plánování kapacity")
-        with c2:
             page_link("investice", "Nákup strojů – Investice")
 
 
