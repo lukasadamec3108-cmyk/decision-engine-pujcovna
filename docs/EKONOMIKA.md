@@ -26,6 +26,7 @@ pro sjednocení ekonomiky (etapa E2.2). Pojmy jsou vysvětlené ve [slovníku](S
 | Příspěvek pronájmu a zakázky, verdikt | Pronájem strojů, Rozhodovací centrum | `planner.py`, `econ_formula.py` → **`economics.py`** | rezervace, požadavky uživatele, data | evidence + vstup | přímo `economics.py` (`test_planner_*`) |
 | Kapacita, využití, konflikty | Plánování kapacity, Dashboard | `capacity.py` | flotila, rezervace, servis, plán | evidence | žádné částky (strojodny) |
 | Fixní náklady flotily, režie, celkový výsledek | – (nezobrazuje se) | `economics.py` | data | – | `test_total_result_is_incomplete_on_current_data` |
+| Využití fyzických strojů za období (strojodny po kusech a typech, konflikty) | – (nezobrazuje se, K2) | `fleet_usage.py` nad `capacity.py` | flotila, rezervace, plán zakázek, servis | evidence | žádné částky; shoda s kalendářem a přehledem využití (`tests/test_fleet_usage.py`) |
 
 ## Pravidla proti dvojímu započtení
 
@@ -71,6 +72,58 @@ Poznámka: v `investice.py` se prostá návratnost (pořizovací cena ÷ měsí�
 | Za jaké období ukazovat výsledek flotily? | Fixní náklady jsou měsíční, plán 20–25 dní. | Za zobrazené období, fixní náklady poměrně (dny ÷ 30) – **předpoklad ke schválení**. |
 | Počítat předběžné rezervace a nepotvrzené zakázky? | Mohou zkreslit výsledek. | Jen potvrzené, předběžné zvlášť. |
 | Fixní náklad v Investicích z panelu, nebo z dat? | Dva základy vedle sebe na Dashboardu. | Beze změny, později volitelný přepínač. |
+
+## Využití strojů za období (K2)
+
+Funkce `fleet_usage.machine_days(kalendář, začátek, konec)` (případně `fleet_usage.from_model(...)`
+přímo z dat) vyhodnotí každý fyzický kus v každém dni zvoleného období. Zatím se **nikde nezobrazuje**
+a nic v aplikaci nemění – je připravená pro výsledek flotily za období (K3).
+
+**Strojodny.** 1 strojoden = 1 kus na 1 den; období zahrnuje oba krajní dny, dny mohou být čísla
+plánu i kalendářní data (přes hranici měsíce a roku). Dostupná kapacita = kusy ve flotile, které jsou
+ten den k dispozici (objednaný kus až od dodání). Každý dostupný kus se v každém dni započítá
+**právě jednou** do jedné složky:
+
+> pronájem + vlastní zakázka + servis + konflikt + nelze určit + volno = dostupná kapacita
+
+**Stavy záznamů** (stejně jako Plánování kapacity): potvrzené blokují kapacitu; předběžné rezervace
+a nabídky ji neblokují a vykazují se zvlášť (volbou `include_tentative=True` je lze započítat);
+zrušené se ignorují; neznámý stav nebo neplatný termín je chyba dat – volné strojodny typu jsou pak
+„nelze určit“, nikdy volno.
+
+**Konflikty** se nikdy tiše neodstraní ani nezapočítají dvakrát. Přednost pronájmu, zakázky ani
+servisu se neurčuje. Konflikt je:
+- dva různé nároky na stejný konkrétní kus ve stejný den (překrývající se servisní záznamy téhož kusu
+  konflikt nejsou – kus je v servisu jednou, vypíše se upozornění na možnou duplicitu),
+- víc nároků na typ stroje, než je dostupných kusů – v konfliktu jsou pak všechny dostupné kusy typu
+  v tom dni (bez priority nelze říct, co ustoupí),
+- konkrétní kus naplánovaný na den, kdy není ve flotile.
+
+Konfliktní strojoden se započte jednou (složka „konflikt“); nároky, které se nevejdou, se vykazují
+zvlášť jako **nárok nad kapacitu** a do kapacity se nepřičítají.
+
+**Konkrétní kus × typ stroje.** Rezervace i zakázky v datech uvádějí jen typ stroje. Počty strojodnů
+po typech jsou proto jisté, ale u kusů je stav **„nejednoznačné přiřazení“** – kromě případu, kdy jsou
+všechny zbývající kusy typu obsazené stejným druhem využití (druh je jistý, konkrétní rezervace ne).
+Výsledek to uvádí ve sloupci `unit_level` a v poznámkách.
+
+**Výsledek:** stav (úplný / neúplný / nelze spočítat), tabulka kusů po dnech, tabulka typů po dnech,
+součty po typech a za flotilu (s kontrolou součtu), seznam konfliktů a poznámky o nejistotách.
+Neplatné období (chybí, konec před začátkem, míchání čísel dní a dat) = „nelze spočítat“. Pokud nelze
+spolehlivě určit počet kusů typu, je jeho součet výslovně neurčitelný a do součtu flotily se nezapočte.
+
+**Ukázková data** (plán zakázek ze stránky Vlastní zakázky, dny 1–25): 225 strojodnů, z toho pronájem
+25, vlastní zakázky 110, servis 8, konflikt 5, volno 77; předběžné rezervace 10 strojodnů zvlášť.
+Konflikty: kolový bagr den 11 (servis × zakázka J005), silniční válec dny 15–18 (pronájem FIKT-P05 ×
+zakázka J006) – stejné jako na stránce Plánování kapacity.
+
+**Chybějící vstupy:**
+- přiřazení rezervací a zakázek ke konkrétním kusům (sloupec kusu v rezervacích / požadavcích zakázek),
+- stav „zrušeno“ v datech (model ho zná, data E1 ho zatím nemají),
+- pracovní dny a horizont plánování (`settings`: nezadáno – počítají se kalendářní dny),
+- skutečné termíny zakázek: berou se z optimalizovaného plánu, ne z evidence,
+- datum prvního dne plánu (bez něj jsou dny jen čísla 1, 2, …),
+- pravidla priority mezi pronájmem, zakázkou a servisem (záměrně nedefinována).
 
 ## Regrese
 
