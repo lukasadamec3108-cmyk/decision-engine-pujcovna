@@ -147,6 +147,40 @@ v konfliktu FIKT-P05, J005 a J006 (304 500 Kč – nesčítat), předběžné FI
 Otevřená pravidla: časové rozlišení přesahujících závazků, závaznost plánu zakázek, řešení konfliktů,
 penále potvrzené zakázky bez termínu.
 
+## Varianty řešení konfliktů (K3.2)
+
+`fleet_economics.conflict_options(model, začátek, konec, job_starts)` (čísla dní plánu) připraví pro
+každý konflikt potvrzených závazků podklad pro rozhodnutí majitele. **Nezobrazuje se a nic nevybírá.**
+
+- Případ konfliktu: dotčené pronájmy a zakázky (příspěvek, úplnost, vzorec), servis, stroje a dny.
+  Konflikty se společným závazkem tvoří jeden případ.
+- **Posun zakázky** (proveditelná): nejbližší začátek, kdy se vejdou všechny stroje zakázky vedle
+  ostatních závazků, servisu a zakázek (kontrola plánovače nad `capacity.evaluate_request`). Penále
+  z `economics.job_contribution`. Vypíše se, co bližší termíny blokuje (kaskáda), termíny bez penále
+  a varování na předběžné rezervace. Posouvá se vždy jen jedna zakázka.
+- **Uvolnění pronájmu** – zrušení, nebo zkrácení o konfliktní dny na kraji termínu – je jen
+  **podmíněné**: smluvní náhrada je ve vzorci jako neznámá a chybí souhlas zákazníka.
+- **Posun servisu** a **externí zapůjčení** jsou nevyhodnotitelné – vypíše se, co chybí.
+- **Ruční rozhodnutí** je vždy k dispozici (konflikt trvá, výsledek nelze vyčíslit).
+- Každá varianta se ověří přepočtem kalendáře: zbývající konflikt = „proveditelná jen částečně“,
+  nikdy „vyřešeno“; částečné varianty se ekonomicky nesrovnávají.
+- Ekonomika varianty = vzorec (`econ_formula`) součtu **všech** dotčených závazků, každého jednou,
+  ve stejném scénáři nastavení přímých nákladů. Stav: úplný / neúplný / nevyčíslitelný; meze místo
+  vymyšlené částky. Porovnání dvojic je jen informace.
+
+Ukázková data (dny 1–25, návrh plánu):
+
+| Konflikt | Varianta | Stav | Příspěvek dotčených závazků |
+|---|---|---|---|
+| FIKT-P05 × J006 (válec, dny 15–18) | posun J006 na dny 20–27 (zpoždění 11 místo 2 dní, −81 000 Kč) | proveditelná; varování FIKT-P07 | nejvýše 108 500 Kč |
+| | zrušení FIKT-P05 | podmíněná | 142 000 Kč − náhrada |
+| | zkrácení FIKT-P05 na den 19 | podmíněná | 151 500 Kč − náhrada |
+| servis × J005 (kolový bagr, den 11) | posun J005 na dny 21–26 (zpoždění 15 dní, −135 000 Kč) | proveditelná; varování FIKT-P06 | nejvýše −20 000 Kč |
+| | posun servisu | nevyhodnotitelná | – |
+
+Všechny částky jsou horní meze (chybí variabilní náklady a nastavení přímých nákladů). Porovnání
+s podmíněnými variantami nelze rozhodnout, dokud není známa smluvní náhrada.
+
 ## Regrese
 
 - `tests/test_econ_consistency.py` – shoda modulů s `economics.py`, ochrana před dvojím započtením,
