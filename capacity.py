@@ -1,7 +1,7 @@
 """Kapacitní plánování strojů (etapa E2.3A). Jen výpočetní logika, bez Streamlitu.
 
 Hlídá, aby se nenaplánovalo víc využití strojů, než kolik jich firma v daný den má.
-Aplikace modul zatím nepoužívá (napojení na vizuální kalendář až v E2.3B).
+Používají ho stránka Plánování kapacity (capacity_view.py), Dashboard a Rozhodovací plánovač.
 
 PRAVIDLA
 --------
