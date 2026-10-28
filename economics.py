@@ -1,8 +1,26 @@
 """Ekonomický modul Decision Engine (etapa E2.1).
 
 Společný výpočtový základ pro pronájem strojů i vlastní zakázky nad datovou vrstvou
-`datamodel.py`. Modul zatím žádná záložka aplikace nepoužívá – v E2.1 se jen připravuje
-a testuje; dosavadní výpočty v app.py se nemění.
+`datamodel.py`.
+
+KDE SE POUŽÍVÁ (stav E2.2 / K0)
+-------------------------------
+- Rozhodovací plánovač – stránky Pronájem strojů a Rozhodovací centrum (přes planner.py
+  a econ_formula.py): příspěvek z pronájmu a ze zakázky.
+- Ostatní stránky zatím počítají vlastními moduly (investice.py, portfolio.py, scheduling.py);
+  testy tests/test_econ_consistency.py hlídají, že dávají stejné částky jako tento modul,
+  a dokumentují známé rozdíly. Přehled: docs/EKONOMIKA.md.
+- Fixní náklady flotily, režie a celkový výsledek (total_result) aplikace zatím nezobrazuje –
+  na současných datech jsou neúplné (chybí variabilní náklady, režie a nastavení
+  direct_cost_includes_machines).
+
+TŘI ÚROVNĚ EKONOMIKY (nezaměňovat)
+----------------------------------
+- model jednoho stroje (Investice, Nákup strojů, Strojový park) – odhad pro rozhodnutí o nákupu,
+  NESČÍTÁ se za flotilu (fixní náklady kusu už obsahuje),
+- příspěvek pronájmu / zakázky (tento modul) – tržba − variabilní náklady, BEZ fixních nákladů,
+- výsledek celé flotily (total_result) – příspěvky − fixní náklady flotily − režie; jen z evidence.
+Neúplný výsledek NENÍ čistý zisk: známá částka je jen horní mez.
 
 EKONOMICKÁ LOGIKA (srozumitelně)
 --------------------------------

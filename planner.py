@@ -1,6 +1,7 @@
 """Společný plánovací a rozhodovací model (etapa E2.5a) – strategie C: vyvážené rozhodování.
 
-Samostatná logika bez Streamlitu; aplikace ji zatím nepoužívá. Nic nevymýšlí a nic nemění:
+Samostatná logika bez Streamlitu; používají ji stránky Pronájem strojů a Rozhodovací centrum
+(přes planner_view.py). Nic nevymýšlí a nic nemění:
 vstupní data, rezervace ani plán zakázek se nepřepisují – výsledkem je jen DOPORUČENÍ.
 
 Využívá existující moduly (žádná druhá kapacitní ani ekonomická logika):

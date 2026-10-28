@@ -79,7 +79,11 @@ přesně stejné tabulky.
 
 ## Ekonomický modul (`economics.py`, E2.1)
 
-Modul počítá nad těmito tabulkami, ale aplikace ho zatím nepoužívá.
+Modul počítá nad těmito tabulkami. V aplikaci ho zatím používá Rozhodovací plánovač (stránky
+Pronájem strojů a Rozhodovací centrum) pro příspěvek z pronájmu a ze zakázky. Ostatní stránky
+počítají vlastními moduly – shodu s tímto modulem a známé rozdíly hlídají testy
+`tests/test_econ_consistency.py`, přehled je v [`docs/EKONOMIKA.md`](../../docs/EKONOMIKA.md).
+Celkový výsledek flotily se zatím nezobrazuje – na současných datech je neúplný.
 
 - **Náklady flotily (fixní)** – za každý vlastněný nebo leasingový kus a měsíc, jen jednou za flotilu.
   Celek je přesný i s nerozdělenými náklady; rozpad na vlastnické / provozní je do doplnění neúplný.

@@ -185,6 +185,7 @@ Výstupem je **strukturovaný podklad pro rozhodnutí**, ne automatické investi
 ├── tools/hash_password.py           # vytvoření hashe hesla pro secrets (heslo se zadává skrytě)
 ├── tools/regression/                # regresní nástroje pro úpravy vzhledu (snímek, porovnání, pixelová kontrola)
 ├── docs/SLOVNIK.md                  # slovník pojmů aplikace (druhy zisku, kapacita, rezervace, stavy údajů)
+├── docs/EKONOMIKA.md                # mapa ekonomických výpočtů, tři úrovně ekonomiky, známé rozdíly (E2.2)
 ├── tests/                           # testy (python -m pytest tests)
 │   └── fixtures/legacy/             # původní tabulky pro kontrolu zpětné kompatibility
 ├── assets/decision_engine_mark.svg  # vlastní neutrální symbol aplikace
@@ -214,7 +215,11 @@ Podrobný popis tabulek a jejich budoucího využití je v [`data/model/README.m
 ekonomiku pronájmu i vlastních zakázek: fixní náklady flotily (vlastnické, provozní, nerozdělené),
 variabilní náklady podle využití, příspěvek z pronájmu, příspěvek ze zakázky, podklady pro ušlý
 zisk a celkový výsledek. Každý výsledek nese stav **úplný / neúplný (co chybí) / nelze spočítat**
-a příznak fiktivních dat. Aplikace modul zatím nepoužívá – zobrazené výsledky se nemění.
+a příznak fiktivních dat. Používá ho Rozhodovací plánovač (Pronájem strojů, Rozhodovací centrum);
+ostatní stránky zatím počítají vlastními moduly a testy hlídají, že s ním dávají stejné částky.
+Přehled všech ekonomických výpočtů, tří úrovní ekonomiky (model jednoho stroje / příspěvek /
+výsledek flotily) a známých rozdílů je v [`docs/EKONOMIKA.md`](docs/EKONOMIKA.md), pojmy ve
+[slovníku](docs/SLOVNIK.md). Neúplný ekonomický výsledek **není čistý zisk** půjčovny.
 
 **Kapacitní modul** (`capacity.py`, etapa E2.3A) počítá, kolik kusů každého typu stroje je
 v jednotlivých dnech k dispozici a čím jsou obsazené (pronájem, vlastní zakázka, servis), hledá
@@ -289,8 +294,10 @@ Aplikace je **chráněna heslem**. Přístup je poskytován pouze pro účely ov
 - Model pracuje s **fiktivními demonstračními daty** a nebyl ověřen na skutečných provozních datech.
 - Model používá zjednodušené předpoklady. Například zadaný fixní náklad je stejný pro oba porovnávané stroje
   a model nepočítá se sezónností poptávky.
-- Simulace nepoužívá pevný seed, takže se výsledky při každém přepočtu mírně liší.
-- Celá aplikace je zatím v jednom souboru `app.py`. Výpočty nejsou pokryty automatickými testy.
+- Simulace používá pevný seed, takže stejné vstupy dávají vždy stejné výsledky (náhodnost je jen modelová).
+- Ekonomické výpočty jsou zatím v několika modulech s různými předpoklady (např. fixní náklad
+  v Investicích z panelu × z dat v Nákupu strojů); sjednocení připravuje etapa E2.2 – viz
+  [`docs/EKONOMIKA.md`](docs/EKONOMIKA.md). Celkový zisk půjčovny aplikace zatím nepočítá.
 - Výstupy slouží jako **podklad pro odbornou diskusi**, ne jako investiční doporučení.
 
 ## Plánované další kroky
