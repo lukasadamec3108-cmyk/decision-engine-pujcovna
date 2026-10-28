@@ -125,6 +125,28 @@ zakázka J006) – stejné jako na stránce Plánování kapacity.
 - datum prvního dne plánu (bez něj jsou dny jen čísla 1, 2, …),
 - pravidla priority mezi pronájmem, zakázkou a servisem (záměrně nedefinována).
 
+## Evidence závazků za období (K3.1)
+
+`fleet_economics.period_ledger(model, začátek, konec, job_starts=…, plan_start=…)` propojí kapacitu
+z `fleet_usage.py` s příspěvky z `economics.py`. **Nezobrazuje se** a nic nerozhoduje.
+
+- Každý pronájem a každá zakázka z dat má právě jeden řádek: termín, zdroj termínu (rezervace /
+  **návrh plánu** / bez termínu), strojodny celkem, v období, mimo období a v konfliktu, přiřazení kusu,
+  příspěvek **celého** závazku a jeho úplnost.
+- Stav (právě jeden): jisté využití · konflikt · předběžné · přesah mimo období · nelze určit · mimo
+  období · zrušeno. Nejednoznačné přiřazení kusu je samostatný údaj – ekonomika je po typech strojů.
+- Mezi **jisté** příspěvky se sčítají jen závazky ve stavu „jisté využití“. Konfliktní (obě strany,
+  bez priority), předběžné, přesahující a neurčité závazky jsou ve vlastních skupinách a nesčítají se.
+- Chybějící náklad zůstává chybějícím (stav „neúplný“, částka = horní mez), nikdy 0.
+- Období je povinný parametr; přesah období se **neděli poměrně** – pravidlo časového rozlišení je otevřené.
+- Plán zakázek je návrh; bez něj zůstávají zakázky „nelze určit“. Modelová poptávka se nepoužívá.
+
+Ukázková data (dny 1–25, návrh plánu): jisté pronájmy 194 500 Kč a jisté zakázky 635 000 Kč (horní meze),
+v konfliktu FIKT-P05, J005 a J006 (304 500 Kč – nesčítat), předběžné FIKT-P06 a FIKT-P07 (77 500 Kč).
+
+Otevřená pravidla: časové rozlišení přesahujících závazků, závaznost plánu zakázek, řešení konfliktů,
+penále potvrzené zakázky bez termínu.
+
 ## Regrese
 
 - `tests/test_econ_consistency.py` – shoda modulů s `economics.py`, ochrana před dvojím započtením,
