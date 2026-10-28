@@ -336,9 +336,10 @@ def test_module_is_standalone_and_not_connected_to_ui():
     tree = ast.parse((ROOT / "fleet_economics.py").read_text(encoding="utf-8"))
     imported = {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
     imported |= {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
-    assert "streamlit" not in imported and imported <= {"dataclasses", "pandas", "capacity", "economics", "fleet_usage"}
+    assert "streamlit" not in imported and imported <= {"dataclasses", "pandas", "capacity", "economics", "fleet_usage",
+                                                         "econ_formula", "planner"}
     names = {n.name for n in tree.body if isinstance(n, ast.FunctionDef) and not n.name.startswith("_")}
-    assert names == {"period_ledger"}                       # jen K3.1 – žádné další kroky
+    assert names == {"period_ledger", "conflict_options"}   # jen K3.1 a K3.2 – žádné další kroky K3
     for path in [ROOT / "app.py", *ROOT.glob("*_view.py"), *(ROOT / "stranky").glob("*.py")]:
         assert "fleet_economics" not in path.read_text(encoding="utf-8"), path
 
