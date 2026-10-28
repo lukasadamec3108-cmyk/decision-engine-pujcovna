@@ -79,8 +79,7 @@ Poznámka: v `investice.py` se prostá návratnost (pořizovací cena ÷ měsí�
   plán zakázek, přínos zakázek, ekonomika jednoho kusu, nákupní sestava, fixní náklady flotily
   a export DOCX výchozího scénáře.
 - `tests/test_investice.py`, `tests/test_report_docx.py` – bitová shoda výpočtů Investic a DOCX.
-  Známá nestabilita (neopraveno): `test_report_docx.py::test_report_is_deterministic` porovnává celé
-  soubory DOCX včetně časové značky položek ZIP (přesnost 2 s). Obsah všech částí je vždy shodný,
-  ale pokud dvě sestavení padnou do různých 2s oken, test výjimečně selže. Nový regresní test
-  porovnává obsah částí, a je proto stabilní.
+  Determinismus DOCX se ověřuje porovnáním pořadí, názvů, komprese a obsahu všech částí souboru,
+  nikoli celých bajtů: knihovna zipfile dává každé položce aktuální čas (přesnost 2 s), takže se
+  dvě jinak shodná sestavení mohla lišit jen časovou značkou (dříve občasné selhání testu).
 - `tools/regression/` – snímek celé aplikace pro porovnání větví.

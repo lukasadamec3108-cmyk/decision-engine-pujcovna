@@ -47,6 +47,31 @@ def parts(data: bytes) -> dict:
     return {name: hashlib.sha256(z.read(name)).hexdigest() for name in sorted(z.namelist())}
 
 
+def fingerprint(data: bytes) -> list:
+    """Otisk DOCX bez časových značek ZIP: pořadí položek, jejich názvy, komprese a obsah.
+
+    Celé bajty souboru porovnávat nelze – zipfile dá každé položce aktuální čas (přesnost 2 s),
+    takže dvě jinak shodná sestavení se v rychlém sledu občas liší jen časovou značkou.
+    """
+    z = zipfile.ZipFile(io.BytesIO(data))
+    return [(i.filename, i.compress_type, hashlib.sha256(z.read(i)).hexdigest()) for i in z.infolist()]
+
+
+def rezip(data: bytes, date_time=None, replace=None) -> bytes:
+    """Kopie DOCX s jinou časovou značkou položek nebo s nahrazeným obsahem jedné části (jen pro testy)."""
+    src = zipfile.ZipFile(io.BytesIO(data))
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as dst:
+        for info in src.infolist():
+            blob = src.read(info)
+            if replace and info.filename == replace[0]:
+                blob = replace[1](blob)
+            new = zipfile.ZipInfo(info.filename, date_time=date_time or info.date_time)
+            new.compress_type = info.compress_type
+            dst.writestr(new, blob)
+    return out.getvalue()
+
+
 def text(data: bytes) -> str:
     doc = Document(io.BytesIO(data))
     return "\n".join([p.text for p in doc.paragraphs] + [c.text for t in doc.tables for r in t.rows for c in r.cells])
@@ -60,7 +85,27 @@ def test_report_matches_reference_exactly(case):
 
 def test_report_is_deterministic():
     kw = inputs("pesimisticky")
-    assert rd.build_report(**kw) == rd.build_report(**kw)
+    a, b = rd.build_report(**kw), rd.build_report(**kw)
+    assert fingerprint(a) == fingerprint(b)
+    assert text(a) == text(b)
+
+
+def test_fingerprint_ignores_only_zip_timestamps():
+    data = rd.build_report(**inputs("pesimisticky"))
+    shifted = rezip(data, date_time=(2001, 2, 3, 4, 5, 6))
+    assert shifted != data                                          # bajty se liší jen časovou značkou
+    assert fingerprint(shifted) == fingerprint(data)
+
+
+def test_fingerprint_detects_content_changes():
+    kw = inputs("pesimisticky")
+    data = rd.build_report(**kw)
+    changed = rezip(data, replace=("word/document.xml", lambda b: b.replace("Mini bagr".encode(), "Mini bágr".encode(), 1)))
+    assert fingerprint(changed) != fingerprint(data)                # změna textu v dokumentu
+    for case in ("optimisticky", "oba_ztratove"):                   # jiné vstupy → jiný report
+        assert fingerprint(rd.build_report(**inputs(case))) != fingerprint(data)
+    kw["fixed_cost"] = kw["fixed_cost"] + 1
+    assert fingerprint(rd.build_report(**kw)) != fingerprint(data)  # i drobná změna jedné hodnoty
 
 
 def test_report_content_and_branches():
