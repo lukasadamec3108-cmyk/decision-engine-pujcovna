@@ -71,6 +71,9 @@ Přehled všech výpočtů, jejich zdrojů a známých rozdílů je v [`EKONOMIK
 - **Kolize mezi zakázkami plánu** (Vlastní zakázky) – překrytí vlastních zakázek navzájem. Plán zakázek
   pronájmy a servis nezná, proto může mít 0 kolizí, i když kalendář ukazuje konflikty.
 - **Nelze určit** – kapacitu nelze spočítat (chybí nebo je neplatný údaj); nikdy to neznamená volno.
+- **Nejednoznačné přiřazení** – kolik kusů typu je obsazeno, je jisté, ale který konkrétní kus, z dat
+  určit nelze (rezervace a zakázky uvádějí jen typ stroje).
+- **Nárok nad kapacitu** – nároky, které se do dostupných kusů nevejdou; vykazují se zvlášť, ne jako strojodny kapacity.
 
 ## Rezervace a závazky
 
