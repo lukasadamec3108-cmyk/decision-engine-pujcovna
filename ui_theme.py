@@ -898,3 +898,46 @@ JOBS_CSS = dash_css(JOBS_KEY).replace("</style>", f"""
   {_JOBS} table.dd-cmp td[data-label]::before {{ content: attr(data-label); color: {UI_MUTED}; font-weight: 500; }}
 }}
 </style>""")
+
+
+# ---------------------------------------------------------------------------
+# Strojový park (modernizace UI): komponenty Dashboardu + tabulka jako Vlastní zakázky.
+# Jen zobrazení – hodnoty dodává app.py (počty kusů z dat flotily, ekonomika 1 kusu z portfolio.type_month).
+# ---------------------------------------------------------------------------
+
+FLEET_KEY = TAB_KEY_PREFIX + "strojovy_park"
+_FLEET = f".st-key-{FLEET_KEY}"
+
+
+def dash_units(items: list, total_label: str) -> None:
+    """Kompaktní mřížka strojů ve flotile: items = [(název, počet kusů)] + řádek celkem."""
+    cards = "".join(
+        f'<div class="dd-unit"><span class="n">{html.escape(name)}</span>'
+        f'<span class="c">{units}<small>ks</small></span></div>'
+        for name, units in items
+    )
+    st.markdown(f'<div class="dd-units">{cards}</div><div class="dd-units-total">{total_label}</div>',
+                unsafe_allow_html=True)
+
+
+# Stejné styly jako Vlastní zakázky (karty, sekce, tabulka; na mobilu řádky pod sebou), jen jiný kontejner.
+FLEET_CSS = JOBS_CSS.replace(_JOBS, _FLEET).replace("</style>", f"""
+{_FLEET} table.dd-cmp td:nth-child(3) {{ font-weight: 400; }}
+{_FLEET} table.dd-cmp th:last-child, {_FLEET} table.dd-cmp td.chg {{ background: {ACCENT_SOFT}; }}
+{_FLEET} table.dd-cmp td.chg {{ font-weight: 800; }}
+{_FLEET} table.dd-cmp td.chg .neg {{ color: {BAD_TEXT}; }}
+{_FLEET} .dd-units {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: .55rem; }}
+{_FLEET} .dd-unit {{ display: flex; justify-content: space-between; align-items: center; gap: .6rem;
+                   background: {UI_BG}; border: 1px solid {UI_LINE}; border-radius: 10px; padding: .55rem .75rem; }}
+{_FLEET} .dd-unit .n {{ color: {INK}; font-weight: 600; font-size: .92rem; line-height: 1.3; }}
+{_FLEET} .dd-unit .c {{ color: {INK}; font-weight: 800; font-size: 1.15rem; font-variant-numeric: tabular-nums;
+                      white-space: nowrap; }}
+{_FLEET} .dd-unit .c small {{ font-size: .78rem; font-weight: 600; color: {UI_MUTED}; margin-left: .2rem; }}
+{_FLEET} .dd-units-total {{ font-size: .84rem; color: {UI_MUTED}; margin-top: .6rem; }}
+@media (max-width: 640px) {{
+  {_FLEET} .dd-units {{ grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem; }}
+  {_FLEET} .dd-unit {{ padding: .5rem .6rem; }}
+  {_FLEET} .dd-unit .n {{ font-size: .84rem; }}
+  {_FLEET} table.dd-cmp td.chg {{ background: none; }}
+}}
+</style>""")
