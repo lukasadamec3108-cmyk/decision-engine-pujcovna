@@ -375,3 +375,28 @@ def test_part_total_marks_missing_parts():
 def test_not_computable_view_has_empty_page_sections():
     v = fv.build(fe.period_result(BASE, 5, 1, STARTS))
     assert v["headline"] == [] and v["components"] == [] and v["period"] == "neplatné období"
+
+
+
+# ---------------------------------------------------------------------------
+# K3.4d – porovnání variant a podklady pro odkazy
+# ---------------------------------------------------------------------------
+
+def test_conflict_view_has_machine_codes_jobs_and_comparison_notes():
+    k1, k2 = SAMPLE["conflicts"]
+    assert (k1["types"], k1["jobs"], k2["types"], k2["jobs"]) == (["KOLOVY_BAGR"], ["J005"], ["SILNICNI_VALEC"], ["J006"])
+    assert k1["comparisons"] == [] and "vyčíslit lze jen jednu variantu" in k1["comparison_note"]
+    assert {c["kind"] for c in k2["comparisons"]} == {"nelze porovnat"} and len(k2["comparisons"]) == 3
+    assert "nelze spolehlivě porovnat" in k2["comparison_note"]
+    assert "doporučení" in fv.COMPARISON_DISCLAIMER and "rozhoduje majitel" in fv.COMPARISON_DISCLAIMER
+
+
+def test_comparison_with_complete_data_is_labelled_but_not_selected():
+    m = full(bookings=[booking("P1", BAGR, 1, 5)], jobs=[job("J1", 3, deadline=10)], needs=[need("J1", BAGR)])
+    v = months(m, end=12, starts={"J1": 4})
+    [case] = v["conflicts"]
+    kinds = {c["kind"] for c in case["comparisons"]}
+    assert kinds <= set(fv.COMPARISON_KIND.values())
+    assert "nelze porovnat" in kinds                                  # podmíněné varianty: neznámá náhrada
+    assert case["comparison_note"] == ""                              # aspoň jedna dvojice je podložená/podmíněná
+    assert "selected" not in case and all("doporuč" not in c["text"].lower() for c in case["comparisons"])

@@ -440,12 +440,36 @@ def _conflict(case, names, plan_start) -> dict:
         id=case["id"],
         title=f"{', '.join(machines)} · {days_text(days, plan_start)} · "
               + " × ".join([c["ref"] for c in case["commitments"]] + (["servis"] if case["services"] else [])),
-        machines=machines, days=days_text(days, plan_start), services=list(case["services"]),
-        commitments=commitments,
+        machines=machines, types=list(case["types"]), days=days_text(days, plan_start),
+        services=list(case["services"]), commitments=commitments,
+        jobs=[c["ref"] for c in case["commitments"] if c["kind"] == "job"],
         variants=[_variant(v, plan_start, names) for v in variants],
-        comparisons=[dict(a=c["a"], b=c["b"], text=c["text"]) for c in case["comparisons"]],
+        comparisons=[dict(a=c["a"], b=c["b"], text=c["text"],
+                          kind=COMPARISON_KIND.get(c.get("status"), "nelze porovnat"))
+                     for c in case["comparisons"]],
+        comparison_note=_comparison_note(case),
         note="Nic se automaticky nevybírá, neruší ani nepřesouvá – rozhodne majitel.",
     )
+
+
+# Porovnání variant (K3.4d) – jen informace z econ_formula.compare, nic se nevybírá ani nedoporučuje.
+COMPARISON_KIND = {"jistý": "podložené porovnání", "podmíněný": "závisí na neznámých nákladech",
+                   "nelze rozhodnout": "nelze porovnat"}
+COMPARISON_DISCLAIMER = ("Jen informace: porovnání vychází z dostupných údajů. Nejde o doporučení ani rozhodnutí – "
+                         "o řešení konfliktu rozhoduje majitel.")
+
+
+def _comparison_note(case) -> str:
+    """Proč porovnání chybí nebo je omezené (vždy výslovně – nic se nedoplňuje nulou)."""
+    evaluable = [v for v in case["variants"] if v["feasibility"] in (fe.FEASIBLE, fe.CONDITIONAL)
+                 and v["formula"] is not None and v["formula"].valid]
+    if len(evaluable) < 2:
+        return ("Varianty nelze porovnat – vyčíslit lze jen "
+                + ("jednu variantu" if evaluable else "žádnou variantu")
+                + "; ostatní závisí na údajích, které chybějí.")
+    if all(c.get("status") == "nelze rozhodnout" for c in case["comparisons"]):
+        return "Varianty nelze spolehlivě porovnat – výsledek závisí na chybějících údajích (viz u každé dvojice)."
+    return ""
 
 
 def _contribution_from(c) -> dict:

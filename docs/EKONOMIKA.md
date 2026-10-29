@@ -266,6 +266,12 @@ se nepočítá a žádná jiná stránka se nemění.
 - **Kapacitní konflikty a varianty** (K3.2) včetně rozpětí scénářů (K3.3) – jen přehled, nic se
   nevybírá ani nemění, rozhodne majitel.
 - Neúplný výsledek má vždy upozornění „Neúplný výsledek – nejde o čistý zisk.“
+- **K3.4d – u každého konfliktu:** závazky, které blokují bližší termín posunu zakázky (kaskáda);
+  rozbalovací blok **„Porovnání variant – jen informace“** (porovnání dvojic z `econ_formula`,
+  výslovně „nelze porovnat“, když chybí údaje; není to doporučení ani rozhodnutí); odkaz
+  **„Zobrazit v kalendáři“** (Plánování kapacity s filtrem na stroj konfliktu – mění se jen filtr
+  zobrazení) a odkaz **„Vlastní zakázky“**. Na ukázkových datech nelze varianty porovnat: u J005 lze
+  vyčíslit jen posun, u FIKT-P05 × J006 chybí storno / smluvní náhrada.
 
 Na ukázkových datech (dny 1–25) jsou všechny ekonomické částky **horní meze** nebo „chybí údaje“
 (chybí variabilní náklady pronájmu, nastavení `direct_cost_includes_machines`, režie a rozhodnutí
