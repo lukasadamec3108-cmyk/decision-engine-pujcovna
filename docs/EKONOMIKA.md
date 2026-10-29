@@ -223,6 +223,30 @@ Ukázková data (dny 1–25, návrh plánu, `months` = 25/30 pouze jako příkla
 Pro období 1–31 jsou posuny celé v období a horní mez rozpětí je 521 000 Kč (dolní mez nelze určit –
 chybí náklady a smluvní náhrady).
 
+## Zobrazovací vrstva „Ekonomika flotily“ (K3.4a)
+
+`fleet_view.build(period_result, názvy_strojů, plan_start)` převádí výsledek K3.3 na řádky, texty,
+stavy a upozornění pro budoucí stránku „Ekonomika flotily“ (K3.4b+). **Nic nepočítá jinak a zatím
+se nikde nezobrazuje.** Výstup jsou jen obyčejné hodnoty (lze uložit do mezipaměti).
+
+Každá částka má právě jeden z pěti stavů:
+
+| Stav | Kdy | Text |
+|---|---|---|
+| **úplný** | všechny údaje známé (i skutečná nula) | „389 500 Kč“, „0 Kč“ |
+| **horní mez** | chybí jen náklad (variabilní, přímé náklady, penále, režie, fixní náklady) | „nejvýše 389 500 Kč“ |
+| **podmíněný** | platí jen za neověřitelné podmínky (souhlas zákazníka, storno, smluvní náhrada) | „nejvýše 142 000 Kč“ + podmínky |
+| **chybí údaje** | chybí tržba / cena, neplatný údaj, nezadaný náklad, nerozhodnuté konflikty | „nelze určit“, „nezadáno“ |
+| **nezapočítáno** | závazek v konfliktu, předběžný, přesahující období, s nejistou obsazeností | částka jen pro informaci |
+
+- Chybějící náklad se nikdy nezobrazí jako „0 Kč“ (režie „0“ = úplný, prázdná = „nezadáno“).
+- Chybějící tržba nebo cena znamená „nelze určit“ – horní mez by neplatila.
+- Výsledek je **úplný** jen při úplném výpočtu K3.3. Při nerozhodnutých konfliktech je i s úplnými
+  náklady „chybí údaje“ (částka platí jen pro jisté závazky).
+- Slovo „zisk“ se ve výstupu objevuje jen v upozornění „Neúplný výsledek – nejde o čistý zisk.“,
+  které je u každého neúplného výsledku (hlídá test).
+- Varianty konfliktů mají pevné pořadí podle druhu (ne podle částky) – nic se nedoporučuje.
+
 ## Regrese
 
 - `tests/test_econ_consistency.py` – shoda modulů s `economics.py`, ochrana před dvojím započtením,

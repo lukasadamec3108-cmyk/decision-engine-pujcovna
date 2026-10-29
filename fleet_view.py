@@ -1,0 +1,487 @@
+"""Zobrazovací vrstva stránky „Ekonomika flotily“ (etapa E2.2 – K3.4a). Bez Streamlitu.
+
+Převádí hotový výsledek fleet_economics.period_result (K3.1–K3.3) na řádky, texty, stavy
+a upozornění. NIC NEPOČÍTÁ jinak: částky, meze a stavy přebírá, jen je pojmenuje a naformátuje.
+Výstup build() jsou jen obyčejné hodnoty (texty, čísla, seznamy, slovníky) – lze je uložit
+do mezipaměti Streamlitu a testovat bez aplikace. Stránku zatím nic nepoužívá.
+
+STAVY ČÁSTEK (jediné povolené označení)
+---------------------------------------
+  úplný        … všechny údaje známé – přesná částka (i skutečná nula „0 Kč“),
+  horní mez    … chybí jen NÁKLAD (variabilní náklad, přímé náklady, penále, režie, fixní náklady) –
+                 skutečná částka může být jen nižší: „nejvýše X Kč“,
+  podmíněný    … platí jen za podmínky, kterou nelze ověřit (souhlas zákazníka, storno, smluvní
+                 náhrada) – částka je nejvýše X Kč a podmínka se vypíše,
+  chybí údaje  … nelze určit ani mez (chybí tržba / cena, neplatný údaj, nezadaný náklad),
+  nezapočítáno … závazek je vidět, ale do výsledku se nepočítá (konflikt, předběžný, přesah
+                 období, nejistá obsazenost, zrušený).
+Neúplný výsledek se NIKDY neoznačuje jako zisk – texty používají „výsledek z jistých závazků“
+a „příspěvek“ a u neúplného výsledku je vždy upozornění, že nejde o čistý zisk.
+"""
+
+import re
+from datetime import date, timedelta
+
+import fleet_economics as fe
+import fleet_usage as fu
+from formatting import fmt_czk, fmt_num
+
+COMPLETE, UPPER, CONDITIONAL, MISSING, EXCLUDED = "úplný", "horní mez", "podmíněný", "chybí údaje", "nezapočítáno"
+STATUSES = (COMPLETE, UPPER, CONDITIONAL, MISSING, EXCLUDED)
+TONE = {COMPLETE: "good", UPPER: "warn", CONDITIONAL: "info", MISSING: "bad", EXCLUDED: "neutral"}
+_RANK = {COMPLETE: 0, UPPER: 1, CONDITIONAL: 2, MISSING: 3}
+
+NOT_NET_PROFIT = "Neúplný výsledek – nejde o čistý zisk."
+FICTITIOUS = "Ukázková (fiktivní) data – nejde o skutečná firemní čísla."
+CONTRIBUTION_NOTE = ("Příspěvek = tržba − variabilní náklady (u zakázky i přímé náklady a penále); "
+                     "fixní náklady flotily a režie se odečítají jen jednou, ve výsledku.")
+
+# Chybějící údaj, který NENÍ náklad: bez něj neplatí ani horní mez (štítky z economics.py).
+REVENUE_MARKERS = (": tržba", "cena pronájmu/den", "cena rezervace")
+SETTING_MARKERS = ("metoda přepočtu", "direct_cost_includes_machines")
+
+STATE_TEXT = {
+    fe.CONFLICT: "v konfliktu – rozhodne majitel",
+    fe.TENTATIVE: "předběžný – jen potenciál",
+    fe.CROSSES: "přesahuje období – chybí pravidlo časového rozlišení",
+    fe.UNKNOWN: "obsazenost nelze určit",
+    fe.OUTSIDE: "mimo období",
+    fe.CANCELLED: "zrušený",
+}
+VARIANT_ORDER = ["zachovat ostatní závazky a posunout zakázku", "zachovat zakázku – zrušení celé rezervace",
+                 "zachovat zakázku – zkrácení rezervace o konfliktní dny", "posun servisu",
+                 "externí zapůjčení / náhradní stroj", "ponechat k ručnímu rozhodnutí"]
+VARIANT_TITLE = {
+    "zachovat ostatní závazky a posunout zakázku": "Posun zakázky",
+    "zachovat zakázku – zrušení celé rezervace": "Zrušení pronájmu",
+    "zachovat zakázku – zkrácení rezervace o konfliktní dny": "Zkrácení pronájmu",
+    "posun servisu": "Posun servisu",
+    "externí zapůjčení / náhradní stroj": "Externí zapůjčení / náhradní stroj",
+    "ponechat k ručnímu rozhodnutí": "Ponechat k ručnímu rozhodnutí",
+}
+
+
+# ---------------------------------------------------------------------------
+# Částky a stavy
+# ---------------------------------------------------------------------------
+
+def money(value) -> str:
+    """Jednotné formátování částky („389 500 Kč“, „−20 000 Kč“, „0 Kč“); None → „–“."""
+    return "–" if value is None else fmt_czk(value)
+
+
+def _cell(status, text, explanation="", value=None) -> dict:
+    return dict(status=status, tone=TONE[status], text=text, explanation=explanation, value=value)
+
+
+def _missing_only_costs(missing) -> bool:
+    return not any(m for m in missing if any(x in m for x in REVENUE_MARKERS))
+
+
+def contribution_cell(result) -> dict:
+    """Příspěvek (economics.Result): úplný / horní mez / chybí údaje."""
+    if result is None or result.value is None or result.invalid:
+        why = "; ".join(result.invalid) if result is not None and result.invalid else "neplatný údaj"
+        return _cell(MISSING, "nelze určit", f"neplatný údaj: {why}")
+    if result.complete:
+        return _cell(COMPLETE, money(result.value), "", result.value)
+    if _missing_only_costs(result.missing):
+        return _cell(UPPER, f"nejvýše {money(result.value)}", "chybí: " + "; ".join(result.missing), result.value)
+    return _cell(MISSING, "nelze určit", "chybí: " + "; ".join(result.missing))
+
+
+def cost_cell(result) -> dict:
+    """Náklad (fixní náklady, režie): úplný (i skutečná 0 Kč) / chybí údaje. Nikdy nezadaná nula."""
+    if result is None or result.value is None or result.invalid:
+        why = "; ".join(result.invalid) if result is not None and result.invalid else "neplatný údaj"
+        return _cell(MISSING, "nelze určit", f"neplatný údaj: {why}")
+    if result.complete:
+        return _cell(COMPLETE, money(result.value), "", result.value)
+    if result.value == 0:
+        return _cell(MISSING, "nezadáno", "chybí: " + "; ".join(result.missing))
+    return _cell(MISSING, f"nejméně {money(result.value)}",
+                 "známá je jen část – chybí: " + "; ".join(result.missing), result.value)
+
+
+def bounds_cell(lo, hi, conditional: bool = False, conditions=()) -> dict:
+    """Interval (dolní, horní mez) z econ_formula.bounds → text a stav."""
+    cond = "; ".join(conditions)
+    if lo is not None and hi is not None and abs(lo - hi) < 0.5:
+        if conditional:
+            return _cell(CONDITIONAL, money(hi), "platí jen pokud: " + cond, hi)
+        return _cell(COMPLETE, money(hi), "", hi)
+    if hi is not None:
+        if conditional:
+            return _cell(CONDITIONAL, f"nejvýše {money(hi)}", "platí jen pokud: " + cond, hi)
+        rng = f"rozpětí {money(lo)} až {money(hi)}" if lo is not None else "dolní mez nelze určit"
+        return _cell(UPPER, f"nejvýše {money(hi)}", rng + " – chybí některé náklady", hi)
+    if lo is not None:
+        return _cell(MISSING, f"nejméně {money(lo)}", "horní mez nelze určit")
+    return _cell(MISSING, "nelze určit", cond and ("chybí: " + cond))
+
+
+def _worst(*statuses) -> str:
+    known = [s for s in statuses if s in _RANK]
+    return max(known, key=_RANK.get) if known else MISSING
+
+
+def day_text(day, plan_start=None) -> str:
+    """„den 15“, s datem dne 1 plánu „den 15 (13. 2. 2026)“."""
+    if not isinstance(day, int) or isinstance(day, bool):
+        return "–"
+    if isinstance(plan_start, date):
+        d = plan_start + timedelta(day - 1)
+        return f"den {day} ({d.day}. {d.month}. {d.year})"
+    return f"den {day}"
+
+
+def days_text(days, plan_start=None) -> str:
+    """„dny 15–18“ (souvislé), „dny 3, 5“ (nesouvislé), „den 11“."""
+    days = sorted(d for d in days if isinstance(d, int))
+    if not days:
+        return "–"
+    if len(days) == 1:
+        return day_text(days[0], plan_start)
+    if days == list(range(days[0], days[-1] + 1)):
+        first, last = day_text(days[0], plan_start), day_text(days[-1], plan_start)
+        return f"dny {first[4:]}–{last[4:]}"
+    return "dny " + ", ".join(day_text(d, plan_start)[4:] for d in days)
+
+
+# ---------------------------------------------------------------------------
+# Celkový pohled
+# ---------------------------------------------------------------------------
+
+def build(pr, names=None, plan_start=None) -> dict:
+    """Celý obsah stránky z výsledku period_result – jen obyčejné hodnoty.
+
+    names … {type_id: název stroje} (jinak kódy), plan_start … datum dne 1 (jen pro popisky dnů).
+    """
+    names = dict(names or {})
+    if pr is None or pr.status == fu.NOT_COMPUTABLE:
+        reasons = list(pr.notes) if pr is not None else ["výsledek chybí"]
+        return dict(status=MISSING, computable=False,
+                    banners=[dict(tone="bad", text="Výsledek nelze spočítat: " + "; ".join(reasons))],
+                    kpis=[], breakdown=[], missing=[], conflicts=[], scenarios=dict(), pending=[],
+                    ledger=[], usage=[], method=dict(text="", chosen=False))
+    led = pr.options.ledger
+    rentals, jobs = contribution_cell(pr.rentals), contribution_cell(pr.jobs)
+    fixed, overhead = cost_cell(pr.fixed_costs), cost_cell(pr.overhead)
+    excluded = _excluded(led)
+    result = _result_cell(pr, rentals, jobs, fixed, overhead, excluded)
+    return dict(
+        status=result["status"], computable=True,
+        banners=_banners(pr, result),
+        kpis=_kpis(pr, rentals, jobs, fixed, overhead, result),
+        breakdown=_breakdown(pr, rentals, jobs, fixed, overhead, result),
+        missing=_missing(pr, excluded),
+        conflicts=[_conflict(case, names, plan_start) for case in pr.options.cases],
+        scenarios=_scenarios(pr),
+        pending=_pending(led, plan_start),
+        ledger=_ledger(led, plan_start),
+        usage=_usage(led.usage, names),
+        method=dict(text=basis_text(pr.fixed_cost_basis), chosen=pr.months is not None),
+    )
+
+
+def _excluded(led) -> dict:
+    """{stav: [ref]} závazků, které se do výsledku nezapočítávají (bez mimo období / zrušených)."""
+    out = {}
+    for r in led.entries.itertuples():
+        if r.state in (fe.CONFLICT, fe.TENTATIVE, fe.CROSSES, fe.UNKNOWN):
+            out.setdefault(r.state, []).append(r.ref)
+    return out
+
+
+def _result_cell(pr, rentals, jobs, fixed, overhead, excluded) -> dict:
+    """Výsledek z jistých závazků: úplný jen tehdy, je-li úplný celý výpočet (period_result)."""
+    r = pr.result
+    if r is None or r.value is None or r.invalid:
+        return _cell(MISSING, "nelze určit", "neplatný údaj: " + "; ".join(r.invalid if r else ()))
+    not_counted = sorted(excluded.get(fe.CONFLICT, []) + excluded.get(fe.CROSSES, []) + excluded.get(fe.UNKNOWN, []))
+    note = ("nezapočítáno: " + ", ".join(not_counted)) if not_counted else ""
+    if pr.status == fu.COMPLETE:
+        return _cell(COMPLETE, money(r.value), "", r.value)
+    if MISSING in (rentals["status"], jobs["status"]):
+        # chybí tržba / cena nebo je údaj neplatný → ani horní mez neplatí
+        return _cell(MISSING, "nelze určit", "chybí tržba, cena nebo platný údaj některého závazku")
+    if any(c["status"] != COMPLETE for c in (rentals, jobs, fixed, overhead)):
+        # chybí jen náklady – ty výsledek mohou jen snížit → známá částka je horní mez
+        return _cell(UPPER, f"nejvýše {money(r.value)}",
+                     "; ".join(x for x in ("chybí některé náklady", note) if x), r.value)
+    # náklady úplné, ale některé závazky nejsou započteny (chybí rozhodnutí) – nejde o úplný výsledek
+    return _cell(MISSING, f"{money(r.value)} bez nezapočítaných závazků",
+                 "chybí rozhodnutí; " + note, r.value)
+
+
+def _banners(pr, result) -> list:
+    out = []
+    fictitious = any(getattr(x, "fictitious", False) for x in (pr.rentals, pr.jobs, pr.fixed_costs, pr.overhead))
+    if fictitious:
+        out.append(dict(tone="info", text=FICTITIOUS))
+    if result["status"] != COMPLETE:
+        n = len(_missing_flat(pr))
+        out.append(dict(tone="warn", text=f"{NOT_NET_PROFIT} Chybí {n} {_plural(n, 'údaj', 'údaje', 'údajů')} "
+                                          "nebo rozhodnutí (viz seznam)."))
+    if pr.months is None:
+        out.append(dict(tone="info", text="Fixní náklady a režie se neodečítají – metoda přepočtu na období "
+                                          "není zvolena. Výsledek je proto jen horní mez."))
+    if pr.options.cases:
+        out.append(dict(tone="info", text="Konflikty se automaticky neřeší – nic se neruší ani nepřesouvá. "
+                                          "Příspěvky závazků v konfliktu se do výsledku nezapočítávají."))
+    return out
+
+
+def _plural(n, one, few, many) -> str:
+    return one if n == 1 else few if 2 <= n <= 4 else many
+
+
+def _kpis(pr, rentals, jobs, fixed, overhead, result) -> list:
+    both = pr.rentals + pr.jobs if pr.rentals is not None and pr.jobs is not None else None
+    contrib = contribution_cell(both)
+    costs_status = _worst(fixed["status"], overhead["status"])
+    costs_text = (money(-(pr.fixed_costs.value + pr.overhead.value)) if costs_status == COMPLETE
+                  else f"fixní {fixed['text']} · režie {overhead['text']}")
+    n = len(pr.options.cases)
+    return [
+        dict(key="vysledek", label="Výsledek z jistých závazků", **_kpi(result)),
+        dict(key="prispevky", label="Jisté příspěvky (pronájmy + zakázky)", **_kpi(contrib)),
+        dict(key="naklady", label="Fixní náklady a režie za období", text=costs_text, status=costs_status,
+             tone=TONE[costs_status], explanation=basis_text(pr.fixed_cost_basis)),
+        dict(key="konflikty", label="Konflikty", text=f"{n} {_plural(n, 'případ', 'případy', 'případů')}",
+             status=EXCLUDED if n else COMPLETE, tone=TONE[EXCLUDED if n else COMPLETE],
+             explanation="příspěvky obou stran nezapočítány – rozhodne majitel" if n else "žádný konflikt"),
+    ]
+
+
+def _kpi(cell) -> dict:
+    return dict(text=cell["text"], status=cell["status"], tone=cell["tone"], explanation=cell["explanation"])
+
+
+def _breakdown(pr, rentals, jobs, fixed, overhead, result) -> list:
+    neg = lambda c: dict(c, text=("−" + c["text"]) if c["status"] == COMPLETE and c["value"] else c["text"])
+    rows = [
+        dict(item="Jisté příspěvky pronájmů", **rentals),
+        dict(item="Jisté příspěvky vlastních zakázek", **jobs),
+        dict(item="Fixní náklady flotily za období", **neg(fixed)),
+        dict(item="Režie za období", **neg(overhead)),
+        dict(item="Výsledek z jistých závazků", total=True, **result),
+    ]
+    rows[2]["explanation"] = "; ".join(x for x in (basis_text(pr.fixed_cost_basis), fixed["explanation"],
+                                                   "obsahují i průměrný servis – neodečítá se znovu") if x)
+    return rows
+
+
+def _missing_flat(pr) -> list:
+    out = []
+    for r in (pr.rentals, pr.jobs, pr.fixed_costs, pr.overhead):
+        if r is not None:
+            out += [m for m in r.missing if m not in out]
+    out += [m for m in pr.missing if m not in out and _is_decision(m)]
+    return out
+
+
+def _is_decision(text) -> bool:
+    return any(x in text for x in ("konflikt", "časové rozlišení", "obsazenost nelze"))
+
+
+def _missing(pr, excluded) -> list:
+    """Seznam chybějících údajů a rozhodnutí ve skupinách."""
+    costs, settings = [], []
+    for r in (pr.rentals, pr.jobs, pr.fixed_costs, pr.overhead):
+        for m in (r.missing if r is not None else ()):
+            target = settings if any(x in m for x in SETTING_MARKERS) else costs
+            if m not in target:
+                target.append(m)
+    decisions = []
+    if excluded.get(fe.CONFLICT):
+        decisions.append("řešení konfliktů (" + ", ".join(sorted(excluded[fe.CONFLICT])) + ")")
+    if excluded.get(fe.CROSSES):
+        decisions.append("pravidlo časového rozlišení závazků přesahujících období ("
+                         + ", ".join(sorted(excluded[fe.CROSSES])) + ")")
+    if excluded.get(fe.UNKNOWN):
+        decisions.append("závazky s nejistou obsazeností (" + ", ".join(sorted(excluded[fe.UNKNOWN])) + ")")
+    groups = [("Náklady a ceny", costs), ("Nastavení", settings), ("Rozhodnutí majitele", decisions)]
+    return [dict(group=g, items=items) for g, items in groups if items]
+
+
+# ---------------------------------------------------------------------------
+# Konflikty a varianty
+# ---------------------------------------------------------------------------
+
+def _conflict(case, names, plan_start) -> dict:
+    machines = [names.get(t, t) for t in case["types"]]
+    days = sorted({d for ds in case["days"].values() for d in ds})
+    commitments = [dict(ref=c["ref"], kind="pronájem" if c["kind"] == "rental" else "vlastní zakázka",
+                        period=days_text(list(range(c["start"], c["end"] + 1)), plan_start),
+                        **{k: v for k, v in _contribution_from(c).items()}) for c in case["commitments"]]
+    variants = sorted(case["variants"], key=lambda v: (VARIANT_ORDER.index(v["kind"])
+                                                       if v["kind"] in VARIANT_ORDER else 99, v["key"]))
+    return dict(
+        id=case["id"],
+        title=f"{', '.join(machines)} · {days_text(days, plan_start)} · "
+              + " × ".join([c["ref"] for c in case["commitments"]] + (["servis"] if case["services"] else [])),
+        machines=machines, days=days_text(days, plan_start), services=list(case["services"]),
+        commitments=commitments,
+        variants=[_variant(v, plan_start, names) for v in variants],
+        comparisons=[dict(a=c["a"], b=c["b"], text=c["text"]) for c in case["comparisons"]],
+        note="Nic se automaticky nevybírá, neruší ani nepřesouvá – rozhodne majitel.",
+    )
+
+
+def _contribution_from(c) -> dict:
+    """Příspěvek závazku v konfliktu – vždy „nezapočítáno“, hodnota jen pro informaci."""
+    value, status, missing = c["contribution"], c["contribution_status"], c["missing"]
+    if value is None or status == "nelze spočítat":
+        amount = "nelze určit"
+    elif status == "úplný":
+        amount = money(value)
+    elif _missing_only_costs(missing):
+        amount = f"nejvýše {money(value)}"
+    else:
+        amount = "nelze určit"
+    return dict(status=EXCLUDED, tone=TONE[EXCLUDED], text=amount,
+                explanation="v konfliktu – do výsledku se nezapočítává" + (
+                    "; chybí: " + "; ".join(missing) if missing else ""))
+
+
+FEASIBILITY_TEXT = {fe.FEASIBLE: "proveditelná", fe.CONDITIONAL: "podmíněná", fe.PARTIAL: "jen částečně",
+                    fe.NOT_EVALUABLE: "nelze vyhodnotit", fe.MANUAL: "ruční rozhodnutí"}
+
+
+def _variant(v, plan_start, names) -> dict:
+    title = VARIANT_TITLE.get(v["kind"], v["kind"])
+    feas = v["feasibility"]
+    if feas == fe.CONDITIONAL:
+        conds = [m for m in v["missing"] if _is_condition(m)]
+        rest = [m for m in v["missing"] if not _is_condition(m)]
+        amount = bounds_cell(*v["bounds"], conditional=True, conditions=conds)
+        if rest:
+            amount["explanation"] += " · chybí: " + "; ".join(rest)
+    elif feas == fe.FEASIBLE:
+        amount = bounds_cell(*v["bounds"])
+        if amount["status"] == UPPER:
+            amount["explanation"] = "chybí: " + "; ".join(v["missing"]) if v["missing"] else amount["explanation"]
+    elif feas == fe.MANUAL:
+        amount = _cell(EXCLUDED, "nelze vyčíslit", "konflikt trvá – oba závazky nelze splnit současně")
+    else:
+        amount = _cell(MISSING, "nelze určit", "chybí: " + "; ".join(v["missing"]))
+    return dict(key=v["key"], title=title, feasibility=FEASIBILITY_TEXT.get(feas, feas),
+                resolves={fe.RESOLVED: "ano", fe.PARTLY: "jen částečně", fe.NOT_RESOLVED: "ne"}.get(v["resolves"], "–"),
+                change=_change_text(v, plan_start), warnings=warnings_text(v.get("warnings", []), names, plan_start),
+                blockers=[f"{b['source']} ({days_text(b['days'], plan_start)})" for b in v.get("blockers", [])],
+                missing=list(v.get("missing", [])), amount=amount)
+
+
+def _change_text(v, plan_start) -> str:
+    ch = v.get("changes") or {}
+    if not ch:
+        return v.get("description", "")
+    old = days_text(list(range(ch["start"], ch["end"] + 1)), plan_start)
+    if "new_days_late" in ch:                                         # posun zakázky
+        new = days_text(list(range(ch["new_start"], ch["new_end"] + 1)), plan_start)
+        parts = [f"{ch['ref']}: {old} → {new}",
+                 f"zpoždění {ch['days_late']} → {ch['new_days_late']} dní"]
+        if ch.get("contribution_change") is not None:
+            parts.append(f"změna příspěvku zakázky {money(ch['contribution_change'])}")
+        if ch.get("penalty_free_starts") == []:
+            parts.append("bez penále posunout nelze")
+        return " · ".join(parts)
+    if ch.get("new_start") is None:                                   # zrušení pronájmu
+        return f"{ch['ref']}: zrušit ({old}) · uvolní {_md(ch['released_machine_days'])}"
+    new = days_text(list(range(ch["new_start"], ch["new_end"] + 1)), plan_start)
+    return f"{ch['ref']}: {old} → {new} · uvolní {_md(ch['released_machine_days'])}"
+
+
+def _md(n) -> str:
+    return f"{n} {_plural(n, 'strojoden', 'strojodny', 'strojodnů')}"
+
+
+def _is_condition(text) -> bool:
+    return any(x in text for x in ("souhlas zákazníka", "storno", "smluvní náhrad"))
+
+
+_WARNING = re.compile(r"^(?P<type>\S+) den (?P<day>\d+): (?P<text>.+)$")
+
+
+def warnings_text(warnings, names=None, plan_start=None) -> list:
+    """Varování po dnech sloučená podle stroje a důvodu: „Smykový nakladač, dny 20–23: …“."""
+    names = names or {}
+    grouped, other = {}, []
+    for w in warnings:
+        m = _WARNING.match(w)
+        if not m:
+            other.append(w)
+            continue
+        grouped.setdefault((m["type"], m["text"]), []).append(int(m["day"]))
+    return [f"{names.get(t, t)}, {days_text(d, plan_start)}: {text}" for (t, text), d in grouped.items()] + other
+
+
+def basis_text(text) -> str:
+    """Popis metody přepočtu s českou desetinnou čárkou (0.8333 → 0,8333)."""
+    return re.sub(r"(\d)\.(\d)", r"\1,\2", text or "")
+
+
+def _scenarios(pr) -> dict:
+    lo, hi = pr.range
+    if not pr.options.cases:
+        cell = bounds_cell(lo, hi)
+        return dict(applicable=False, cell=cell, counted=0, total=0, notes=[])
+    counted = [s for s in pr.scenarios if s.get("valid") and s.get("in_period")]
+    conditional = any(_has_condition(pr, s) for s in counted)
+    cell = bounds_cell(lo, hi, conditional=conditional and hi is not None,
+                       conditions=["souhlas zákazníka a výše storna / smluvní náhrady"] if conditional else ())
+    if not counted:
+        cell = _cell(MISSING, "nelze určit", "žádná kombinace variant nezůstane celá v období a bez konfliktu")
+    notes = [n for n in pr.notes if "kombinac" in n or "rozpětí" in n]
+    return dict(applicable=True, cell=cell, counted=len(counted), total=len(pr.scenarios), notes=notes,
+                text="Rozpětí výsledku přes ověřené kombinace variant konfliktů – žádná varianta se nevybírá.")
+
+
+def _has_condition(pr, scenario) -> bool:
+    keys = set(scenario["variants"].values())
+    return any(v["key"] in keys and v["feasibility"] == fe.CONDITIONAL
+               for c in pr.options.cases for v in c["variants"])
+
+
+# ---------------------------------------------------------------------------
+# Předběžné a nejisté závazky, evidence, využití
+# ---------------------------------------------------------------------------
+
+def _pending(led, plan_start) -> list:
+    rows = []
+    for r in led.entries.itertuples():
+        if r.state in (fe.TENTATIVE, fe.CROSSES, fe.UNKNOWN):
+            rows.append(_entry_row(r, plan_start))
+    return rows
+
+
+def _ledger(led, plan_start) -> list:
+    return [_entry_row(r, plan_start) for r in led.entries.itertuples()]
+
+
+def _entry_row(r, plan_start) -> dict:
+    res = fe.ec.Result(r.contribution, tuple(r.missing), tuple(r.invalid))
+    cell = contribution_cell(res)
+    if r.state != fe.CERTAIN:
+        cell = dict(cell, status=EXCLUDED, tone=TONE[EXCLUDED],
+                    explanation="; ".join(x for x in (STATE_TEXT.get(r.state, r.state), cell["explanation"]) if x))
+    period = (days_text(list(range(r.start, r.end + 1)), plan_start)
+              if isinstance(r.start, int) and isinstance(r.end, int) else "bez termínu")
+    return dict(ref=r.ref, kind="pronájem" if r.kind == "rental" else "vlastní zakázka", name=r.name or "",
+                period=period, date_source=r.date_source, state=r.state,
+                counted=bool(r.counted_as_certain), machines=r.needs, unit_assignment=r.unit_assignment,
+                machine_days=r.machine_days, machine_days_in_period=r.md_in_period, **cell)
+
+
+def _usage(usage, names) -> list:
+    if usage is None or usage.by_type is None:
+        return []
+    rows = []
+    for r in usage.by_type.itertuples():
+        rows.append(dict(type_id=r.type_id, name=names.get(r.type_id, r.type_id),
+                         capacity=int(r.capacity) if r.capacity_known else None,
+                         rental=int(r.rental), job=int(r.job), maintenance=int(r.maintenance),
+                         conflict=int(r.conflict), unknown=int(r.unknown), free=int(r.free),
+                         capacity_known=bool(r.capacity_known), unit_level=r.unit_level))
+    return rows
