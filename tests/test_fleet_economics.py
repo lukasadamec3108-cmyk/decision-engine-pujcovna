@@ -341,9 +341,11 @@ def test_module_is_standalone_and_not_connected_to_ui():
                                                          "datetime"}
     names = {n.name for n in tree.body if isinstance(n, ast.FunctionDef) and not n.name.startswith("_")}
     assert names == {"period_ledger", "conflict_options", "period_result"}   # jen K3.1–K3.3, žádné další kroky
-    # fleet_view.py je zobrazovací vrstva K3.4a nad tímto modulem; sama do UI napojená není
-    # (hlídá tests/test_fleet_view.py) – proto se tu vynechává.
-    for path in [ROOT / "app.py", *ROOT.glob("*_view.py"), *(ROOT / "stranky").glob("*.py")]:
+        # K3.4c: app.py modul používá jen na stránce Ekonomika flotily (výpočet v mezipaměti); jinde nikde
+    sys.path.insert(0, str(ROOT / "tests"))
+    from app_pages import outside_economics_page
+    assert outside_economics_page("fleet_economics", "fe") == []
+    for path in [*ROOT.glob("*_view.py"), *(ROOT / "stranky").glob("*.py")]:
         if path.name != "fleet_view.py":
             assert "fleet_economics" not in path.read_text(encoding="utf-8"), path
 

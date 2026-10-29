@@ -92,10 +92,81 @@
    },
    "expanders": [],
    "numbers": {
-    "2": 2
+    "0": 78,
+    "005": 8,
+    "006": 8,
+    "01": 4,
+    "05": 14,
+    "06": 2,
+    "07": 2,
+    "1": 70,
+    "1 425 000": 2,
+    "10": 14,
+    "108 500": 2,
+    "11": 24,
+    "115 000": 2,
+    "12": 20,
+    "135 000": 2,
+    "14": 4,
+    "142 000": 4,
+    "15": 16,
+    "151 500": 2,
+    "16": 6,
+    "17": 16,
+    "18": 18,
+    "19": 8,
+    "194 500": 6,
+    "2": 54,
+    "20": 4,
+    "20 000": 2,
+    "21": 4,
+    "23": 2,
+    "24": 36,
+    "25": 22,
+    "26": 2,
+    "27": 2,
+    "3": 42,
+    "4": 38,
+    "47 500": 2,
+    "5": 52,
+    "6": 40,
+    "635 000": 4,
+    "7": 40,
+    "700 000": 2,
+    "8": 72,
+    "81 000": 2,
+    "829 500": 4,
+    "9": 8,
+    "90 000": 2
    },
-   "text": "fae33bbe601a27a4",
-   "widgets": []
+   "text": "54e4994901959496",
+   "widgets": [
+    {
+     "key": "fe_period",
+     "label": "Období (dny plánu)",
+     "options": [],
+     "type": "slider",
+     "value": "(1, 25)"
+    },
+    {
+     "key": "fe_plan_start",
+     "label": "Datum prvního dne plánu (nepovinné)",
+     "options": [],
+     "type": "date_input",
+     "value": "None"
+    },
+    {
+     "key": "fe_method",
+     "label": "Fixní náklady a režie za období",
+     "options": [
+      "Nezadávat – fixní náklady a režie se neodečtou (výsledek je horní mez)",
+      "Zadat počet měsíců",
+      "Podle kalendáře (vyžaduje datum prvního dne plánu)"
+     ],
+     "type": "radio",
+     "value": "Nezadávat – fixní náklady a režie se neodečtou (výsledek je horní mez)"
+    }
+   ]
   },
   "sidebar": {
    "elements": {

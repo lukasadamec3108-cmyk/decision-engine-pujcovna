@@ -17,6 +17,9 @@ import capacity as cp
 import capacity_view as cv
 import datamodel as dm
 import econ_formula as ef
+import fleet_economics as fe
+import fleet_usage as fu
+import fleet_view as fv
 import formatting
 import investice as inv
 import navigace as navreg
@@ -42,6 +45,9 @@ cp = importlib.reload(cp)
 cv = importlib.reload(cv)
 pl = importlib.reload(pl)
 ef = importlib.reload(ef)
+fu = importlib.reload(fu)                   # pořadí: využití → ekonomika → zobrazení (závisí na sobě)
+fe = importlib.reload(fe)
+fv = importlib.reload(fv)
 pv = importlib.reload(pv)
 rv = importlib.reload(rv)
 inv = importlib.reload(inv)
@@ -310,7 +316,7 @@ with sb_user:
     st.button("Odhlásit se", key="logout", on_click=_log_out, width="stretch")
 
 # Verze dat a kódu jako součást klíčů mezipaměti (≈ 1 ms na běh) – viz load_data_model.
-CODE_MODULES = (dm, sch, cp, cv, pl, ef, pv)
+CODE_MODULES = (dm, sch, cp, cv, pl, ef, pv, fu, fe, fv)
 data_version = dm.data_fingerprint()
 code_version = dm.files_fingerprint([m.__file__ for m in CODE_MODULES])
 _tables, _issues = load_data_model(data_version, code_version)
@@ -2881,28 +2887,146 @@ if PAGE == "dashboard":
 
 
 # ==================================================
-# EKONOMIKA FLOTILY (E2.2 – K3.4b) – zatím jen kostra stránky
+# EKONOMIKA FLOTILY (E2.2 – K3.4c) – výsledek flotily za období
 # ==================================================
-# Stránka zatím NIC NEPOČÍTÁ a nezobrazuje žádnou částku ani ukazatel. V kroku K3.4c se sem připojí
-# zobrazovací vrstva ekonomiky flotily z kroku K3.4a (výsledek K3.3) – na vyznačená místa níže.
-# Upozornění je stejné jako ve zobrazovací vrstvě (hlídá test), aby se po připojení nezměnilo.
+# Jen zobrazuje výsledek fleet_economics.period_result převedený zobrazovací vrstvou fleet_view.build.
+# Termíny zakázek z plánu Vlastních zakázek (stejná funkce plan_jobs, výsledek z mezipaměti), výchozí
+# období jako Plánování kapacity. Nic se nevybírá, neruší ani nepřesouvá; fixní náklady a režie se
+# odečtou jen při výslovně zvolené metodě přepočtu (výchozí: nezadávat).
 FLEET_ECON_TITLE = "Ekonomika flotily"
 FLEET_ECON_INTRO = ("Společný ekonomický výsledek flotily za zvolené období: jisté příspěvky pronájmů "
                     "a vlastních zakázek, fixní náklady, režie a konflikty. Vychází z <b>ukázkových dat</b>.")
-FLEET_ECON_BADGE = "Ukázková data / neúplné"
-FLEET_ECON_NOT_NET_PROFIT = "Neúplný výsledek – nejde o čistý zisk."
-FLEET_ECON_PENDING = ("Ekonomické výsledky budou doplněny v následujícím kroku. Zatím se zde nic nepočítá "
-                      "a nezobrazují se žádné částky.")
+FLEET_ECON_NOT_NET_PROFIT = fv.NOT_NET_PROFIT
+FLEET_ECON_METHODS = {
+    "Nezadávat – fixní náklady a režie se neodečtou (výsledek je horní mez)": None,
+    "Zadat počet měsíců": "months",
+    "Podle kalendáře (vyžaduje datum prvního dne plánu)": "calendar_days",
+}
+FE_CHIP_TONE = {"good": "good", "warn": "warn", "info": "info", "bad": "bad", "neutral": "info"}
+FE_KPI_ICONS = {"pronajem": "truck", "zakazky": "route", "fixni": "gauge", "celkem": "coins"}
+
+
+@st.cache_data(show_spinner="Počítám ekonomiku flotily…", max_entries=32)
+def fleet_economics_view(data_version: str, code_version: str, job_starts: tuple, start: int, end: int,
+                         method, months, plan_start):
+    """Obsah stránky Ekonomika flotily (fleet_view.build nad fleet_economics.period_result).
+
+    Výpočet trvá jednotky sekund – mezipaměť ho přepočítá jen při změně vstupů nebo dat / kódu.
+    Ukládají se jen obyčejné hodnoty (texty, čísla, seznamy), viz load_data_model.
+    """
+    tables, _ = load_data_model(data_version, code_version)
+    model = dm.DataModel(**tables)
+    pr = fe.period_result(model, start, end, dict(job_starts), fixed_cost_method=method, months=months,
+                          plan_start=plan_start)
+    return fv.build(pr, cv.type_names(model), plan_start)
+
+
+def fe_chip(status: str, tone: str) -> str:
+    return ui.dash_chip(status, FE_CHIP_TONE.get(tone, "info"))
+
+
+def fe_banner(b: dict) -> None:
+    text = html.escape(b["text"])
+    if b["text"].startswith(FLEET_ECON_NOT_NET_PROFIT):
+        text = f"<b>{html.escape(FLEET_ECON_NOT_NET_PROFIT)}</b>" + html.escape(b["text"][len(FLEET_ECON_NOT_NET_PROFIT):])
+    ui.insight(text, "bad" if b["tone"] in ("bad", "warn") else "")
+
 
 if PAGE == "ekonomika":
+    st.markdown(ui.ECON_CSS, unsafe_allow_html=True)
     with ui.tab_container("ekonomika"):
         ui.tab_header(FLEET_ECON_TITLE, FLEET_ECON_INTRO)
-        st.markdown(ui.status_chip(FLEET_ECON_BADGE, "warn"), unsafe_allow_html=True)
-        # K3.4c: upozornění ze zobrazovací vrstvy – nahradí pevné upozornění níže
-        ui.insight(f"<b>{html.escape(FLEET_ECON_NOT_NET_PROFIT)}</b>", "bad")
-        # K3.4c: filtry období a metody fixních nákladů (výchozí: nezadávat), ukazatele a rozpad výsledku
-        # K3.4d: konflikty a varianty (jen čtení) · K3.4e: předběžné závazky, využití, evidence, metodika
-        ui.hint(html.escape(FLEET_ECON_PENDING))
+        fe_badge = st.empty()
+        _, fe_plan, _ = plan_jobs(jobs_df, machine_capacity, code_version)
+        fe_starts = cv.job_starts_from_plan(jobs_df, fe_plan)
+        fe_default_end, fe_max_day = cv.period_bounds(cv.build(data_model, fe_starts))
+        fe_top = ui.summary_slot("ekonomika")                 # upozornění a ukazatele – naplní se po filtrech
+
+        with ui.filter_box("ekonomika", "Období a fixní náklady"):
+            f1, f2 = st.columns([3, 2])
+            with f1:
+                fe_from, fe_to = st.slider("Období (dny plánu)", min_value=1, max_value=fe_max_day,
+                                           value=(1, fe_default_end), key="fe_period")
+            with f2:
+                fe_start = st.date_input("Datum prvního dne plánu (nepovinné)", value=None, key="fe_plan_start",
+                                         format="DD.MM.YYYY")
+            fe_label = st.radio("Fixní náklady a režie za období", list(FLEET_ECON_METHODS), key="fe_method")
+            fe_method = FLEET_ECON_METHODS[fe_label]
+            fe_months = None
+            if fe_method == "months":
+                fe_months = st.number_input("Počet měsíců", min_value=0.01, max_value=24.0, value=1.0, step=0.25,
+                                            format="%.2f", key="fe_months")
+            ui.hint("Metodu přepočtu měsíčních fixních nákladů a režie na období volíte vy – aplikace žádnou "
+                    "nepředpokládá. Režie se odečte jen tehdy, když je v datech zadaná.")
+
+        fe_view = fleet_economics_view(data_version, code_version, tuple(sorted(fe_starts.items())),
+                                       int(fe_from), int(fe_to), fe_method, fe_months, fe_start)
+        fe_badge.markdown(ui.status_chip("Ukázková data" + (" / neúplné" if fe_view["status"] != fv.COMPLETE else ""),
+                                         "warn"), unsafe_allow_html=True)
+
+        with fe_top:
+            for b in fe_view["banners"]:
+                fe_banner(b)
+            if fe_view["computable"]:
+                st.markdown(f'<div class="dd-section-title">Hlavní ukazatele <small>{html.escape(fe_view["period"])}'
+                            "</small></div>", unsafe_allow_html=True)
+                ui.dash_kpis([dict(
+                    icon=FE_KPI_ICONS[h["key"]], label=h["label"], value=html.escape(h["text"]), cls="word",
+                    chip=fe_chip(h["status"], h["tone"]),
+                    sub=html.escape(h["meaning"]) + f'<span class="dd-period">Období: {html.escape(h["period"])}</span>',
+                    tone="neutral") for h in fe_view["headline"]])
+
+        if fe_view["computable"]:
+            st.markdown('<div class="dd-section-title">Rozpad výsledku <small>jen podložené částky – neznámé '
+                        "položky jsou označené</small></div>", unsafe_allow_html=True)
+            fe_cols = st.columns(len(fe_view["components"]))
+            for col, g in zip(fe_cols, fe_view["components"]):
+                with col, ui.dash_section("ekon_" + {"Pronájem strojů": "pronajem", "Vlastní zakázky": "zakazky"}
+                                          .get(g["group"], "flotila")):
+                    ui.dash_section_head({"Pronájem strojů": "truck", "Vlastní zakázky": "route"}.get(g["group"], "coins"),
+                                         g["group"], html.escape(g["note"]))
+                    ui.dash_rows([(r["item"], html.escape(r["text"]), fe_chip(r["status"], r["tone"]),
+                                   r.get("total", False)) for r in g["rows"]])
+
+            st.markdown('<div class="dd-section-title">Co chybí k přesnému výsledku</div>', unsafe_allow_html=True)
+            with ui.dash_section("ekon_chybi_" + ("bad" if fe_view["missing"] else "good")):
+                if fe_view["missing"]:
+                    for grp in fe_view["missing"]:
+                        st.markdown(f'<div class="dd-group">{html.escape(grp["group"])}</div><ul class="dd-list">'
+                                    + "".join(f"<li>{html.escape(item)}</li>" for item in grp["items"]) + "</ul>",
+                                    unsafe_allow_html=True)
+                else:
+                    ui.dash_text("Pro zvolené období a metodu nechybí žádný údaj ani rozhodnutí.")
+
+            fe_cases = fe_view["conflicts"]
+            st.markdown('<div class="dd-section-title">Kapacitní konflikty a možné varianty <small>'
+                        + html.escape(f"{len(fe_cases)} {fv._plural(len(fe_cases), 'případ', 'případy', 'případů')}")
+                        + "</small></div>", unsafe_allow_html=True)
+            if not fe_cases:
+                ui.dash_text("V období nejsou konflikty potvrzených pronájmů, zakázek a servisu.", muted=True)
+            for case in fe_cases:
+                with ui.dash_section(f"ekon_konflikt_{case['id']}_bad"):
+                    ui.dash_section_head("alert", case["title"], html.escape(case["note"]), tone="bad")
+                    ui.dash_rows([(f"{c['ref']} – {c['kind']}", html.escape(c["text"]),
+                                   html.escape(c["period"]) + " · " + fe_chip(c["status"], c["tone"]))
+                                  for c in case["commitments"]]
+                                 + ([("Servis", "", html.escape(", ".join(case["services"])))] if case["services"] else []))
+                    ui.dash_variants([dict(
+                        title=v["title"], sub=f"{v['feasibility']} · vyřeší konflikt: {v['resolves']}",
+                        tag=v["amount"]["status"],
+                        rows=[("Příspěvek dotčených závazků", html.escape(v["amount"]["text"]))],
+                        why="<ul>" + "".join(f"<li>{html.escape(x)}</li>" for x in
+                                             ([v["change"]] if v["change"] else [])
+                                             + [f"Varování: {w}" for w in v["warnings"]]
+                                             + ([v["amount"]["explanation"]] if v["amount"]["explanation"] else []))
+                        + "</ul>") for v in case["variants"]])
+            if fe_cases:
+                sc = fe_view["scenarios"]
+                with ui.dash_section("ekon_rozpeti_neutral"):
+                    ui.dash_kv("Rozpětí celkového výsledku přes ověřené varianty", html.escape(sc["cell"]["text"]),
+                               fe_chip(sc["cell"]["status"], sc["cell"]["tone"]) + " "
+                               + html.escape(sc["cell"]["explanation"] or sc.get("text", "")))
+                    ui.dash_text(html.escape(sc.get("text", "")) + " Rozhodnutí je na majiteli půjčovny.", muted=True)
 
 
 # ==================================================

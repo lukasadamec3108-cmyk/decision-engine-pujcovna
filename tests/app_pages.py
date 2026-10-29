@@ -20,3 +20,23 @@ def open_page(at, key: str):
 def page(at):
     """Hlavní plocha aktivní stránky (dříve obsah záložky)."""
     return at.main
+
+
+ECON_PAGE_START = "# EKONOMIKA FLOTILY"
+ECON_PAGE_END = "# STROJOVÝ PARK"
+
+
+def outside_economics_page(module: str, alias: str) -> list:
+    """Řádky app.py, které používají ekonomiku flotily MIMO stránku Ekonomika flotily (K3.4c).
+
+    Povolené je jen: import, importlib.reload, CODE_MODULES (klíč mezipaměti) a blok stránky
+    „Ekonomika flotily“. Jinde se moduly fleet_usage / fleet_economics / fleet_view použít nesmějí.
+    """
+    import re
+    lines = (ROOT / "app.py").read_text(encoding="utf-8").splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith(ECON_PAGE_START))
+    end = next(i for i, line in enumerate(lines) if line.startswith(ECON_PAGE_END))
+    pattern = re.compile(rf"\b({re.escape(module)}|{re.escape(alias)}\.)")
+    allowed = (f"import {module} as {alias}", f"{alias} = importlib.reload({alias})", "CODE_MODULES = (")
+    return [f"{i + 1}: {line}" for i, line in enumerate(lines)
+            if pattern.search(line) and not (start <= i < end) and not line.strip().startswith(allowed)]
