@@ -322,8 +322,10 @@ def test_module_is_standalone_and_not_connected_to_ui():
     imported = {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
     imported |= {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     assert "streamlit" not in imported
-    # fleet_view.py je zobrazovací vrstva K3.4a nad tímto modulem; sama do UI napojená není
-    # (hlídá tests/test_fleet_view.py) – proto se tu vynechává.
-    for path in [ROOT / "app.py", *ROOT.glob("*_view.py"), *(ROOT / "stranky").glob("*.py")]:
+        # K3.4c: app.py modul používá jen na stránce Ekonomika flotily (výpočet v mezipaměti); jinde nikde
+    sys.path.insert(0, str(ROOT / "tests"))
+    from app_pages import outside_economics_page
+    assert outside_economics_page("fleet_usage", "fu") == []
+    for path in [*ROOT.glob("*_view.py"), *(ROOT / "stranky").glob("*.py")]:
         if path.name != "fleet_view.py":
             assert "fleet_usage" not in path.read_text(encoding="utf-8"), path

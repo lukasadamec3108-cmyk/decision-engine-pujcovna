@@ -163,7 +163,8 @@ def build(pr, names=None, plan_start=None) -> dict:
         return dict(status=MISSING, computable=False,
                     banners=[dict(tone="bad", text="Výsledek nelze spočítat: " + "; ".join(reasons))],
                     kpis=[], breakdown=[], missing=[], conflicts=[], scenarios=dict(), pending=[],
-                    ledger=[], usage=[], method=dict(text="", chosen=False))
+                    ledger=[], usage=[], method=dict(text="", chosen=False), headline=[], components=[],
+                    period=_period(pr, plan_start) if pr is not None else "")
     led = pr.options.ledger
     rentals, jobs = contribution_cell(pr.rentals), contribution_cell(pr.jobs)
     fixed, overhead = cost_cell(pr.fixed_costs), cost_cell(pr.overhead)
@@ -181,7 +182,125 @@ def build(pr, names=None, plan_start=None) -> dict:
         ledger=_ledger(led, plan_start),
         usage=_usage(led.usage, names),
         method=dict(text=basis_text(pr.fixed_cost_basis), chosen=pr.months is not None),
+        period=_period(pr, plan_start),
+        headline=_headline(pr, rentals, jobs, fixed, overhead, result, plan_start),
+        components=_components(pr, rentals, jobs, fixed, overhead, result),
     )
+
+
+# ---------------------------------------------------------------------------
+# Hlavní ukazatele stránky a rozpad výsledku (K3.4c)
+# ---------------------------------------------------------------------------
+# Jen skládá hotové částky: příspěvky jednotlivých JISTÝCH závazků z economics.py (ledger.results)
+# a jejich položky (tržba, variabilní náklady, přímé náklady, penále). Položka, kterou economics
+# označí jako chybějící, se do součtu nezapočte a zůstane „nezadáno“ – nikdy jako 0.
+
+PART_MARKERS = {
+    "tržba z pronájmu": ("cena pronájmu/den", "cena rezervace"),
+    "variabilní náklady pronájmu": ("variabilní náklad pronájmu/den",),
+    "tržba ze zakázky": (": tržba",),
+    "přímé náklady": (": přímé náklady",),
+    "penále": ("penále/den",),
+    "variabilní náklady strojů": ("variabilní náklad na zakázce/den", "direct_cost_includes_machines"),
+}
+MACHINES_IN_DIRECT = "obsaženy v přímých nákladech zakázek"
+
+
+def _period(pr, plan_start=None) -> str:
+    s, e = getattr(pr, "start", None), getattr(pr, "end", None)
+    if not (isinstance(s, int) and isinstance(e, int)) or isinstance(s, bool) or e < s:
+        return "neplatné období"
+    n = e - s + 1
+    return f"{days_text(list(range(s, e + 1)), plan_start)} ({n} {_plural(n, 'den', 'dny', 'dní')})"
+
+
+def _certain_results(pr, kind) -> list:
+    led = pr.options.ledger
+    return [led.results[(kind, r.ref)] for r in led.entries.itertuples() if r.counted_as_certain and r.kind == kind]
+
+
+def part_total(results, key, cost: bool = False):
+    """Součet jedné položky (např. „tržba z pronájmu“) přes závazky jako economics.Result.
+
+    Závazek, u něhož economics položku označí jako chybějící, se do součtu nezapočte a štítek
+    chybějícího údaje se přenese – výsledek je pak neúplný (u nákladu „nejméně“, u tržby „nelze určit“).
+    """
+    value, missing, invalid = 0.0, [], []
+    for r in results:
+        if r.invalid or r.value is None:
+            invalid += [x for x in (r.invalid or ("neplatný údaj",)) if x not in invalid]
+            continue
+        hit = [m for m in r.missing if any(x in m for x in PART_MARKERS[key])]
+        if hit:
+            missing += [m for m in hit if m not in missing]
+            continue
+        v = r.parts.get(key)
+        if v is not None:
+            value += abs(v) if cost else v
+    return fe.ec.Result(None if invalid else value, tuple(missing), tuple(invalid))
+
+
+def _negative(cell) -> dict:
+    """Náklad jako odečítaná položka: „−440 000 Kč“ (jen u známé nenulové částky)."""
+    if cell["status"] == COMPLETE and cell.get("value"):
+        return dict(cell, text="−" + cell["text"])
+    return cell
+
+
+def _headline(pr, rentals, jobs, fixed, overhead, result, plan_start) -> list:
+    period = _period(pr, plan_start)
+    ovh = ("režie započtena" if overhead["status"] == COMPLETE
+           else "režie není známá – nezapočtena (výsledek je nejvýše uvedená částka)")
+    fixed_note = (basis_text(pr.fixed_cost_basis) if pr.months is not None
+                  else "metoda přepočtu na období není zvolena – fixní náklady nejsou odečteny")
+    return [
+        dict(key="pronajem", label="Výsledek z pronájmu strojů", period=period, **_kpi(rentals),
+             meaning="příspěvek jistých pronájmů: tržby − variabilní náklady pronájmu"),
+        dict(key="zakazky", label="Výsledek z vlastních zakázek", period=period, **_kpi(jobs),
+             meaning="příspěvek jistých zakázek: tržby − přímé náklady − penále − variabilní náklady strojů "
+                     "(pokud nejsou v přímých nákladech)"),
+        dict(key="fixni", label="Fixní náklady flotily", period=period, **_kpi(fixed),
+             meaning="odečteny jednou za celou flotilu (vlastněné a leasingové kusy, včetně průměrného servisu); "
+                     + fixed_note),
+        dict(key="celkem", label="Celkový výsledek flotily", period=period, **_kpi(result),
+             meaning="jisté příspěvky − fixní náklady − režie; " + ovh
+                     + "; závazky v konfliktu a předběžné se nezapočítávají"),
+    ]
+
+
+def _components(pr, rentals, jobs, fixed, overhead, result) -> list:
+    """Rozpad výsledku po skupinách: [dict(group, rows=[dict(item, text, status, tone, explanation, …)])]."""
+    rent_r, job_r = _certain_results(pr, "rental"), _certain_results(pr, "job")
+
+    def revenue(key, results):
+        return contribution_cell(part_total(results, key)) if results else _cell(COMPLETE, money(0), "žádný jistý závazek", 0.0)
+
+    def cost(key, results):
+        if not results:
+            return _cell(COMPLETE, money(0), "žádný jistý závazek", 0.0)
+        return _negative(cost_cell(part_total(results, key, cost=True)))
+
+    machine = cost("variabilní náklady strojů", job_r)
+    if job_r and not any("variabilní náklady strojů" in r.parts for r in job_r) \
+            and not any(any(x in m for x in PART_MARKERS["variabilní náklady strojů"]) for r in job_r for m in r.missing):
+        machine = _cell(COMPLETE, MACHINES_IN_DIRECT, "podle nastavení direct_cost_includes_machines – neodečítají se znovu")
+    n_rent, n_job = len(rent_r), len(job_r)
+    return [
+        dict(group="Pronájem strojů", note=f"{n_rent} {_plural(n_rent, 'jistý pronájem', 'jisté pronájmy', 'jistých pronájmů')}",
+             rows=[dict(item="Tržby z pronájmu", **revenue("tržba z pronájmu", rent_r)),
+                   dict(item="Variabilní náklady pronájmu", **cost("variabilní náklady pronájmu", rent_r)),
+                   dict(item="Příspěvek pronájmu", total=True, **rentals)]),
+        dict(group="Vlastní zakázky", note=f"{n_job} {_plural(n_job, 'jistá zakázka', 'jisté zakázky', 'jistých zakázek')}",
+             rows=[dict(item="Tržby ze zakázek", **revenue("tržba ze zakázky", job_r)),
+                   dict(item="Přímé náklady zakázek", **cost("přímé náklady", job_r)),
+                   dict(item="Penále za zpoždění", **cost("penále", job_r)),
+                   dict(item="Variabilní náklady strojů na zakázkách", **machine),
+                   dict(item="Příspěvek vlastních zakázek", total=True, **jobs)]),
+        dict(group="Flotila", note="náklady se odečítají jednou za celou flotilu",
+             rows=[dict(item="Fixní náklady flotily", **_negative(fixed)),
+                   dict(item="Režie", **_negative(overhead)),
+                   dict(item="Celkový výsledek flotily", total=True, **result)]),
+    ]
 
 
 def _excluded(led) -> dict:

@@ -941,3 +941,26 @@ FLEET_CSS = JOBS_CSS.replace(_JOBS, _FLEET).replace("</style>", f"""
   {_FLEET} table.dd-cmp td.chg {{ background: none; }}
 }}
 </style>""")
+
+
+# ---------------------------------------------------------------------------
+# Ekonomika flotily (E2.2 – K3.4c): stejné komponenty a styly jako Pronájem strojů (dd-*, karty variant),
+# jen jiný kontejner. Jen zobrazení – hodnoty dodává app.py z fleet_view.build.
+# ---------------------------------------------------------------------------
+
+ECON_KEY = TAB_KEY_PREFIX + "ekonomika"
+_ECON = f".st-key-{ECON_KEY}"
+
+ECON_CSS = RENTAL_CSS.replace(_RENT, _ECON).replace("</style>", f"""
+{_ECON} .dd-kpis .dd-val.word {{ font-size: 1.5rem; }}
+{_ECON} .dd-sub .dd-period {{ display: block; margin-top: .3rem; font-weight: 600; color: {INK}; }}
+{_ECON} .dd-row .l .dd-chip {{ margin-top: .25rem; display: inline-block; }}
+{_ECON} .dd-row .v {{ white-space: normal; }}
+{_ECON} ul.dd-list li .dd-chip {{ margin-left: .3rem; }}
+{_ECON} .dd-var-why ul {{ margin: .2rem 0 0 1rem; padding: 0; }}
+@media (max-width: 640px) {{
+  {_ECON} .dd-kpis .dd-val.word {{ font-size: 1.1rem; }}
+  {_ECON} .dd-row {{ flex-wrap: wrap; }}
+  {_ECON} .dd-row .v {{ text-align: left; }}
+}}
+</style>""")

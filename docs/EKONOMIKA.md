@@ -247,6 +247,30 @@ Každá částka má právě jeden z pěti stavů:
   které je u každého neúplného výsledku (hlídá test).
 - Varianty konfliktů mají pevné pořadí podle druhu (ne podle částky) – nic se nedoporučuje.
 
+## Stránka „Ekonomika flotily“ (K3.4b–K3.4c)
+
+Stránka ve skupině Přehled pod Dashboardem zobrazuje výsledek `fleet_economics.period_result`
+převedený `fleet_view.build`. Výpočet běží v mezipaměti (`fleet_economics_view` v `app.py`) – nic jiného
+se nepočítá a žádná jiná stránka se nemění.
+
+- **Vstupy:** termíny zakázek z plánu stránky Vlastní zakázky (stejná funkce `plan_jobs`), období
+  v dnech plánu (výchozí jako Plánování kapacity), volitelné datum dne 1 a **metoda přepočtu
+  fixních nákladů a režie** – výchozí „nezadávat“ (fixní náklady a režie se neodečtou, výsledek je
+  horní mez), „zadat počet měsíců“, nebo „podle kalendáře“ (vyžaduje datum dne 1).
+- **Čtyři ukazatele** (každý s významem, obdobím a stavem): výsledek z pronájmu strojů, výsledek
+  z vlastních zakázek, fixní náklady flotily, celkový výsledek flotily (režie jen pokud je zadaná).
+- **Rozpad výsledku:** tržby, variabilní náklady pronájmu, přímé náklady, penále, variabilní náklady
+  strojů na zakázkách, fixní náklady, režie. Součty jen z příspěvků jistých závazků z `economics.py`;
+  položka, kterou `economics.py` označí jako chybějící, je „nezadáno“ – nikdy 0 Kč.
+- **Co chybí k přesnému výsledku:** konkrétní chybějící údaje a rozhodnutí z modelu.
+- **Kapacitní konflikty a varianty** (K3.2) včetně rozpětí scénářů (K3.3) – jen přehled, nic se
+  nevybírá ani nemění, rozhodne majitel.
+- Neúplný výsledek má vždy upozornění „Neúplný výsledek – nejde o čistý zisk.“
+
+Na ukázkových datech (dny 1–25) jsou všechny ekonomické částky **horní meze** nebo „chybí údaje“
+(chybí variabilní náklady pronájmu, nastavení `direct_cost_includes_machines`, režie a rozhodnutí
+konfliktů); přesný výsledek ani čistý zisk z nich určit nelze.
+
 ## Regrese
 
 - `tests/test_econ_consistency.py` – shoda modulů s `economics.py`, ochrana před dvojím započtením,

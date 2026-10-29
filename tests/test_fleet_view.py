@@ -278,6 +278,100 @@ def test_module_is_standalone_and_not_connected_to_ui():
     imported = {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
     imported |= {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     assert "streamlit" not in imported
-    for path in [ROOT / "app.py", ROOT / "navigace.py", *ROOT.glob("*_view.py"), *(ROOT / "stranky").glob("*.py")]:
+    # K3.4c: app.py používá zobrazovací vrstvu jen na stránce Ekonomika flotily; jinde nikde
+    from app_pages import outside_economics_page
+    assert outside_economics_page("fleet_view", "fv") == []
+    for path in [ROOT / "navigace.py", *ROOT.glob("*_view.py"), *(ROOT / "stranky").glob("*.py")]:
         if path.name != "fleet_view.py":
             assert "fleet_view" not in path.read_text(encoding="utf-8"), path
+
+
+# ---------------------------------------------------------------------------
+# K3.4c – hlavní ukazatele stránky a rozpad výsledku
+# ---------------------------------------------------------------------------
+
+def head(v, key):
+    return next(h for h in v["headline"] if h["key"] == key)
+
+
+def comp(v, item):
+    return next(r for g in v["components"] for r in g["rows"] if r["item"] == item)
+
+
+def test_headline_has_four_indicators_with_meaning_period_and_state():
+    v = SAMPLE_M
+    assert [h["label"] for h in v["headline"]] == ["Výsledek z pronájmu strojů", "Výsledek z vlastních zakázek",
+                                                    "Fixní náklady flotily", "Celkový výsledek flotily"]
+    for h in v["headline"]:
+        assert h["status"] in fv.STATUSES and h["meaning"] and h["period"] == "dny 1–25 (25 dní)"
+    assert head(v, "pronajem")["text"] == f"nejvýše 194{NBSP}500" + K and head(v, "pronajem")["status"] == fv.UPPER
+    assert head(v, "zakazky")["text"] == f"nejvýše 635{NBSP}000" + K
+    assert head(v, "fixni")["text"] == f"440{NBSP}000" + K and head(v, "fixni")["status"] == fv.COMPLETE
+    assert head(v, "celkem")["text"] == f"nejvýše 389{NBSP}500" + K
+    assert "režie není známá" in head(v, "celkem")["meaning"]
+    assert head(SAMPLE, "fixni")["text"] == "nezadáno" and head(SAMPLE, "fixni")["status"] == fv.MISSING
+
+
+def test_sample_components_sum_up_without_double_counting():
+    v = SAMPLE_M
+    assert comp(v, "Tržby z pronájmu")["value"] == 194500 and comp(v, "Tržby z pronájmu")["status"] == fv.COMPLETE
+    assert comp(v, "Variabilní náklady pronájmu")["text"] == "nezadáno"            # chybí sazby – ne 0 Kč
+    assert comp(v, "Tržby ze zakázek")["value"] == 1425000
+    assert comp(v, "Přímé náklady zakázek")["text"] == f"−700{NBSP}000" + K
+    assert comp(v, "Penále za zpoždění")["text"] == f"−90{NBSP}000" + K
+    assert comp(v, "Variabilní náklady strojů na zakázkách")["status"] == fv.MISSING
+    # tržby − přímé náklady − penále = příspěvek zakázek (stejné závazky, každý jednou)
+    assert 1425000 - 700000 - 90000 == comp(v, "Příspěvek vlastních zakázek")["value"] == 635000
+    assert comp(v, "Fixní náklady flotily")["text"] == f"−440{NBSP}000" + K
+    assert comp(v, "Celkový výsledek flotily")["value"] == 194500 + 635000 - 440000
+    fixed_rows = [r for g in v["components"] for r in g["rows"] if "Fixní" in r["item"]]
+    assert len(fixed_rows) == 1                                                    # fixní náklady jen jednou
+    assert not any("servis" in r["item"].lower() for g in v["components"] for r in g["rows"])
+
+
+def test_components_with_complete_inputs_and_true_zero():
+    m = full(bookings=[booking("P1", BAGR, 1, 4)], jobs=[job("J1", 3, deadline=4)], needs=[need("J1", DUMPER)])
+    v = months(m, starts={"J1": 1})
+    assert comp(v, "Tržby z pronájmu")["value"] == 4 * 6500
+    assert comp(v, "Variabilní náklady pronájmu")["text"] == "−" + fv.money(4 * 500)
+    assert comp(v, "Penále za zpoždění")["text"] == "0" + K and comp(v, "Penále za zpoždění")["status"] == fv.COMPLETE
+    # sazba stroje na zakázce je skutečná 0 (dumper) → úplná nula, ne „nezadáno“
+    machine = comp(v, "Variabilní náklady strojů na zakázkách")
+    assert machine["status"] == fv.COMPLETE and machine["text"] == "0" + K
+    assert head(v, "celkem")["status"] == fv.COMPLETE and "režie započtena" in head(v, "celkem")["meaning"]
+    assert comp(v, "Celkový výsledek flotily")["value"] == 4 * 6000 + 60000 - 127000 - 20000
+
+
+def test_machine_costs_included_in_direct_costs_are_not_subtracted_again():
+    m = full(jobs=[job("J1", 3)], needs=[need("J1", BAGR)])
+    st = m.settings.copy()
+    st.loc[st["key"] == "direct_cost_includes_machines", "value"] = "ano"
+    m.settings = st
+    v = months(m, starts={"J1": 1})
+    machine = comp(v, "Variabilní náklady strojů na zakázkách")
+    assert machine["text"] == fv.MACHINES_IN_DIRECT and machine["status"] == fv.COMPLETE
+    assert comp(v, "Příspěvek vlastních zakázek")["value"] == 100000 - 40000
+
+
+def test_missing_revenue_component_is_not_zero():
+    v = months(full(jobs=[job("J1", 3, revenue="")], needs=[need("J1", BAGR)]), starts={"J1": 1})
+    assert comp(v, "Tržby ze zakázek")["text"] == "nelze určit" and comp(v, "Tržby ze zakázek")["status"] == fv.MISSING
+    assert head(v, "zakazky")["status"] == fv.MISSING
+
+
+def test_part_total_marks_missing_parts():
+    known = ec.Result(1000.0, parts={"tržba z pronájmu": 1200.0, "variabilní náklady pronájmu": -200.0})
+    unknown = ec.Result(800.0, missing=("Mini bagr: variabilní náklad pronájmu/den",),
+                        parts={"tržba z pronájmu": 800.0, "variabilní náklady pronájmu": -0.0})
+    rev = fv.part_total([known, unknown], "tržba z pronájmu")
+    assert rev.value == 2000 and rev.complete
+    var = fv.part_total([known, unknown], "variabilní náklady pronájmu", cost=True)
+    assert var.value == 200 and var.missing == ("Mini bagr: variabilní náklad pronájmu/den",)
+    assert fv.cost_cell(var)["text"].startswith("nejméně")
+    bad = fv.part_total([ec.Result(None, invalid=("x",))], "přímé náklady", cost=True)
+    assert bad.value is None and bad.invalid == ("x",)
+
+
+def test_not_computable_view_has_empty_page_sections():
+    v = fv.build(fe.period_result(BASE, 5, 1, STARTS))
+    assert v["headline"] == [] and v["components"] == [] and v["period"] == "neplatné období"
