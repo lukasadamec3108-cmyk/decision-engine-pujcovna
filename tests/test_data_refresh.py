@@ -154,10 +154,12 @@ def test_code_fingerprint_changes_with_module_source():
         shutil.rmtree(tmp, ignore_errors=True)
     # aplikace do klíče mezipaměti zahrnuje všechny moduly, které uložené funkce volají
     src = (ROOT / "app.py").read_text(encoding="utf-8")
-    assert "CODE_MODULES = (dm, sch, cp, cv, pl, ef, pv)" in src
+    # K3.4c: stránka Ekonomika flotily volá v mezipaměti i fleet_usage / fleet_economics / fleet_view
+    assert "CODE_MODULES = (dm, sch, cp, cv, pl, ef, pv, fu, fe, fv)" in src
     for call in ("load_data_model(data_version, code_version)",
                  "plan_jobs(jobs_df, machine_capacity, code_version)",
-                 "data_version, code_version, tuple(sorted(cap_starts.items()))"):
+                 "data_version, code_version, tuple(sorted(cap_starts.items()))",
+                 "fleet_economics_view(data_version, code_version, tuple(sorted(fe_starts.items()))"):
         assert call in src, call
 
 
