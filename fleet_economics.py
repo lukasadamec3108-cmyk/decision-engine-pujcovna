@@ -4,8 +4,8 @@ konfliktů (K3.2: conflict_options). Bez Streamlitu.
 Propojuje kapacitní fakta z fleet_usage.py (nad capacity.py) s příspěvky z economics.py.
 Nic nového nepočítá jinak: strojodny a konflikty jsou z fleet_usage, částky z economics,
 vzorce s neznámými a porovnání z econ_formula, kontrola posunu zakázky z planner/capacity.
-Zatím se nikde nezobrazuje a nic nerozhoduje (výsledek období a porovnání využití – K3.3 a dál –
-tu záměrně NEJSOU).
+K3.3 (period_result) skládá evidenci a varianty konfliktů s fixními náklady a režií z economics.
+Zatím se nikde nezobrazuje a nic nerozhoduje (porovnání využití – K3.4 a dál – tu záměrně NENÍ).
 
 ZÁSADY
 ------
@@ -33,8 +33,11 @@ ZÁSADY
 - Priorita pronájmu a zakázky se neurčuje. Období je povinný parametr (žádný 30denní měsíc).
 """
 
+import calendar
 import dataclasses
+import itertools
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 
 import pandas as pd
 
@@ -700,3 +703,255 @@ def _release_rental(ctx, label, conflict_days, whole: bool) -> dict:
         + [f"zbývá konflikt: {c['kind']} ({c['sources']})" for c in remaining]
         + [f"nový konflikt: {c['kind']} ({c['sources']})" for c in created])
     return v
+
+
+
+# ===========================================================================
+# K3.3 – ekonomický výsledek flotily za období (period_result)
+# ===========================================================================
+#
+# výsledek z jistých závazků = jisté příspěvky pronájmů + jisté příspěvky zakázek
+#                              − fixní náklady flotily za období − režie za období
+# - jisté příspěvky = jen závazky ve stavu „jisté využití“ z period_ledger (každý jednou),
+# - konfliktní, předběžné, přesahující a neurčité závazky se do něj NEZAPOČÍTÁVAJÍ – jsou zvlášť,
+# - fixní náklady = economics.fleet_fixed_costs (vlastněné a leasingové kusy; servis je jejich
+#   součástí – nepřičítá se znovu), odečtou se JEDNOU; režie = economics.overhead,
+# - přepočet měsíčních nákladů na období jen výslovně zadanou metodou (fixed_cost_method):
+#     None            … nezadáno → fixní náklady a režie jsou CHYBĚJÍCÍ údaj (výsledek neúplný),
+#     "months"        … počet měsíců zadá volající (months > 0), např. 1 pro celý měsíc,
+#     "calendar_days" … podle kalendáře: Σ (dny období v měsíci ÷ dny měsíce); vyžaduje plan_start
+#                       (datum dne 1 plánu). Žádný 30denní měsíc se nepředpokládá.
+# - scénáře konfliktů: kombinace proveditelných a podmíněných variant z conflict_options, které
+#   konflikt vyřeší. Kombinace se ověří kapacitně (společně) a započte se jen tehdy, když všechny
+#   dotčené závazky zůstanou celé v období. Rozpětí = meze vzorců (econ_formula) přes tyto
+#   kombinace; NIC se nevybírá. Výsledek s nevyřešenými konflikty je vždy neúplný.
+# - modelová poptávka (rental_demand) se nepoužívá.
+
+FIXED_METHODS = (None, "months", "calendar_days")
+MAX_SCENARIOS = 256
+
+
+@dataclass
+class PeriodResult:
+    """Výsledek period_result. Částky jsou economics.Result (hodnota + chybějící / neplatné údaje).
+
+    status          … úplný | neúplný | nelze spočítat
+    rentals, jobs   … jisté příspěvky pronájmů / zakázek (jen „jisté využití“)
+    fixed_costs, overhead … za období podle zadané metody (nezadáno = chybějící údaj)
+    result          … výsledek z jistých závazků (bez konfliktních, předběžných, přesahujících)
+    conflicts       … přehled případů konfliktů (příspěvky obou stran – NEsčítat) a jejich variant
+    tentative, uncertain … přehled předběžných a nejistých závazků (nezapočteno)
+    scenarios       … ověřené kombinace variant konfliktů s mezemi výsledku
+    range           … (dolní, horní) mez výsledku přes započitatelné scénáře; None = nelze určit
+    missing         … co chybí, aby šlo o přesný výsledek
+    """
+    status: str
+    start: object = None
+    end: object = None
+    rentals: object = None
+    jobs: object = None
+    fixed_costs: object = None
+    overhead: object = None
+    result: object = None
+    months: object = None
+    fixed_cost_basis: str = ""
+    conflicts: list = field(default_factory=list)
+    tentative: list = field(default_factory=list)
+    uncertain: list = field(default_factory=list)
+    scenarios: list = field(default_factory=list)
+    range: tuple = (None, None)
+    missing: list = field(default_factory=list)
+    notes: list = field(default_factory=list)
+    options: object = None
+
+
+def period_result(model, start, end, job_starts=None, fixed_cost_method=None, months=None,
+                  plan_start=None) -> PeriodResult:
+    """Ekonomický výsledek flotily za období start–end (čísla dní plánu, oba včetně).
+
+    job_starts        … návrh plánu zakázek {job_id: první den},
+    fixed_cost_method … None | "months" | "calendar_days" (viz výše); months jen pro "months",
+                        plan_start (datum dne 1) jen pro "calendar_days".
+    Nic se nevybírá ani nemění.
+    """
+    opts = conflict_options(model, start, end, job_starts)
+    if opts.status == fu.NOT_COMPUTABLE:
+        return PeriodResult(fu.NOT_COMPUTABLE, start, end, notes=list(opts.notes), options=opts)
+    led = opts.ledger
+    fic = ec.is_fictitious(model)
+
+    m, basis, problem = _months(start, end, fixed_cost_method, months, plan_start)
+    if problem:
+        return PeriodResult(fu.NOT_COMPUTABLE, start, end, notes=[problem], options=opts)
+    if m is None:
+        label = "metoda přepočtu měsíčních fixních nákladů a režie na období (nezadána)"
+        fixed = ec.Result(0.0, missing=(f"fixní náklady flotily: {label}",), fictitious=fic,
+                          parts={"fixní náklady flotily": None})
+        overhead = ec.Result(0.0, missing=(f"režie: {label}",), fictitious=fic, parts={"režie": None})
+    else:
+        fixed = ec.fleet_fixed_costs(model, m)["celkem"].scaled(1, "fixní náklady flotily")
+        overhead = ec.overhead(model, m)
+
+    rentals = led.totals["jisté – pronájmy (rezervace)"]
+    jobs = led.totals["jisté – zakázky (návrh plánu)"]
+    base = rentals + jobs - fixed - overhead
+
+    entries = led.entries
+    excluded = []
+    for state, text in ((CONFLICT, "řešení konfliktů není rozhodnuto – konfliktní závazky nejsou započteny"),
+                        (CROSSES, "časové rozlišení závazků přesahujících období – nezapočteny"),
+                        (UNKNOWN, "závazky, jejichž obsazenost nelze určit – nezapočteny")):
+        refs = sorted(entries.loc[entries["state"] == state, "ref"])
+        if refs:
+            excluded.append(f"{text} ({', '.join(refs)})")
+    result = ec.Result(base.value, ec._unique(base.missing, tuple(excluded)), base.invalid, base.fictitious,
+                       dict(base.parts))
+
+    cal = cp.from_model(model, job_starts=dict(job_starts or {}))
+    certain_f = _certain_formula(model, cal, entries)
+    costs_f = ef.combine([_cost_formula(fixed, ("fixed_costs_period",), "fixní náklady flotily za období"),
+                          _cost_formula(overhead, ("overhead_period",), "režie za období")])
+    scenarios, rng, scen_notes = _scenarios(opts, cal, certain_f, costs_f, start, end)
+
+    def overview(state):
+        return [dict(ref=r.ref, kind=r.kind, state=r.state, start=r.start, end=r.end, reason=r.reason,
+                     contribution=r.contribution, contribution_status=r.contribution_status)
+                for r in entries.itertuples() if r.state == state]
+
+    conflicts = [dict(id=c["id"], kinds=c["kinds"], days=c["days"], services=c["services"],
+                      commitments=[dict(ref=x["ref"], kind=x["kind"], contribution=x["contribution"],
+                                        contribution_status=x["contribution_status"]) for x in c["commitments"]],
+                      variants=[dict(key=v["key"], feasibility=v["feasibility"], resolves=v["resolves"],
+                                     econ_status=v["econ_status"], bounds=v["bounds"]) for v in c["variants"]],
+                      note="příspěvky obou stran konfliktu nelze sčítat – rozhodne majitel")
+                 for c in opts.cases]
+    missing = list(result.missing)
+    status = fu.NOT_COMPUTABLE if result.invalid else (fu.COMPLETE if result.complete else fu.INCOMPLETE)
+    notes = [
+        "výsledek z jistých závazků: jisté příspěvky − fixní náklady flotily − režie; "
+        "konfliktní, předběžné a přesahující závazky jsou zvlášť a nezapočítávají se",
+        "fixní náklady obsahují i průměrný servis – servis se znovu neodečítá",
+        "modelová poptávka po pronájmu (rental_demand) se nepoužívá",
+        "žádná varianta konfliktu se nevybírá – rozpětí je jen přehled",
+    ] + scen_notes
+    if status != fu.COMPLETE:
+        notes.insert(0, "NEJDE o přesný čistý zisk – výsledek je neúplný (viz chybějící údaje)")
+    return PeriodResult(status, start, end, rentals, jobs, fixed, overhead, result, m, basis, conflicts,
+                        overview(TENTATIVE), overview(UNKNOWN) + overview(CROSSES), scenarios, rng,
+                        missing, notes, opts)
+
+
+def _months(start, end, method, months, plan_start):
+    """(počet měsíců | None, popis, chyba) – jen výslovně zadaná metoda, nic se nepředpokládá."""
+    if method not in FIXED_METHODS:
+        return None, "", f"neznámá metoda přepočtu fixních nákladů „{method}“ (povoleno: months, calendar_days)"
+    if method is None:
+        return None, "nezadáno – fixní náklady a režie za období nelze určit", None
+    if method == "months":
+        if isinstance(months, bool) or not isinstance(months, (int, float)) or not months > 0:
+            return None, "", "metoda „months“ vyžaduje kladný počet měsíců (months)"
+        return float(months), f"zadáno: {float(months):.4f} měsíce × měsíční náklady", None
+    if not isinstance(plan_start, date):
+        return None, "", "metoda „calendar_days“ vyžaduje datum prvního dne plánu (plan_start)"
+    first, last = plan_start + timedelta(start - 1), plan_start + timedelta(end - 1)
+    total, parts, day = 0.0, [], first
+    while day <= last:
+        in_month = calendar.monthrange(day.year, day.month)[1]
+        month_end = date(day.year, day.month, in_month)
+        n = (min(last, month_end) - day).days + 1
+        total += n / in_month
+        parts.append(f"{n}/{in_month} ({day.month}/{day.year})")
+        day = month_end + timedelta(1)
+    return total, f"kalendářní dny: {' + '.join(parts)} = {total:.4f} měsíce × měsíční náklady", None
+
+
+def _certain_formula(model, cal, entries) -> ef.Contribution:
+    """Vzorec jistých příspěvků (stejné závazky a stejné částky jako ledger.totals)."""
+    parts = []
+    for r in entries[entries["counted_as_certain"]].itertuples():
+        items = [a for a in cal.assignments if a.kind == r.kind and a.ref == r.ref]
+        parts.append(_formula(model, _request(model, items)))
+    return ef.combine(parts)
+
+
+def _cost_formula(cost: ec.Result, key, label) -> ef.Contribution:
+    """Náklad jako vzorec: známá část se odečte, chybějící část je neznámý údaj (nikdy 0)."""
+    if cost.invalid or cost.value is None:
+        return ef.Contribution(None, {}, tuple(cost.invalid) or (f"{label}: neplatný údaj",))
+    if not cost.missing:
+        return ef.Contribution({ef.ONLY: ef.Formula.of(-cost.value, {})})
+    unknown = ef.Unknown(key, f"{label} – chybí: " + "; ".join(cost.missing), ef.DATA, "Kč")
+    return ef.Contribution({ef.ONLY: ef.Formula.of(-cost.value, {key: -1.0})}, {key: unknown})
+
+
+def _scenarios(opts, cal, certain_f, costs_f, start, end) -> tuple:
+    """Ověřené kombinace variant konfliktů a rozpětí výsledku (dolní, horní mez; None = nelze určit)."""
+    base_f = ef.combine([certain_f, costs_f])
+    if not opts.cases:
+        return ([dict(variants={}, valid=True, in_period=True, formula=ef.describe(base_f),
+                      bounds=ef.bounds(base_f))], ef.bounds(base_f), [])
+    choices = []
+    for c in opts.cases:
+        usable = [v for v in c["variants"] if v["feasibility"] in (FEASIBLE, CONDITIONAL)
+                  and v["resolves"] == RESOLVED and v["formula"] is not None and v["formula"].valid]
+        choices.append([(c, v) for v in usable])
+    notes = []
+    if any(not ch for ch in choices):
+        empty = [c["id"] for c, ch in zip(opts.cases, choices) if not ch]
+        return [], (None, None), [f"případ {', '.join(empty)}: žádná vyčíslitelná varianta, která konflikt "
+                                  "vyřeší – rozpětí výsledku nelze určit"]
+    combos = list(itertools.islice(itertools.product(*choices), MAX_SCENARIOS + 1))
+    if len(combos) > MAX_SCENARIOS:
+        return [], (None, None), [f"příliš mnoho kombinací variant (víc než {MAX_SCENARIOS}) – rozpětí nelze určit"]
+    before = {_key(c) for c in fu.machine_days(cal, *_span(cal, start, end)).conflicts}
+    out = []
+    for combo in combos:
+        valid, in_period, reason = _check_combo(cal, combo, before, start, end)
+        f = ef.combine([base_f] + [v["formula"] for _, v in combo])
+        out.append(dict(variants={c["id"]: v["key"] for c, v in combo}, valid=valid, in_period=in_period,
+                        reason=reason, formula=ef.describe(f), bounds=ef.bounds(f)))
+    counted = [s for s in out if s["valid"] and s["in_period"]]
+    if not counted:
+        notes.append("žádná kombinace variant nezůstane celá v období a bez konfliktu – rozpětí nelze určit "
+                     "(chybí pravidlo časového rozlišení přesahujících závazků)")
+        return out, (None, None), notes
+    los = [s["bounds"][0] for s in counted]
+    his = [s["bounds"][1] for s in counted]
+    rng = (None if any(x is None for x in los) else min(los), None if any(x is None for x in his) else max(his))
+    skipped = len(out) - len(counted)
+    if skipped:
+        notes.append(f"{skipped} kombinací variant se do rozpětí nezapočítává (přesah mimo období nebo "
+                     "společně nevyřeší konflikty)")
+    return out, rng, notes
+
+
+def _check_combo(cal, combo, before, start, end) -> tuple:
+    """Platí kombinace variant společně? (bez konfliktu, bez nového konfliktu; závazky celé v období)."""
+    assignments = list(cal.assignments)
+    labels, placed = set(), []
+    for case, v in combo:
+        labels |= {x["label"] for x in case["commitments"]} | set(case["services"])
+        ch = v["changes"]
+        if v["kind"].startswith("zachovat ostatní"):
+            label = f"{cp.KIND_LABEL['job']} {ch['ref']}"
+        else:
+            label = f"{cp.KIND_LABEL['rental']} {ch['ref']}"
+        old = [a for a in assignments if a.label == label]
+        assignments = [a for a in assignments if a.label != label]
+        if ch.get("new_start") is not None:
+            assignments += [dataclasses.replace(a, start=ch["new_start"], end=ch["new_end"]) for a in old]
+    for case, _ in combo:
+        for x in case["commitments"]:
+            placed += [a for a in assignments if a.label == x["label"]]
+    test = cp.build_calendar(cal.units, assignments, cal.open_jobs)
+    lo = min([start] + [a.start for a in assignments])
+    hi = max([end] + [a.end for a in assignments])
+    after = fu.machine_days(test, lo, hi).conflicts
+    clash = [c for c in after if _sources(c["sources"]) & labels or _key(c) not in before]
+    if clash:
+        return False, False, "varianty společně nevyřeší konflikty: " + "; ".join(
+            f"{c['kind']} ({c['sources']})" for c in clash)
+    outside = sorted({a.ref for a in placed if a.start < start or a.end > end})
+    if outside:
+        return True, False, "přesah mimo období: " + ", ".join(outside) + " – chybí pravidlo časového rozlišení"
+    return True, True, ""

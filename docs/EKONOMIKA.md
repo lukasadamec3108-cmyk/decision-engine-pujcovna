@@ -181,6 +181,48 @@ Ukázková data (dny 1–25, návrh plánu):
 Všechny částky jsou horní meze (chybí variabilní náklady a nastavení přímých nákladů). Porovnání
 s podmíněnými variantami nelze rozhodnout, dokud není známa smluvní náhrada.
 
+## Výsledek flotily za období (K3.3)
+
+`fleet_economics.period_result(model, začátek, konec, job_starts, fixed_cost_method=…, months=…, plan_start=…)`
+skládá evidenci (K3.1) a varianty konfliktů (K3.2) s fixními náklady a režií z `economics.py`.
+**Nezobrazuje se a nic nevybírá.**
+
+**Výsledek z jistých závazků** = jisté příspěvky pronájmů + jisté příspěvky zakázek − fixní náklady
+flotily za období − režie za období.
+- Jisté příspěvky = jen závazky ve stavu „jisté využití“ (každý jednou). Konfliktní (obě strany),
+  předběžné, přesahující a neurčité závazky jsou ve vlastních přehledech a **nezapočítávají se**;
+  dokud konflikty nejsou rozhodnuté, je výsledek vždy **neúplný**.
+- Fixní náklady = `economics.fleet_fixed_costs` (vlastněné a leasingové kusy), odečtou se **jednou**;
+  průměrný servis je jejich součástí a znovu se neodečítá. Režie = `economics.overhead`.
+- **Přepočet měsíčních nákladů na období jen výslovně zvolenou metodou:**
+  - nezadáno (výchozí) → fixní náklady i režie jsou chybějící údaj, výsledek je jen horní mez,
+  - `"months"` → počet měsíců zadá volající (např. 1 = celý měsíc),
+  - `"calendar_days"` → Σ (dny období v měsíci ÷ počet dní měsíce), vyžaduje datum dne 1 plánu.
+  Žádný 30denní měsíc se nepředpokládá.
+- Chybějící údaj není nula (režie „0“ = úplný výsledek, prázdná režie = neúplný). U neúplného
+  výsledku se výslovně uvádí, že **nejde o přesný čistý zisk**, a seznam chybějících údajů.
+
+**Scénáře konfliktů:** kombinace proveditelných a podmíněných variant z K3.2, které konflikt vyřeší.
+Kombinace se ověří kapacitně **společně** (varianty různých konfliktů se nesmí srazit) a do rozpětí
+se započte jen tehdy, když všechny dotčené závazky zůstanou celé v období. Rozpětí = dolní a horní mez
+vzorců (`econ_formula`) přes tyto kombinace; neznámá mez = nelze určit. Modelová poptávka se nepoužívá.
+
+Ukázková data (dny 1–25, návrh plánu, `months` = 25/30 pouze jako příklad zadané metody):
+
+| Položka | Částka | Stav |
+|---|---|---|
+| Jisté příspěvky pronájmů | 194 500 Kč | neúplné (chybí variabilní náklady) – horní mez |
+| Jisté příspěvky zakázek | 635 000 Kč | neúplné (chybí `direct_cost_includes_machines`) – horní mez |
+| Fixní náklady flotily (25/30 měsíce) | 440 000 Kč | úplné při zadané metodě |
+| Režie | – | chybí |
+| **Výsledek z jistých závazků** | **nejvýše 389 500 Kč** | neúplný – nejde o čistý zisk |
+| V konfliktu (nezapočteno) | FIKT-P05, J005, J006 | rozhodne majitel |
+| Předběžné (nezapočteno) | FIKT-P06, FIKT-P07 – 77 500 Kč | jen potenciál |
+| Rozpětí scénářů | nelze určit | posuny J005 a J006 přesahují den 25 |
+
+Pro období 1–31 jsou posuny celé v období a horní mez rozpětí je 521 000 Kč (dolní mez nelze určit –
+chybí náklady a smluvní náhrady).
+
 ## Regrese
 
 - `tests/test_econ_consistency.py` – shoda modulů s `economics.py`, ochrana před dvojím započtením,
