@@ -50,10 +50,11 @@ def inv_values(at):
     return out
 
 
-def test_registry_has_eight_sections_in_required_order():
+def test_registry_has_all_sections_in_required_order():
     assert [p[2] for p in navigace.PAGES] == [
-        "Dashboard", "Pronájem strojů", "Vlastní zakázky", "Strojový park", "Plánování kapacity",
-        "Rozhodovací centrum", "Investice", "Nastavení"]
+        "Dashboard", "Ekonomika flotily", "Pronájem strojů", "Vlastní zakázky", "Strojový park",
+        "Plánování kapacity", "Rozhodovací centrum", "Investice", "Nastavení"]
+    assert len(navigace.PAGES) == 9
     assert navigace.DEFAULT_PAGE == "dashboard"
     for key in navigace.KEYS:
         assert navigace.page_file(key).is_file(), key
@@ -65,6 +66,7 @@ def test_every_section_renders_and_has_expected_content():
     assert any('class="de-header' in m.value for m in at.main.markdown)        # výchozí stránka = Dashboard
     assert "Souhrn výsledků" in text(at)
     expect = {                                   # co musí na stránce být (původní obsah záložek a nové sekce)
+        "ekonomika": ("Ekonomika flotily", "Ukázková data / neúplné", "Neúplný výsledek – nejde o čistý zisk."),
         "dashboard": ("Vytížení strojového parku", "Ekonomický výsledek", "Pronájmy a zakázky", "Kapacitní konflikty",
                       "Provoz půjčovny a vlastních zakázek", "Ekonomika a hospodaření", "Doporučení a upozornění",
                       "Doporučená sestava"),

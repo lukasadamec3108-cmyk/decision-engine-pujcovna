@@ -15,6 +15,8 @@ PAGES_DIR = "stranky"
 # (klíč, soubor, název v menu, ikona, skupina menu, adresa)
 PAGES = [
     ("dashboard", "stranka_dashboard.py", "Dashboard", ":material/dashboard:", "Přehled", "dashboard"),
+    ("ekonomika", "stranka_ekonomika.py", "Ekonomika flotily", ":material/account_balance_wallet:", "Přehled",
+     "ekonomika-flotily"),
     ("pronajem", "stranka_pronajem.py", "Pronájem strojů", ":material/local_shipping:", "Provoz", "pronajem"),
     ("zakazky", "stranka_zakazky.py", "Vlastní zakázky", ":material/construction:", "Provoz", "zakazky"),
     ("strojovy_park", "stranka_strojovy_park.py", "Strojový park", ":material/precision_manufacturing:", "Provoz",

@@ -83,6 +83,53 @@
   },
   "tab_labels": []
  },
+ "ekonomika": {
+  "main": {
+   "elements": {
+    "dataframe": 0,
+    "download_button": 0,
+    "plotly_chart": 0
+   },
+   "expanders": [],
+   "numbers": {
+    "2": 2
+   },
+   "text": "fae33bbe601a27a4",
+   "widgets": []
+  },
+  "sidebar": {
+   "elements": {
+    "dataframe": 0,
+    "download_button": 0,
+    "plotly_chart": 0
+   },
+   "expanders": [],
+   "numbers": {
+    "0": 60,
+    "1": 2,
+    "2": 26,
+    "3": 16,
+    "4": 18,
+    "41": 2,
+    "5": 6,
+    "53": 2,
+    "64": 2,
+    "8": 10,
+    "9": 28
+   },
+   "text": "032d51508654d6ce",
+   "widgets": [
+    {
+     "key": "logout",
+     "label": "Odhlásit se",
+     "options": [],
+     "type": "button",
+     "value": "False"
+    }
+   ]
+  },
+  "tab_labels": []
+ },
  "investice": {
   "inv_summary": "<div class=\"de-inv-summary\"><b>Mini bagr</b> × <b>Pásový dumper</b> · trh realistický · fixní náklad 100 000 Kč měsíčně · rozpočet 3 000 000 Kč</div>",
   "main": {

@@ -2881,6 +2881,31 @@ if PAGE == "dashboard":
 
 
 # ==================================================
+# EKONOMIKA FLOTILY (E2.2 – K3.4b) – zatím jen kostra stránky
+# ==================================================
+# Stránka zatím NIC NEPOČÍTÁ a nezobrazuje žádnou částku ani ukazatel. V kroku K3.4c se sem připojí
+# zobrazovací vrstva ekonomiky flotily z kroku K3.4a (výsledek K3.3) – na vyznačená místa níže.
+# Upozornění je stejné jako ve zobrazovací vrstvě (hlídá test), aby se po připojení nezměnilo.
+FLEET_ECON_TITLE = "Ekonomika flotily"
+FLEET_ECON_INTRO = ("Společný ekonomický výsledek flotily za zvolené období: jisté příspěvky pronájmů "
+                    "a vlastních zakázek, fixní náklady, režie a konflikty. Vychází z <b>ukázkových dat</b>.")
+FLEET_ECON_BADGE = "Ukázková data / neúplné"
+FLEET_ECON_NOT_NET_PROFIT = "Neúplný výsledek – nejde o čistý zisk."
+FLEET_ECON_PENDING = ("Ekonomické výsledky budou doplněny v následujícím kroku. Zatím se zde nic nepočítá "
+                      "a nezobrazují se žádné částky.")
+
+if PAGE == "ekonomika":
+    with ui.tab_container("ekonomika"):
+        ui.tab_header(FLEET_ECON_TITLE, FLEET_ECON_INTRO)
+        st.markdown(ui.status_chip(FLEET_ECON_BADGE, "warn"), unsafe_allow_html=True)
+        # K3.4c: upozornění ze zobrazovací vrstvy – nahradí pevné upozornění níže
+        ui.insight(f"<b>{html.escape(FLEET_ECON_NOT_NET_PROFIT)}</b>", "bad")
+        # K3.4c: filtry období a metody fixních nákladů (výchozí: nezadávat), ukazatele a rozpad výsledku
+        # K3.4d: konflikty a varianty (jen čtení) · K3.4e: předběžné závazky, využití, evidence, metodika
+        ui.hint(html.escape(FLEET_ECON_PENDING))
+
+
+# ==================================================
 # STROJOVÝ PARK (etapa M2) – existující údaje o strojích
 # ==================================================
 
