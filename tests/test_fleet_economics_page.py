@@ -220,10 +220,74 @@ def test_conflicts_and_variants_are_shown_not_decided():
                   "Externí zapůjčení / náhradní stroj", "Ponechat k ručnímu rozhodnutí"):
         assert title in text, title
     assert "Rozhodnutí je na majiteli půjčovny" in text and "nic se neruší ani nepřesouvá" in text
-    assert "doporuč" not in text.lower()                                       # nic se nedoporučuje
+    # nic se nedoporučuje – slovo je jen ve výslovném „Nejde o doporučení…“ u porovnání variant
+    assert "doporuč" not in text.replace(fv.COMPARISON_DISCLAIMER, "").lower()
 
 
 def test_incomplete_result_is_never_called_profit():
     at = page()
     text = plain(body(at)).lower()
     assert text.count("zisk") == text.count("nejde o čistý zisk") >= 1
+
+
+# ---------------------------------------------------------------------------
+# K3.4d – porovnání variant, blokující závazky, odkazy
+# ---------------------------------------------------------------------------
+
+def expander(at, prefix, index):
+    return [e for e in at.main.expander if e.label.startswith(prefix)][index]
+
+
+def test_comparison_is_information_only_and_says_when_not_possible():
+    at = page()
+    labels = [e.label for e in at.main.expander]
+    assert labels == ["Porovnání variant – jen informace (0)", "Porovnání variant – jen informace (3)"]
+    j005 = plain(m.value for m in expander(at, "Porovnání variant", 0).markdown)
+    assert "Varianty nelze porovnat – vyčíslit lze jen jednu variantu" in j005
+    p05 = plain(m.value for m in expander(at, "Porovnání variant", 1).markdown)
+    assert "Varianty nelze spolehlivě porovnat" in p05
+    assert p05.count("nelze porovnat") == 3 and "storno / smluvní náhrada" in p05
+    assert "posun J006 × zrušení FIKT-P05" in p05
+    for text in (j005, p05):
+        assert fv.COMPARISON_DISCLAIMER in text
+        assert "lepší" not in text                                    # na ukázkových datech nic „jistě lepší“
+    assert "0 Kč" not in p05                                          # chybějící údaj není nula
+
+
+def test_blocking_commitments_are_shown_for_job_shift():
+    text = plain(body(page()))
+    assert ("Bližší termíny blokují: pronájem FIKT-P03 (dny 14–20), servis / údržba KOLOVY_BAGR-01 od dne 11 "
+            "(dny 11–12), vlastní zakázka J001 (dny 1–5), vlastní zakázka J007 (dny 1–5), vlastní zakázka J009 "
+            "(dny 13–16), vlastní zakázka J011 (dny 17–20)") in text
+    assert "Bližší termíny blokují: pronájem FIKT-P05 (dny 15–19)" in text
+
+
+def test_calendar_link_opens_capacity_planning_filtered_to_the_machine():
+    at = page()
+    assert [b.key for b in at.main.button] == ["fe_cal_K1", "fe_cal_K2"]
+    [b for b in at.main.button if b.key == "fe_cal_K2"][0].click().run()
+    assert not at.exception and not at.error and not at.warning
+    assert "Kapacita strojů po dnech" in plain(m.value for m in at.main.markdown)
+    assert [m.value for m in at.multiselect if m.key == "cap_types"] == [["SILNICNI_VALEC"]]
+    assert [s.value for s in at.selectbox if s.key == "cap_detail_type"] == ["SILNICNI_VALEC"]
+    assert [r.value for r in at.radio if r.key == "cap_view"] == ["Kalendář dostupnosti"]
+    open_page(at, KEY)                                                # zpět – stránka beze změny výsledků
+    assert kpi_values(at)["Celkový výsledek flotily"] == "nejvýše 829 500 Kč"
+
+
+def test_jobs_link_points_to_own_jobs_page():
+    at = page()
+    links = [p for p in at.main.get("page_link")]
+    assert len(links) == 2                                            # oba konflikty obsahují zakázku
+    assert {p.proto.label for p in links} == {"Vlastní zakázky"}
+    url = next(page[5] for page in navigace.PAGES if page[0] == "zakazky")
+    assert all(p.proto.page == url for p in links)                    # adresa stránky Vlastní zakázky
+
+
+def test_links_do_not_change_data_or_plan():
+    before = dm.data_fingerprint()
+    at = page()
+    [b for b in at.main.button if b.key == "fe_cal_K1"][0].click().run()
+    assert dm.data_fingerprint() == before
+    open_page(at, KEY)
+    assert kpi_values(at) == {h["label"]: h["text"].replace("\xa0", " ") for h in sample_view()["headline"]}

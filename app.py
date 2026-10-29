@@ -2925,6 +2925,17 @@ def fe_chip(status: str, tone: str) -> str:
     return ui.dash_chip(status, FE_CHIP_TONE.get(tone, "info"))
 
 
+def fe_open_calendar(type_ids: list) -> None:
+    """Plánování kapacity s filtrem na stroje konfliktu (stejné klíče jako show_in_calendar).
+
+    Widgety kalendáře na této stránce nejsou, proto lze jejich stav nastavit před přepnutím stránky.
+    Nic jiného se nemění – jen filtr zobrazení."""
+    st.session_state["cap_types"] = list(type_ids)
+    st.session_state["cap_detail_type"] = type_ids[0]
+    st.session_state["cap_view"] = CAP_VIEWS[0]
+    st.switch_page(_PAGE_OBJ["kapacita"])
+
+
 def fe_banner(b: dict) -> None:
     text = html.escape(b["text"])
     if b["text"].startswith(FLEET_ECON_NOT_NET_PROFIT):
@@ -3017,9 +3028,27 @@ if PAGE == "ekonomika":
                         rows=[("Příspěvek dotčených závazků", html.escape(v["amount"]["text"]))],
                         why="<ul>" + "".join(f"<li>{html.escape(x)}</li>" for x in
                                              ([v["change"]] if v["change"] else [])
+                                             + ([f"Bližší termíny blokují: {', '.join(v['blockers'])}"]
+                                                if v["blockers"] else [])
                                              + [f"Varování: {w}" for w in v["warnings"]]
                                              + ([v["amount"]["explanation"]] if v["amount"]["explanation"] else []))
                         + "</ul>") for v in case["variants"]])
+                    # K3.4d: porovnání variant – jen informace (econ_formula), nic se nevybírá ani nedoporučuje
+                    with st.expander(f"Porovnání variant – jen informace ({len(case['comparisons'])})"):
+                        if case["comparison_note"]:
+                            ui.dash_text(html.escape(case["comparison_note"]))
+                        if case["comparisons"]:
+                            st.markdown('<ul class="dd-list">' + "".join(
+                                f"<li><b>{html.escape(c['a'])} × {html.escape(c['b'])}</b> · {html.escape(c['kind'])}"
+                                f"<small>{html.escape(c['text'])}</small></li>" for c in case["comparisons"])
+                                + "</ul>", unsafe_allow_html=True)
+                        ui.dash_text(html.escape(fv.COMPARISON_DISCLAIMER), muted=True)
+                    with ui.dash_links(f"ekon_{case['id']}"):
+                        if st.button("Zobrazit v kalendáři", key=f"fe_cal_{case['id']}",
+                                     icon=":material/calendar_month:", type="tertiary"):
+                            fe_open_calendar(case["types"])
+                        if case["jobs"]:
+                            page_link("zakazky", "Vlastní zakázky")
             if fe_cases:
                 sc = fe_view["scenarios"]
                 with ui.dash_section("ekon_rozpeti_neutral"):
