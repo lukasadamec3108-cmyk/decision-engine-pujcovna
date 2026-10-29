@@ -322,5 +322,8 @@ def test_module_is_standalone_and_not_connected_to_ui():
     imported = {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
     imported |= {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     assert "streamlit" not in imported
+    # fleet_view.py je zobrazovací vrstva K3.4a nad tímto modulem; sama do UI napojená není
+    # (hlídá tests/test_fleet_view.py) – proto se tu vynechává.
     for path in [ROOT / "app.py", *ROOT.glob("*_view.py"), *(ROOT / "stranky").glob("*.py")]:
-        assert "fleet_usage" not in path.read_text(encoding="utf-8"), path
+        if path.name != "fleet_view.py":
+            assert "fleet_usage" not in path.read_text(encoding="utf-8"), path

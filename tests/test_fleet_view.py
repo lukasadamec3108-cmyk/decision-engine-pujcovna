@@ -1,0 +1,283 @@
+"""Testy zobrazovací vrstvy „Ekonomika flotily“ (E2.2 – K3.4a, fleet_view.py). Jen fiktivní data.
+
+Spuštění: python -m pytest tests/test_fleet_view.py
+"""
+
+import ast
+import json
+import sys
+from datetime import date
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+import capacity_view as cv  # noqa: E402
+import economics as ec  # noqa: E402
+import fleet_economics as fe  # noqa: E402
+import fleet_view as fv  # noqa: E402
+from formatting import NBSP  # noqa: E402
+from test_fleet_economics import BAGR, BASE, DUMPER, STARTS, booking, job, model, need  # noqa: E402
+from test_period_result import full  # noqa: E402
+
+NAMES = cv.type_names(BASE)
+K = NBSP + "Kč"
+
+
+def view(m, start=1, end=10, starts=None, **kw):
+    return fv.build(fe.period_result(m, start, end, starts, **kw), cv.type_names(m))
+
+
+def months(m, start=1, end=10, starts=None, n=1.0):
+    return view(m, start, end, starts, fixed_cost_method="months", months=n)
+
+
+def texts(obj):
+    """Všechny texty ve výstupu (rekurzivně)."""
+    if isinstance(obj, str):
+        yield obj
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            yield from texts(v)
+    elif isinstance(obj, (list, tuple)):
+        for v in obj:
+            yield from texts(v)
+
+
+def statuses(obj):
+    if isinstance(obj, dict):
+        if "status" in obj and "tone" in obj:
+            yield obj["status"]
+        for v in obj.values():
+            yield from statuses(v)
+    elif isinstance(obj, (list, tuple)):
+        for v in obj:
+            yield from statuses(v)
+
+
+def kpi(v, key):
+    return next(k for k in v["kpis"] if k["key"] == key)
+
+
+def row(v, item):
+    return next(r for r in v["breakdown"] if r["item"] == item)
+
+
+# ---------------------------------------------------------------------------
+# Částky a stavy
+# ---------------------------------------------------------------------------
+
+def test_money_formatting():
+    assert fv.money(0) == "0" + K and fv.money(389500) == f"389{NBSP}500" + K
+    assert fv.money(-20000) == f"−20{NBSP}000" + K and fv.money(None) == "–"
+
+
+def test_contribution_states():
+    assert fv.contribution_cell(ec.Result(1000.0))["status"] == fv.COMPLETE
+    assert fv.contribution_cell(ec.Result(0.0))["text"] == "0" + K               # skutečná nula
+    upper = fv.contribution_cell(ec.Result(1000.0, missing=("Mini bagr: variabilní náklad pronájmu/den",)))
+    assert upper["status"] == fv.UPPER and upper["text"] == f"nejvýše 1{NBSP}000" + K
+    revenue = fv.contribution_cell(ec.Result(0.0, missing=("Zakázka: tržba",)))
+    assert revenue["status"] == fv.MISSING and revenue["text"] == "nelze určit"     # bez tržby ani horní mez
+    price = fv.contribution_cell(ec.Result(0.0, missing=("Mini bagr: cena pronájmu/den",)))
+    assert price["status"] == fv.MISSING
+    bad = fv.contribution_cell(ec.Result(None, invalid=("tržba = „abc“",)))
+    assert bad["status"] == fv.MISSING and "abc" in bad["explanation"]
+    assert fv.contribution_cell(None)["status"] == fv.MISSING
+
+
+def test_cost_states_distinguish_zero_from_missing():
+    zero = fv.cost_cell(ec.Result(0.0))
+    assert zero["status"] == fv.COMPLETE and zero["text"] == "0" + K
+    missing = fv.cost_cell(ec.Result(0.0, missing=("společná režie/měs.",)))
+    assert missing["status"] == fv.MISSING and missing["text"] == "nezadáno" and "0" not in missing["text"]
+    part = fv.cost_cell(ec.Result(5000.0, missing=("Bagr: nerozdělené fixní/měs.",)))
+    assert part["status"] == fv.MISSING and part["text"].startswith("nejméně")
+    assert fv.cost_cell(ec.Result(None, invalid=("x",)))["status"] == fv.MISSING
+
+
+def test_bounds_states():
+    assert fv.bounds_cell(100.0, 100.0)["status"] == fv.COMPLETE
+    assert fv.bounds_cell(None, 100.0)["status"] == fv.UPPER
+    assert fv.bounds_cell(50.0, 100.0)["explanation"].startswith("rozpětí")
+    cond = fv.bounds_cell(None, 100.0, conditional=True, conditions=["souhlas zákazníka"])
+    assert cond["status"] == fv.CONDITIONAL and "souhlas zákazníka" in cond["explanation"]
+    assert fv.bounds_cell(10.0, None)["status"] == fv.MISSING
+    assert fv.bounds_cell(None, None)["text"] == "nelze určit"
+
+
+def test_day_texts():
+    assert fv.days_text([15, 16, 17, 18]) == "dny 15–18" and fv.days_text([11]) == "den 11"
+    assert fv.days_text([3, 5]) == "dny 3, 5" and fv.days_text([]) == "–" and fv.day_text(None) == "–"
+    assert fv.day_text(3, date(2026, 1, 30)) == "den 3 (1. 2. 2026)"            # přes hranici měsíce
+    assert fv.days_text([1, 2, 3], date(2026, 1, 30)) == "dny 1 (30. 1. 2026)–3 (1. 2. 2026)"
+
+
+def test_warning_and_basis_texts():
+    w = ["SMYKOVY_NAKLADAC den 20: kdyby se potvrdily předběžné nároky: pronájem FIKT-P07",
+         "SMYKOVY_NAKLADAC den 21: kdyby se potvrdily předběžné nároky: pronájem FIKT-P07", "jiné"]
+    assert fv.warnings_text(w, NAMES) == [
+        "Smykový nakladač, dny 20–21: kdyby se potvrdily předběžné nároky: pronájem FIKT-P07", "jiné"]
+    assert fv.basis_text("zadáno: 0.8333 měsíce") == "zadáno: 0,8333 měsíce" and fv.basis_text(None) == ""
+
+
+# ---------------------------------------------------------------------------
+# Celkový pohled
+# ---------------------------------------------------------------------------
+
+def test_complete_result_without_conflicts():
+    m = full(bookings=[booking("P1", BAGR, 1, 4)], jobs=[job("J1", 3, deadline=4)], needs=[need("J1", DUMPER)])
+    v = months(m, starts={"J1": 1})
+    assert v["status"] == fv.COMPLETE and v["computable"]
+    assert not any(fv.NOT_NET_PROFIT in b["text"] for b in v["banners"])
+    res = row(v, "Výsledek z jistých závazků")
+    expected = 4 * (6500 - 500) + (100000 - 40000) - 127000 - 20000
+    assert res["status"] == fv.COMPLETE and res["text"] == fv.money(expected) and res["total"]
+    assert row(v, "Fixní náklady flotily za období")["text"] == "−" + fv.money(127000)
+    assert kpi(v, "konflikty")["text"] == "0 případů" and kpi(v, "konflikty")["status"] == fv.COMPLETE
+    assert v["missing"] == [] and v["method"]["chosen"]
+    assert v["scenarios"]["applicable"] is False and v["scenarios"]["cell"]["status"] == fv.COMPLETE
+
+
+def test_real_zero_overhead_versus_missing_overhead():
+    zero = months(full(overhead="0", bookings=[booking("P1", BAGR, 1, 4)]))
+    empty = months(full(overhead=None, bookings=[booking("P1", BAGR, 1, 4)]))
+    assert row(zero, "Režie za období")["status"] == fv.COMPLETE and row(zero, "Režie za období")["text"] == "0" + K
+    assert zero["status"] == fv.COMPLETE
+    assert row(empty, "Režie za období")["status"] == fv.MISSING and row(empty, "Režie za období")["text"] == "nezadáno"
+    assert empty["status"] == fv.UPPER and row(empty, "Výsledek z jistých závazků")["text"].startswith("nejvýše")
+    assert any(fv.NOT_NET_PROFIT in b["text"] for b in empty["banners"])
+    assert "společná režie/měs." in empty["missing"][0]["items"]
+
+
+def test_no_method_means_costs_are_missing_and_result_is_upper_bound():
+    v = view(full(bookings=[booking("P1", BAGR, 1, 4)]))
+    assert row(v, "Fixní náklady flotily za období")["text"] == "nezadáno"
+    assert row(v, "Výsledek z jistých závazků")["status"] == fv.UPPER
+    assert any("metoda přepočtu" in b["text"] for b in v["banners"]) and not v["method"]["chosen"]
+    assert any(g["group"] == "Nastavení" for g in v["missing"])
+
+
+def test_missing_revenue_is_not_an_upper_bound():
+    m = full(jobs=[job("J1", 3, revenue="")], needs=[need("J1", BAGR)])
+    v = months(m, starts={"J1": 1})
+    assert row(v, "Jisté příspěvky vlastních zakázek")["status"] == fv.MISSING
+    assert row(v, "Výsledek z jistých závazků")["text"] == "nelze určit"
+    assert v["status"] == fv.MISSING
+
+
+def test_complete_costs_but_unresolved_conflict_is_not_complete():
+    m = full(bookings=[booking("P1", BAGR, 1, 5), booking("P2", DUMPER, 1, 2)],
+             jobs=[job("J1", 3, deadline=10)], needs=[need("J1", BAGR)])
+    v = months(m, end=12, starts={"J1": 4})
+    res = row(v, "Výsledek z jistých závazků")
+    assert res["status"] == fv.MISSING and "bez nezapočítaných závazků" in res["text"]
+    assert "nezapočítáno: J1, P1" in res["explanation"]
+    assert kpi(v, "konflikty")["status"] == fv.EXCLUDED
+    [case] = v["conflicts"]
+    assert all(c["status"] == fv.EXCLUDED for c in case["commitments"])
+    assert [x["title"] for x in case["variants"]] == ["Posun zakázky", "Zrušení pronájmu", "Zkrácení pronájmu",
+                                                      "Externí zapůjčení / náhradní stroj",
+                                                      "Ponechat k ručnímu rozhodnutí"]
+    shift = case["variants"][0]
+    assert shift["amount"]["status"] == fv.COMPLETE and shift["feasibility"] == "proveditelná"
+    cancel = case["variants"][1]
+    assert cancel["amount"]["status"] == fv.CONDITIONAL and "souhlas zákazníka" in cancel["amount"]["explanation"]
+    assert case["variants"][-1]["amount"]["status"] == fv.EXCLUDED
+    assert v["scenarios"]["applicable"] and v["scenarios"]["cell"]["status"] == fv.CONDITIONAL
+    assert {g["group"] for g in v["missing"]} == {"Rozhodnutí majitele"}
+
+
+def test_invalid_inputs_are_reported_not_hidden():
+    bad_period = fv.build(fe.period_result(BASE, 5, 1, STARTS))
+    assert bad_period["computable"] is False and bad_period["banners"][0]["tone"] == "bad"
+    assert bad_period["kpis"] == [] and bad_period["status"] == fv.MISSING
+    bad_method = fv.build(fe.period_result(BASE, 1, 10, STARTS, fixed_cost_method="months", months=0))
+    assert bad_method["computable"] is False and "months" in bad_method["banners"][0]["text"]
+    invalid_job = months(full(jobs=[job("J1", 3, revenue="abc")], needs=[need("J1", BAGR)]), starts={"J1": 1})
+    assert invalid_job["computable"] is False
+    assert fv.build(None)["computable"] is False
+
+
+# ---------------------------------------------------------------------------
+# Ukázková data, zákaz „zisku“, tvar výstupu
+# ---------------------------------------------------------------------------
+
+SAMPLE = fv.build(fe.period_result(BASE, 1, 25, STARTS), NAMES)
+SAMPLE_M = fv.build(fe.period_result(BASE, 1, 25, STARTS, fixed_cost_method="months", months=25 / 30), NAMES)
+
+
+def test_sample_data_view():
+    v = SAMPLE_M
+    assert v["status"] == fv.UPPER
+    assert kpi(v, "vysledek")["text"] == f"nejvýše 389{NBSP}500" + K
+    assert kpi(v, "prispevky")["text"] == f"nejvýše 829{NBSP}500" + K
+    assert row(v, "Fixní náklady flotily za období")["text"] == f"−440{NBSP}000" + K
+    assert "0,8333 měsíce" in row(v, "Fixní náklady flotily za období")["explanation"]
+    assert row(v, "Režie za období")["text"] == "nezadáno"
+    assert [c["title"] for c in v["conflicts"]] == [
+        "Kolový bagr · den 11 · J005 × servis", "Silniční válec · dny 15–18 · FIKT-P05 × J006"]
+    shift = v["conflicts"][1]["variants"][0]
+    assert shift["change"].startswith("J006: dny 11–18 → dny 20–27 · zpoždění 2 → 11 dní")
+    assert shift["amount"]["text"] == f"nejvýše 108{NBSP}500" + K and shift["amount"]["status"] == fv.UPPER
+    assert shift["warnings"] == ["Smykový nakladač, dny 20–23: kdyby se potvrdily předběžné nároky: pronájem FIKT-P07"]
+    j005 = v["conflicts"][0]["variants"][0]
+    assert j005["amount"]["text"] == f"nejvýše −20{NBSP}000" + K
+    assert v["scenarios"]["cell"]["text"] == "nelze určit"
+    assert [p["ref"] for p in v["pending"]] == ["FIKT-P06", "FIKT-P07"]
+    assert all(p["status"] == fv.EXCLUDED for p in v["pending"])
+    ledger = {r["ref"]: r for r in v["ledger"]}
+    assert len(ledger) == 19 and not ledger["FIKT-P05"]["counted"] and ledger["FIKT-P05"]["status"] == fv.EXCLUDED
+    assert ledger["J001"]["counted"] and ledger["J001"]["status"] == fv.UPPER
+    assert sum(r["capacity"] for r in v["usage"]) == 225
+
+
+def test_sample_without_method():
+    assert kpi(SAMPLE, "vysledek")["text"] == f"nejvýše 829{NBSP}500" + K
+    assert kpi(SAMPLE, "naklady")["status"] == fv.MISSING
+
+
+@pytest.mark.parametrize("v", [SAMPLE, SAMPLE_M], ids=["bez metody", "s metodou"])
+def test_incomplete_result_is_never_presented_as_profit(v):
+    assert any(fv.NOT_NET_PROFIT in b["text"] for b in v["banners"])
+    for text in texts(v):
+        low = text.lower()
+        assert low.count("zisk") == low.count("nejde o čistý zisk"), text
+
+
+def test_profit_wording_absent_in_all_views():
+    cases = [SAMPLE, SAMPLE_M,
+             months(full(bookings=[booking("P1", BAGR, 1, 4)])),
+             months(full(jobs=[job("J1", 3, revenue="")], needs=[need("J1", BAGR)]), starts={"J1": 1}),
+             fv.build(fe.period_result(BASE, 5, 1, STARTS))]
+    for v in cases:
+        for text in texts(v):
+            low = text.lower()
+            assert low.count("zisk") == low.count("nejde o čistý zisk"), text
+
+
+def test_only_allowed_status_labels():
+    for v in (SAMPLE, SAMPLE_M):
+        found = set(statuses(v))
+        assert found <= set(fv.STATUSES) and {fv.UPPER, fv.MISSING, fv.EXCLUDED} <= found
+
+
+def test_output_is_plain_and_inputs_unchanged():
+    pr = fe.period_result(BASE, 1, 25, STARTS, fixed_cost_method="months", months=1)
+    before = (pr.result, pr.rentals, pr.jobs, pr.range, len(pr.scenarios), pr.options.ledger.entries.copy())
+    v = fv.build(pr, NAMES)
+    json.dumps(v, ensure_ascii=False)                                    # jen obyčejné hodnoty
+    assert (pr.result, pr.rentals, pr.jobs, pr.range, len(pr.scenarios)) == before[:5]
+    assert pr.options.ledger.entries.equals(before[5])
+
+
+def test_module_is_standalone_and_not_connected_to_ui():
+    tree = ast.parse((ROOT / "fleet_view.py").read_text(encoding="utf-8"))
+    imported = {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
+    imported |= {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
+    assert "streamlit" not in imported
+    for path in [ROOT / "app.py", ROOT / "navigace.py", *ROOT.glob("*_view.py"), *(ROOT / "stranky").glob("*.py")]:
+        if path.name != "fleet_view.py":
+            assert "fleet_view" not in path.read_text(encoding="utf-8"), path
