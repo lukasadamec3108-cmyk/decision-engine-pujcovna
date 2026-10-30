@@ -400,3 +400,48 @@ def test_comparison_with_complete_data_is_labelled_but_not_selected():
     assert "nelze porovnat" in kinds                                  # podmíněné varianty: neznámá náhrada
     assert case["comparison_note"] == ""                              # aspoň jedna dvojice je podložená/podmíněná
     assert "selected" not in case and all("doporuč" not in c["text"].lower() for c in case["comparisons"])
+
+
+
+# ---------------------------------------------------------------------------
+# K3.4e1 – předběžné a nejisté závazky, evidence závazků
+# ---------------------------------------------------------------------------
+
+def test_pending_rows_are_not_counted_and_have_reason():
+    rows = SAMPLE["pending"]
+    assert [r["ref"] for r in rows] == ["FIKT-P06", "FIKT-P07"]
+    for r in rows:
+        assert r["status"] == fv.EXCLUDED and not r["counted"] and r["reason"] == "předběžný – jen potenciál"
+    assert rows[0]["machines_text"] == "Pásový dumper" and rows[0]["text"] == f"nejvýše 40{NBSP}000" + K
+    assert "nejde o potvrzený výsledek" in fv.PENDING_NOTE
+
+
+def test_ledger_groups_cover_every_commitment_exactly_once():
+    for v in (SAMPLE, SAMPLE_M):
+        refs = [r["ref"] for g in v["ledger_groups"] for r in g["rows"]]
+        assert len(refs) == len(set(refs)) == len(v["ledger"]) == 19
+        assert [g["state"] for g in v["ledger_groups"]] == [fe.CERTAIN, fe.CONFLICT, fe.TENTATIVE]
+        for g in v["ledger_groups"]:
+            for r in g["rows"]:
+                assert r["state"] == g["state"]
+                assert r["counted"] == (g["state"] == fe.CERTAIN)
+                assert (r["status"] == fv.EXCLUDED) == (g["state"] != fe.CERTAIN)
+
+
+def test_crossing_and_unknown_commitments_are_pending():
+    v14 = fv.build(fe.period_result(BASE, 1, 14, STARTS), NAMES)
+    assert [(r["ref"], r["state"]) for r in v14["pending"]] == [
+        ("FIKT-P01", fe.CROSSES), ("FIKT-P03", fe.CROSSES), ("J009", fe.CROSSES)]
+    assert all(r["status"] == fv.EXCLUDED for r in v14["pending"])
+    m = model(bookings=[booking("P1", BAGR, 1, 2)], jobs=[job("J1", 2), job("J2", 2)],
+              needs=[need("J1", BAGR), need("J2", BAGR)])
+    v = fv.build(fe.period_result(m, 1, 10, {"J1": 4}))
+    unknown = [r for r in v["pending"] if r["state"] == fe.UNKNOWN]
+    assert {r["ref"] for r in unknown} >= {"J2"} and all(r["status"] == fv.EXCLUDED for r in unknown)
+    j2 = next(r for r in v["ledger"] if r["ref"] == "J2")
+    assert j2["period"] == "bez termínu" and j2["date_source"] == "bez termínu"
+
+
+def test_machines_text_uses_names_and_quantities():
+    assert fv._machines_text("MINI_BAGR×1; PASOVY_DUMPER×2", NAMES) == "Mini bagr, Pásový dumper ×2"
+    assert fv._machines_text("", NAMES) == "" and fv._machines_text("X×1", None) == "X"

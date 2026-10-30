@@ -240,7 +240,7 @@ def expander(at, prefix, index):
 
 def test_comparison_is_information_only_and_says_when_not_possible():
     at = page()
-    labels = [e.label for e in at.main.expander]
+    labels = [e.label for e in at.main.expander if e.label.startswith("Porovnání variant")]
     assert labels == ["Porovnání variant – jen informace (0)", "Porovnání variant – jen informace (3)"]
     j005 = plain(m.value for m in expander(at, "Porovnání variant", 0).markdown)
     assert "Varianty nelze porovnat – vyčíslit lze jen jednu variantu" in j005
@@ -291,3 +291,86 @@ def test_links_do_not_change_data_or_plan():
     assert dm.data_fingerprint() == before
     open_page(at, KEY)
     assert kpi_values(at) == {h["label"]: h["text"].replace("\xa0", " ") for h in sample_view()["headline"]}
+
+
+# ---------------------------------------------------------------------------
+# K3.4e1 – předběžné a nejisté závazky, evidence závazků
+# ---------------------------------------------------------------------------
+
+def section(at, title_start):
+    """Text bloků stránky od nadpisu sekce po další nadpis sekce."""
+    out, inside = [], False
+    for m in body(at):
+        if "Každý pronájem a každá vlastní zakázka" in m:                # začátek evidence – už jiná část
+            break
+        if 'class="dd-section-title"' in m:
+            inside = title_start in m
+            continue
+        if inside:
+            out.append(m)
+    return plain(out)
+
+
+def ledger_rows(at):
+    exp = [e for e in at.main.expander if e.label.startswith("Evidence závazků")][0]
+    html_rows = " ".join(m.value for m in exp.markdown)
+    return exp, re.findall(r'<span class="l">([A-Z0-9-]+) – ', html_rows)
+
+
+def test_pending_commitments_are_shown_as_not_counted():
+    at = page()
+    text = section(at, "Předběžné a nejisté závazky")
+    assert "nezapočítáno – 2 závazky" in plain(body(at))
+    assert fv.PENDING_NOTE in text
+    for ref, period, machine, amount in (("FIKT-P06", "dny 21–25", "Pásový dumper", "nejvýše 40 000 Kč"),
+                                         ("FIKT-P07", "dny 19–23", "Smykový nakladač", "nejvýše 37 500 Kč")):
+        assert f"{ref} – pronájem" in text and period in text and machine in text and amount in text
+    assert text.count("předběžný – jen potenciál") == 2 and text.count("nezapočítáno") >= 2
+    # výsledek se nemění – předběžné částky nejsou ve výsledku
+    assert kpi_values(at)["Celkový výsledek flotily"] == "nejvýše 829 500 Kč"
+
+
+def test_crossing_commitments_in_shorter_period():
+    at = page()
+    [s for s in at.slider if s.key == "fe_period"][0].set_value((1, 14)).run()
+    assert not at.exception
+    text = section(at, "Předběžné a nejisté závazky")
+    for ref in ("FIKT-P01", "FIKT-P03", "J009"):
+        assert ref in text, ref
+    assert text.count("přesahuje období – chybí pravidlo časového rozlišení") == 3
+    assert "FIKT-P06" not in text                                       # předběžná rezervace je mimo období
+    view = fv.build(fe.period_result(dm.load_model(), 1, 14, sample_starts()), cv.type_names(dm.load_model()))
+    assert kpi_values(at) == {h["label"]: h["text"].replace("\xa0", " ") for h in view["headline"]}
+
+
+def test_ledger_lists_all_commitments_once_grouped_by_state():
+    at = page()
+    exp, refs = ledger_rows(at)
+    assert exp.label == "Evidence závazků (19)"
+    assert len(refs) == 19 and len(set(refs)) == 19
+    model = dm.load_model()
+    assert sorted(refs) == sorted(list(model.rental_bookings["booking_id"]) + list(model.jobs["job_id"]))
+    groups = re.findall(r'class="dd-group">([^<]+)</div>', " ".join(m.value for m in exp.markdown))
+    assert groups == ["Jisté využití – započteno do výsledku (14)", "V konfliktu – nezapočítáno, rozhodne majitel (3)",
+                      "Předběžné – nezapočítáno, jen potenciál (2)"]
+    text = plain(m.value for m in exp.markdown)
+    assert "termín: návrh plánu" in text and "termín: rezervace" in text and "kus: nejednoznačné přiřazení" in text
+    assert "zisk" not in text.lower()
+
+
+def test_ledger_in_shorter_period_keeps_every_commitment():
+    at = page()
+    [s for s in at.slider if s.key == "fe_period"][0].set_value((1, 14)).run()
+    exp, refs = ledger_rows(at)
+    assert len(refs) == len(set(refs)) == 19
+    groups = re.findall(r'class="dd-group">([^<]+)</div>', " ".join(m.value for m in exp.markdown))
+    assert [g.rsplit(" (", 1)[0] for g in groups] == [
+        "Jisté využití – započteno do výsledku", "V konfliktu – nezapočítáno, rozhodne majitel",
+        "Přesah mimo období – nezapočítáno, chybí pravidlo časového rozlišení", "Mimo zvolené období – nezapočítáno"]
+
+
+def sample_starts():
+    model = dm.load_model()
+    jobs = dm.legacy_jobs(model)
+    plan = sch.evaluate(jobs, sch.optimize_schedule(jobs, dm.fleet_capacity(model))["starts"])
+    return cv.job_starts_from_plan(jobs, plan)

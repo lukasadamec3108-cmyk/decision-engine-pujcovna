@@ -272,6 +272,12 @@ se nepočítá a žádná jiná stránka se nemění.
   **„Zobrazit v kalendáři“** (Plánování kapacity s filtrem na stroj konfliktu – mění se jen filtr
   zobrazení) a odkaz **„Vlastní zakázky“**. Na ukázkových datech nelze varianty porovnat: u J005 lze
   vyčíslit jen posun, u FIKT-P05 × J006 chybí storno / smluvní náhrada.
+- **K3.4e1 – předběžné a nejisté závazky:** samostatná sekce s předběžnými, přesahujícími a nejistými
+  závazky (období, stroje, částka, důvod nezapočítání) označenými „nezapočítáno – nejde o potvrzený
+  výsledek“; částky se nesčítají s výsledkem ani mezi sebou. Rozbalovací blok **„Evidence závazků“**
+  obsahuje každý pronájem a zakázku z dat právě jednou, ve skupinách podle stavu (jisté využití –
+  započteno; konflikt; předběžné; přesah; nejistá obsazenost; mimo období; zrušené), s termínem, jeho
+  zdrojem a přiřazením kusu. Na mobilu řádky pod sebou. Nic se nepočítá znovu – data jsou z K3.1.
 
 Na ukázkových datech (dny 1–25) jsou všechny ekonomické částky **horní meze** nebo „chybí údaje“
 (chybí variabilní náklady pronájmu, nastavení `direct_cost_includes_machines`, režie a rozhodnutí

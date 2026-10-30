@@ -163,7 +163,8 @@ def build(pr, names=None, plan_start=None) -> dict:
         return dict(status=MISSING, computable=False,
                     banners=[dict(tone="bad", text="Výsledek nelze spočítat: " + "; ".join(reasons))],
                     kpis=[], breakdown=[], missing=[], conflicts=[], scenarios=dict(), pending=[],
-                    ledger=[], usage=[], method=dict(text="", chosen=False), headline=[], components=[],
+                    ledger=[], ledger_groups=[], usage=[], method=dict(text="", chosen=False), headline=[],
+                    components=[],
                     period=_period(pr, plan_start) if pr is not None else "")
     led = pr.options.ledger
     rentals, jobs = contribution_cell(pr.rentals), contribution_cell(pr.jobs)
@@ -178,8 +179,9 @@ def build(pr, names=None, plan_start=None) -> dict:
         missing=_missing(pr, excluded),
         conflicts=[_conflict(case, names, plan_start) for case in pr.options.cases],
         scenarios=_scenarios(pr),
-        pending=_pending(led, plan_start),
-        ledger=_ledger(led, plan_start),
+        pending=_pending(led, plan_start, names),
+        ledger=_ledger(led, plan_start, names),
+        ledger_groups=_ledger_groups(led, plan_start, names),
         usage=_usage(led.usage, names),
         method=dict(text=basis_text(pr.fixed_cost_basis), chosen=pr.months is not None),
         period=_period(pr, plan_start),
@@ -591,19 +593,54 @@ def _has_condition(pr, scenario) -> bool:
 # Předběžné a nejisté závazky, evidence, využití
 # ---------------------------------------------------------------------------
 
-def _pending(led, plan_start) -> list:
-    rows = []
-    for r in led.entries.itertuples():
-        if r.state in (fe.TENTATIVE, fe.CROSSES, fe.UNKNOWN):
-            rows.append(_entry_row(r, plan_start))
-    return rows
+# Předběžné, přesahující a nejisté závazky (K3.4e1): do výsledku se NEZAPOČÍTÁVAJÍ – částka jen pro informaci.
+PENDING_STATES = (fe.TENTATIVE, fe.CROSSES, fe.UNKNOWN)
+PENDING_NOTE = ("Nezapočítané částky – nejde o potvrzený výsledek. Částky se nesčítají s výsledkem ani mezi sebou; "
+                "jde o příspěvky celých závazků (při chybějících nákladech jen horní meze).")
+# Evidence závazků: skupiny v pevném pořadí (každý závazek z dat právě v jedné skupině)
+LEDGER_GROUPS = [
+    (fe.CERTAIN, "Jisté využití – započteno do výsledku"),
+    (fe.CONFLICT, "V konfliktu – nezapočítáno, rozhodne majitel"),
+    (fe.TENTATIVE, "Předběžné – nezapočítáno, jen potenciál"),
+    (fe.CROSSES, "Přesah mimo období – nezapočítáno, chybí pravidlo časového rozlišení"),
+    (fe.UNKNOWN, "Obsazenost nelze určit – nezapočítáno"),
+    (fe.OUTSIDE, "Mimo zvolené období – nezapočítáno"),
+    (fe.CANCELLED, "Zrušené – nezapočítáno"),
+]
 
 
-def _ledger(led, plan_start) -> list:
-    return [_entry_row(r, plan_start) for r in led.entries.itertuples()]
+def _pending(led, plan_start, names=None) -> list:
+    return [_entry_row(r, plan_start, names) for r in led.entries.itertuples() if r.state in PENDING_STATES]
 
 
-def _entry_row(r, plan_start) -> dict:
+def _ledger(led, plan_start, names=None) -> list:
+    return [_entry_row(r, plan_start, names) for r in led.entries.itertuples()]
+
+
+def _ledger_groups(led, plan_start, names=None) -> list:
+    rows = _ledger(led, plan_start, names)
+    known = {state for state, _ in LEDGER_GROUPS}
+    groups = [dict(state=state, title=title, rows=[r for r in rows if r["state"] == state])
+              for state, title in LEDGER_GROUPS]
+    other = [r for r in rows if r["state"] not in known]                # pojistka – nic nezmizí
+    if other:
+        groups.append(dict(state="jiné", title="Jiný stav – nezapočítáno", rows=other))
+    return [g for g in groups if g["rows"]]
+
+
+def _machines_text(needs, names) -> str:
+    """„MINI_BAGR×1; PASOVY_DUMPER×1“ → „Mini bagr, Pásový dumper“ (počet kusů jen když je víc než 1)."""
+    out = []
+    for part in str(needs or "").split("; "):
+        if not part:
+            continue
+        type_id, _, qty = part.partition("×")
+        name = (names or {}).get(type_id, type_id)
+        out.append(name if qty in ("", "1") else f"{name} ×{qty}")
+    return ", ".join(out)
+
+
+def _entry_row(r, plan_start, names=None) -> dict:
     res = fe.ec.Result(r.contribution, tuple(r.missing), tuple(r.invalid))
     cell = contribution_cell(res)
     if r.state != fe.CERTAIN:
@@ -614,6 +651,8 @@ def _entry_row(r, plan_start) -> dict:
     return dict(ref=r.ref, kind="pronájem" if r.kind == "rental" else "vlastní zakázka", name=r.name or "",
                 period=period, date_source=r.date_source, state=r.state,
                 counted=bool(r.counted_as_certain), machines=r.needs, unit_assignment=r.unit_assignment,
+                machines_text=_machines_text(r.needs, names),
+                reason="započteno do výsledku" if r.state == fe.CERTAIN else STATE_TEXT.get(r.state, r.state),
                 machine_days=r.machine_days, machine_days_in_period=r.md_in_period, **cell)
 
 
