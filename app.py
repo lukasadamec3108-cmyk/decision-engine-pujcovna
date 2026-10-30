@@ -2936,6 +2936,16 @@ def fe_open_calendar(type_ids: list) -> None:
     st.switch_page(_PAGE_OBJ["kapacita"])
 
 
+def fe_entry_row(r: dict, detail: bool = False) -> tuple:
+    """Řádek závazku pro ui.dash_rows: (popisek, částka, poznámka se štítkem stavu) – na mobilu pod sebou."""
+    label = f"{r['ref']} – {r['kind']}" + (f" · {r['name']}" if r["name"] else "")
+    facts = [r["period"], r["machines_text"], r["reason"]]
+    if detail:
+        facts += [f"termín: {r['date_source']}", f"kus: {r['unit_assignment']}"]
+    note = html.escape(" · ".join(x for x in facts if x)) + " · " + fe_chip(r["status"], r["tone"])
+    return label, html.escape(r["text"]), note
+
+
 def fe_banner(b: dict) -> None:
     text = html.escape(b["text"])
     if b["text"].startswith(FLEET_ECON_NOT_NET_PROFIT):
@@ -3056,6 +3066,28 @@ if PAGE == "ekonomika":
                                fe_chip(sc["cell"]["status"], sc["cell"]["tone"]) + " "
                                + html.escape(sc["cell"]["explanation"] or sc.get("text", "")))
                     ui.dash_text(html.escape(sc.get("text", "")) + " Rozhodnutí je na majiteli půjčovny.", muted=True)
+
+            # K3.4e1: předběžné, přesahující a nejisté závazky – nezapočítané částky (jen informace)
+            fe_pending = fe_view["pending"]
+            st.markdown('<div class="dd-section-title">Předběžné a nejisté závazky <small>'
+                        + html.escape(f"nezapočítáno – {len(fe_pending)} "
+                                      + fv._plural(len(fe_pending), "závazek", "závazky", "závazků"))
+                        + "</small></div>", unsafe_allow_html=True)
+            with ui.dash_section("ekon_nezapocitano_neutral"):
+                ui.dash_text(html.escape(fv.PENDING_NOTE), muted=True)
+                if fe_pending:
+                    ui.dash_rows([fe_entry_row(r) for r in fe_pending])
+                else:
+                    ui.dash_text("V období nejsou předběžné, přesahující ani nejisté závazky.", muted=True)
+
+            # K3.4e1: evidence všech závazků z dat (každý právě jednou, ve skupinách podle stavu)
+            with st.expander(f"Evidence závazků ({len(fe_view['ledger'])})"):
+                ui.dash_text("Každý pronájem a každá vlastní zakázka z dat právě jednou. Do výsledku se započítává "
+                             "jen skupina „Jisté využití“; částky jsou příspěvky celých závazků.", muted=True)
+                for grp in fe_view["ledger_groups"]:
+                    st.markdown(f'<div class="dd-group">{html.escape(grp["title"])} ({len(grp["rows"])})</div>',
+                                unsafe_allow_html=True)
+                    ui.dash_rows([fe_entry_row(r, detail=True) for r in grp["rows"]])
 
 
 # ==================================================
