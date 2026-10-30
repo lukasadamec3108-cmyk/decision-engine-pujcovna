@@ -163,7 +163,8 @@ def build(pr, names=None, plan_start=None) -> dict:
         return dict(status=MISSING, computable=False,
                     banners=[dict(tone="bad", text="Výsledek nelze spočítat: " + "; ".join(reasons))],
                     kpis=[], breakdown=[], missing=[], conflicts=[], scenarios=dict(), pending=[],
-                    ledger=[], ledger_groups=[], usage=[], method=dict(text="", chosen=False), headline=[],
+                    ledger=[], ledger_groups=[], usage=[], usage_summary=None, methodology=list(METHODOLOGY),
+                    method=dict(text="", chosen=False), headline=[],
                     components=[],
                     period=_period(pr, plan_start) if pr is not None else "")
     led = pr.options.ledger
@@ -182,6 +183,8 @@ def build(pr, names=None, plan_start=None) -> dict:
         pending=_pending(led, plan_start, names),
         ledger=_ledger(led, plan_start, names),
         ledger_groups=_ledger_groups(led, plan_start, names),
+        usage_summary=_usage_summary(led.usage, names),
+        methodology=list(METHODOLOGY),
         usage=_usage(led.usage, names),
         method=dict(text=basis_text(pr.fixed_cost_basis), chosen=pr.months is not None),
         period=_period(pr, plan_start),
@@ -667,3 +670,91 @@ def _usage(usage, names) -> list:
                          conflict=int(r.conflict), unknown=int(r.unknown), free=int(r.free),
                          capacity_known=bool(r.capacity_known), unit_level=r.unit_level))
     return rows
+
+
+
+# ---------------------------------------------------------------------------
+# K3.4e2 – stručný souhrn využití strojů a metodika „Jak se počítá“
+# ---------------------------------------------------------------------------
+# Souhrn je jen převzatý součet za flotilu z fleet_usage (Usage.fleet) – stejná čísla jako stránka
+# Plánování kapacity → Přehled využití. Každý dostupný kus se v každém dni započte do PRÁVĚ JEDNÉ
+# kategorie, takže se kategorie nepřekrývají a jejich součet je kapacita (fleet_usage to ověřuje: balanced).
+# Nárok nad kapacitu a předběžné rezervace NEJSOU součástí kapacity – vykazují se zvlášť.
+
+USAGE_ROWS = [
+    ("rental", "Pronájem", "dny, kdy je kus obsazený potvrzeným pronájmem"),
+    ("job", "Vlastní zakázky", "dny, kdy je kus na zakázce podle návrhu plánu"),
+    ("maintenance", "Servis", "servisní odstávky kusu"),
+    ("conflict", "Konflikt", "dny, kdy nároky převyšují kusy – všechny kusy typu toho dne, rozdělení nelze určit"),
+    ("unknown", "Nelze určit", "chybějící nebo neplatné údaje – nikdy to neznamená volno"),
+    ("free", "Volná kapacita", "kus je k dispozici a nic ho neblokuje"),
+]
+
+
+def _md_text(n) -> str:
+    return f"{n} {_plural(n, 'strojoden', 'strojodny', 'strojodnů')}"
+
+
+def _usage_summary(usage, names) -> dict:
+    """Kompaktní souhrn strojodnů za období (nic se nepočítá znovu – Usage.fleet z fleet_usage)."""
+    if usage is None or not getattr(usage, "fleet", None):
+        return None
+    f = usage.fleet
+    rows = [dict(key=k, label=label, value=int(f[k]), text=_md_text(int(f[k])), meaning=meaning)
+            for k, label, meaning in USAGE_ROWS if k != "unknown" or f.get(k)]
+    notes = []
+    if f.get("excess"):
+        notes.append(f"Nárok nad kapacitu: {_md_text(int(f['excess']))} – potvrzené nároky, které se do kusů nevejdou; "
+                     "nejsou součástí kapacity.")
+    if f.get("tentative"):
+        notes.append(f"Předběžné rezervace: {_md_text(int(f['tentative']))} – kapacitu neblokují; nejsou součástí "
+                     "kapacity.")
+    if f.get("excluded"):
+        notes.append("Bez typů, u nichž nelze spolehlivě určit počet kusů: "
+                     + ", ".join((names or {}).get(t, t) for t in f["excluded"]) + ".")
+    balanced = bool(f.get("balanced"))
+    return dict(capacity=int(f["capacity"]), capacity_text=_md_text(int(f["capacity"])), rows=rows, notes=notes,
+                balanced=balanced,
+                composition=("Kategorie se nepřekrývají – každý dostupný kus se v každém dni započte do právě jedné; "
+                             "dohromady dávají kapacitu flotily." if balanced
+                             else "Součet kategorií neodpovídá kapacitě – souhrn nelze spolehlivě sestavit."))
+
+
+# Metodika „Jak se počítá“ – jen popis skutečné implementace (economics, fleet_usage, fleet_economics,
+# fleet_view). Žádné závěry ani rady majiteli.
+METHODOLOGY = [
+    ("Pět stavů částek",
+     "Úplný – všechny potřebné údaje jsou známé, částka je přesná (i skutečná nula „0 Kč“). "
+     "Horní mez – chybí jen některý náklad (například variabilní náklad nebo režie); skutečná částka může být "
+     "jen nižší, proto „nejvýše“. Podmíněný – platí jen za podmínky, kterou nelze ověřit (souhlas zákazníka, "
+     "storno nebo smluvní náhrada). Chybí údaje – nejde určit ani mez (například chybí tržba, cena nebo "
+     "zvolená metoda přepočtu) nebo nejsou rozhodnuté konflikty; nikdy se nenahrazuje nulou. Nezapočítáno – závazek je vidět, ale do výsledku "
+     "se nepočítá."),
+    ("Příspěvek a celkový výsledek",
+     "Příspěvek pronájmu = tržby − variabilní náklady pronájmu. Příspěvek vlastní zakázky = tržby − přímé "
+     "náklady − penále za zpoždění − variabilní náklady strojů (jen pokud nejsou už v přímých nákladech). "
+     "Příspěvky neobsahují fixní náklady ani režii. Celkový výsledek flotily = jisté příspěvky pronájmů "
+     "a zakázek − fixní náklady flotily − režie."),
+    ("Fixní náklady jen jednou",
+     "Fixní náklady se odečítají jednou za celou flotilu (vlastněné a leasingové kusy) a nerozpočítávají se do "
+     "příspěvků pronájmů ani zakázek. Obsahují i průměrný servis, proto se servis znovu neodečítá."),
+    ("Přepočet na zvolené období",
+     "Fixní náklady a režie jsou v datech měsíční. Aplikace žádnou metodu přepočtu nepředpokládá: "
+     "„Nezadávat“ – neodečtou se a výsledek je jen horní mez; „Zadat počet měsíců“ – měsíční částka × zadaný počet "
+     "měsíců; „Podle kalendáře“ – za každý měsíc dny období v měsíci ÷ počet dní měsíce (vyžaduje datum "
+     "prvního dne plánu). Režie se odečte jen tehdy, když je v datech zadaná."),
+    ("Co se nezapočítává a proč",
+     "Konflikt – stroj nemůže ve stejný den sloužit oběma závazkům a aplikace nerozhoduje, který ustoupí; "
+     "nezapočítávají se obě strany. Předběžné rezervace – nejsou potvrzené a kapacitu neblokují. Přesah mimo "
+     "období – chybí pravidlo, jakou část příspěvku přiřadit zvolenému období; příspěvek se poměrně nedělí. "
+     "Nejistá obsazenost – neplatné nebo chybějící údaje, případně zakázka bez termínu v plánu."),
+    ("Strojodny ve využití",
+     "Strojoden = jeden kus stroje na jeden den. Každý dostupný kus se v každém dni započte do právě jedné "
+     "kategorie (pronájem, vlastní zakázka, servis, konflikt, nelze určit, volno); dohromady dávají kapacitu. "
+     "Termíny vlastních zakázek pocházejí z návrhu plánu. Nárok nad kapacitu a předběžné rezervace jsou "
+     "uvedené zvlášť a do kapacity se nepočítají."),
+    ("Proč zobrazený výsledek není přesný",
+     "Pokud chybí náklady nebo režie, některé závazky nejsou započtené nebo jde o ukázková data, nejde o čistý "
+     "zisk – je to výsledek z jistých závazků se známými položkami. Rozpětí scénářů jen ukazuje možné "
+     "varianty řešení konfliktů; žádnou nevybírá."),
+]
