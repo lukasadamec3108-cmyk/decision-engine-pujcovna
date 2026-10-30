@@ -445,3 +445,61 @@ def test_crossing_and_unknown_commitments_are_pending():
 def test_machines_text_uses_names_and_quantities():
     assert fv._machines_text("MINI_BAGR×1; PASOVY_DUMPER×2", NAMES) == "Mini bagr, Pásový dumper ×2"
     assert fv._machines_text("", NAMES) == "" and fv._machines_text("X×1", None) == "X"
+
+
+
+# ---------------------------------------------------------------------------
+# K3.4e2 – souhrn využití strojů a metodika
+# ---------------------------------------------------------------------------
+
+def capacity_page_totals(start, end):
+    """Součty z Přehledu využití stránky Plánování kapacity (capacity_view) pro stejné období a plán."""
+    cal = cv.build(BASE, STARTS)
+    grid = cv.grid(cal, start, end, cal.type_ids())
+    return cv.fleet_utilization(cv.utilization_table(grid, NAMES, cal.unknown_capacity), grid)
+
+
+def test_usage_summary_matches_capacity_planning():
+    for start, end in ((1, 25), (1, 14), (5, 30)):
+        u = fv.build(fe.period_result(BASE, start, end, STARTS), NAMES)["usage_summary"]
+        ref = capacity_page_totals(start, end)
+        assert u["capacity"] == ref["capacity"]
+        values = {r["key"]: r["value"] for r in u["rows"]}
+        for key in ("rental", "job", "maintenance", "conflict", "free"):
+            assert values[key] == ref[key], (start, end, key)
+        assert ref["unknown"] == 0 and "unknown" not in values           # „nelze určit“ jen když nenulové
+
+
+def test_usage_categories_do_not_overlap_and_make_up_capacity():
+    u = SAMPLE["usage_summary"]
+    assert u["balanced"] and sum(r["value"] for r in u["rows"]) == u["capacity"] == 225
+    assert [(r["label"], r["value"]) for r in u["rows"]] == [
+        ("Pronájem", 25), ("Vlastní zakázky", 110), ("Servis", 8), ("Konflikt", 5), ("Volná kapacita", 77)]
+    assert "nepřekrývají" in u["composition"]
+    assert u["notes"] == ["Nárok nad kapacitu: 5 strojodnů – potvrzené nároky, které se do kusů nevejdou; nejsou "
+                          "součástí kapacity.",
+                          "Předběžné rezervace: 10 strojodnů – kapacitu neblokují; nejsou součástí kapacity."]
+    assert not any("%" in r["text"] for r in u["rows"])                  # žádné nové procento využití
+
+
+def test_usage_summary_shows_unknown_and_excluded_types():
+    fleet = model(units=((f"{BAGR}-01", BAGR),), bookings=[booking("P1", BAGR, 1, 2),
+                                                           booking("P2", BAGR, 4, 4, status="potvrzeno")])
+    u = fv.build(fe.period_result(fleet, 1, 5))["usage_summary"]
+    values = {r["key"]: r["value"] for r in u["rows"]}
+    assert values["unknown"] == 3 and values["rental"] == 2 and u["balanced"]
+
+
+def test_methodology_matches_implementation_and_wording_rules():
+    titles = [t for t, _ in SAMPLE["methodology"]]
+    assert titles == ["Pět stavů částek", "Příspěvek a celkový výsledek", "Fixní náklady jen jednou",
+                      "Přepočet na zvolené období", "Co se nezapočítává a proč", "Strojodny ve využití",
+                      "Proč zobrazený výsledek není přesný"]
+    text = " ".join(d for _, d in SAMPLE["methodology"])
+    for status in fv.STATUSES:                                          # všech pět stavů
+        assert status.capitalize() in text, status
+    assert "jen jednou" not in text or "jednou za celou flotilu" in text
+    assert "servis znovu neodečítá" in text and "nepředpokládá" in text
+    assert text.lower().count("zisk") == text.lower().count("nejde o čistý zisk") == 1
+    assert "doporuč" not in text.lower()
+    assert fv.build(fe.period_result(BASE, 5, 1, STARTS))["methodology"] == SAMPLE["methodology"]

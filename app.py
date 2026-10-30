@@ -2936,6 +2936,15 @@ def fe_open_calendar(type_ids: list) -> None:
     st.switch_page(_PAGE_OBJ["kapacita"])
 
 
+def fe_open_usage(start: int, end: int, plan_start) -> None:
+    """Plánování kapacity → Přehled využití se stejným obdobím (všechny stroje). Jen filtry zobrazení."""
+    st.session_state["cap_types"] = []
+    st.session_state["cap_period"] = (int(start), int(end))
+    st.session_state["cap_plan_start"] = plan_start
+    st.session_state["cap_view"] = CAP_VIEWS[1]
+    st.switch_page(_PAGE_OBJ["kapacita"])
+
+
 def fe_entry_row(r: dict, detail: bool = False) -> tuple:
     """Řádek závazku pro ui.dash_rows: (popisek, částka, poznámka se štítkem stavu) – na mobilu pod sebou."""
     label = f"{r['ref']} – {r['kind']}" + (f" · {r['name']}" if r["name"] else "")
@@ -3019,6 +3028,23 @@ if PAGE == "ekonomika":
                 else:
                     ui.dash_text("Pro zvolené období a metodu nechybí žádný údaj ani rozhodnutí.")
 
+            # K3.4e2: stručný souhrn využití strojů (Usage.fleet – stejná čísla jako Plánování kapacity)
+            fe_use = fe_view["usage_summary"]
+            if fe_use:
+                st.markdown('<div class="dd-section-title">Využití strojů za období <small>'
+                            + html.escape(f"{fe_view['period']} · kapacita flotily {fe_use['capacity_text']}")
+                            + "</small></div>", unsafe_allow_html=True)
+                with ui.dash_section("ekon_vyuziti_neutral"):
+                    ui.dash_rows([(r["label"], html.escape(r["text"]), html.escape(r["meaning"]))
+                                  for r in fe_use["rows"]])
+                    ui.dash_text(html.escape(fe_use["composition"]), muted=True)
+                    for note in fe_use["notes"]:
+                        ui.dash_text(html.escape(note), muted=True)
+                    with ui.dash_links("ekon_vyuziti"):
+                        if st.button("Podrobné využití v Plánování kapacity", key="fe_usage_detail",
+                                     icon=":material/calendar_month:", type="tertiary"):
+                            fe_open_usage(fe_from, fe_to, fe_start)
+
             fe_cases = fe_view["conflicts"]
             st.markdown('<div class="dd-section-title">Kapacitní konflikty a možné varianty <small>'
                         + html.escape(f"{len(fe_cases)} {fv._plural(len(fe_cases), 'případ', 'případy', 'případů')}")
@@ -3088,6 +3114,10 @@ if PAGE == "ekonomika":
                     st.markdown(f'<div class="dd-group">{html.escape(grp["title"])} ({len(grp["rows"])})</div>',
                                 unsafe_allow_html=True)
                     ui.dash_rows([fe_entry_row(r, detail=True) for r in grp["rows"]])
+
+        # K3.4e2: metodika – jen popis skutečné implementace, bez závěrů a rad
+        with st.expander("Jak se počítá"):
+            ui.explain([(title, html.escape(text)) for title, text in fe_view["methodology"]])
 
 
 # ==================================================

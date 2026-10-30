@@ -278,6 +278,14 @@ se nepočítá a žádná jiná stránka se nemění.
   obsahuje každý pronájem a zakázku z dat právě jednou, ve skupinách podle stavu (jisté využití –
   započteno; konflikt; předběžné; přesah; nejistá obsazenost; mimo období; zrušené), s termínem, jeho
   zdrojem a přiřazením kusu. Na mobilu řádky pod sebou. Nic se nepočítá znovu – data jsou z K3.1.
+- **K3.4e2 – využití strojů a metodika:** kompaktní souhrn strojodnů za období (pronájem, vlastní
+  zakázky, servis, konflikt, případně „nelze určit“, volná kapacita) převzatý z `fleet_usage`
+  (`Usage.fleet`) – stejná čísla jako Plánování kapacity → Přehled využití. Kategorie se nepřekrývají
+  a dohromady dávají kapacitu; nárok nad kapacitu a předběžné rezervace jsou uvedené zvlášť. Nové
+  procento využití se nepočítá. Tlačítko **„Podrobné využití v Plánování kapacity“** otevře Přehled
+  využití se stejným obdobím (a datem dne 1) pro všechny stroje. Rozbalovací blok **„Jak se počítá“**
+  popisuje stavy částek, příspěvek × výsledek, fixní náklady jednou, metody přepočtu, nezapočtené
+  závazky, strojodny a proč nejde o čistý zisk (texty ve `fleet_view.METHODOLOGY`).
 
 Na ukázkových datech (dny 1–25) jsou všechny ekonomické částky **horní meze** nebo „chybí údaje“
 (chybí variabilní náklady pronájmu, nastavení `direct_cost_includes_machines`, režie a rozhodnutí
