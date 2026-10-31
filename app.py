@@ -2951,8 +2951,19 @@ def fe_entry_row(r: dict, detail: bool = False) -> tuple:
     facts = [r["period"], r["machines_text"], r["reason"]]
     if detail:
         facts += [f"termín: {r['date_source']}", f"kus: {r['unit_assignment']}"]
-    note = html.escape(" · ".join(x for x in facts if x)) + " · " + fe_chip(r["status"], r["tone"])
+    note = ui.nowrap_ids(" · ".join(x for x in facts if x)) + " · " + fe_chip(r["status"], r["tone"])
     return label, html.escape(r["text"]), note
+
+
+def fe_banners(banners: list) -> None:
+    """Upozornění stránky (K3.4e3a): ukázková data a „nejde o čistý zisk“ samostatně a výrazně, ostatní
+    informační upozornění (metoda přepočtu, konflikty) v jednom kompaktním bloku – texty beze změny."""
+    info = [b for b in banners if b["tone"] == "info" and b["text"] != fv.FICTITIOUS]
+    for b in banners:
+        if b not in info:
+            fe_banner(b)
+    if info:
+        ui.insight("<ul class=\"fe-notes\">" + "".join(f"<li>{html.escape(b['text'])}</li>" for b in info) + "</ul>")
 
 
 def fe_banner(b: dict) -> None:
@@ -2995,8 +3006,7 @@ if PAGE == "ekonomika":
                                          "warn"), unsafe_allow_html=True)
 
         with fe_top:
-            for b in fe_view["banners"]:
-                fe_banner(b)
+            fe_banners(fe_view["banners"])
             if fe_view["computable"]:
                 st.markdown(f'<div class="dd-section-title">Hlavní ukazatele <small>{html.escape(fe_view["period"])}'
                             "</small></div>", unsafe_allow_html=True)
@@ -3042,7 +3052,7 @@ if PAGE == "ekonomika":
                         ui.dash_text(html.escape(note), muted=True)
                     with ui.dash_links("ekon_vyuziti"):
                         if st.button("Podrobné využití v Plánování kapacity", key="fe_usage_detail",
-                                     icon=":material/calendar_month:", type="tertiary"):
+                                     icon=":material/bar_chart:", type="tertiary"):
                             fe_open_usage(fe_from, fe_to, fe_start)
 
             fe_cases = fe_view["conflicts"]
@@ -3053,7 +3063,8 @@ if PAGE == "ekonomika":
                 ui.dash_text("V období nejsou konflikty potvrzených pronájmů, zakázek a servisu.", muted=True)
             for case in fe_cases:
                 with ui.dash_section(f"ekon_konflikt_{case['id']}_bad"):
-                    ui.dash_section_head("alert", case["title"], html.escape(case["note"]), tone="bad")
+                    ui.dash_section_head("alert", case["title"], html.escape(case["note"]), tone="bad",
+                                         title_html=ui.nowrap_ids(case["title"]))
                     ui.dash_rows([(f"{c['ref']} – {c['kind']}", html.escape(c["text"]),
                                    html.escape(c["period"]) + " · " + fe_chip(c["status"], c["tone"]))
                                   for c in case["commitments"]]
@@ -3062,7 +3073,7 @@ if PAGE == "ekonomika":
                         title=v["title"], sub=f"{v['feasibility']} · vyřeší konflikt: {v['resolves']}",
                         tag=v["amount"]["status"],
                         rows=[("Příspěvek dotčených závazků", html.escape(v["amount"]["text"]))],
-                        why="<ul>" + "".join(f"<li>{html.escape(x)}</li>" for x in
+                        why="<ul>" + "".join(f"<li>{ui.nowrap_ids(x)}</li>" for x in
                                              ([v["change"]] if v["change"] else [])
                                              + ([f"Bližší termíny blokují: {', '.join(v['blockers'])}"]
                                                 if v["blockers"] else [])
@@ -3075,12 +3086,12 @@ if PAGE == "ekonomika":
                             ui.dash_text(html.escape(case["comparison_note"]))
                         if case["comparisons"]:
                             st.markdown('<ul class="dd-list">' + "".join(
-                                f"<li><b>{html.escape(c['a'])} × {html.escape(c['b'])}</b> · {html.escape(c['kind'])}"
-                                f"<small>{html.escape(c['text'])}</small></li>" for c in case["comparisons"])
+                                f"<li><b>{ui.nowrap_ids(c['a'])} × {ui.nowrap_ids(c['b'])}</b> · {html.escape(c['kind'])}"
+                                f"<small>{ui.nowrap_ids(c['text'])}</small></li>" for c in case["comparisons"])
                                 + "</ul>", unsafe_allow_html=True)
                         ui.dash_text(html.escape(fv.COMPARISON_DISCLAIMER), muted=True)
                     with ui.dash_links(f"ekon_{case['id']}"):
-                        if st.button("Zobrazit v kalendáři", key=f"fe_cal_{case['id']}",
+                        if st.button(f"Zobrazit v kalendáři – {', '.join(case['machines'])}", key=f"fe_cal_{case['id']}",
                                      icon=":material/calendar_month:", type="tertiary"):
                             fe_open_calendar(case["types"])
                         if case["jobs"]:
