@@ -264,7 +264,7 @@ def test_blocking_commitments_are_shown_for_job_shift():
 
 def test_calendar_link_opens_capacity_planning_filtered_to_the_machine():
     at = page()
-    assert [b.key for b in at.main.button] == ["fe_cal_K1", "fe_cal_K2"]
+    assert [b.key for b in at.main.button if b.key.startswith("fe_cal_")] == ["fe_cal_K1", "fe_cal_K2"]
     [b for b in at.main.button if b.key == "fe_cal_K2"][0].click().run()
     assert not at.exception and not at.error and not at.warning
     assert "Kapacita strojů po dnech" in plain(m.value for m in at.main.markdown)
@@ -374,3 +374,39 @@ def sample_starts():
     jobs = dm.legacy_jobs(model)
     plan = sch.evaluate(jobs, sch.optimize_schedule(jobs, dm.fleet_capacity(model))["starts"])
     return cv.job_starts_from_plan(jobs, plan)
+
+
+
+# ---------------------------------------------------------------------------
+# K3.4e2 – souhrn využití strojů, odkaz do Plánování kapacity, metodika
+# ---------------------------------------------------------------------------
+
+def test_usage_summary_section_matches_view():
+    at = page()
+    text = section(at, "Využití strojů za období")
+    usage = sample_view()["usage_summary"]
+    assert "Využití strojů za období dny 1–25 (25 dní) · kapacita flotily 225 strojodnů" in plain(body(at))
+    for row in usage["rows"]:
+        assert f"{row['label']} {row['meaning']} {row['text']}" in text, row["label"]
+    assert usage["composition"] in text and all(n in text for n in usage["notes"])
+
+
+def test_usage_link_opens_capacity_overview_with_same_period():
+    at = page()
+    [s for s in at.slider if s.key == "fe_period"][0].set_value((3, 20)).run()
+    [b for b in at.main.button if b.key == "fe_usage_detail"][0].click().run()
+    assert not at.exception and not at.error and not at.warning
+    assert [s.value for s in at.slider if s.key == "cap_period"] == [(3, 20)]
+    assert [r.value for r in at.radio if r.key == "cap_view"] == ["Přehled využití"]
+    assert [m.value for m in at.multiselect if m.key == "cap_types"] == [[]]
+    open_page(at, KEY)                                                   # zpět – výsledky beze změny
+    assert not at.exception
+
+
+def test_methodology_expander():
+    at = page()
+    [exp] = [e for e in at.main.expander if e.label == "Jak se počítá"]
+    text = plain(m.value for m in exp.markdown)
+    for title, desc in fv.METHODOLOGY:
+        assert title in text and desc in text, title
+    assert kpi_values(at)["Celkový výsledek flotily"] == "nejvýše 829 500 Kč"     # výsledek beze změny
