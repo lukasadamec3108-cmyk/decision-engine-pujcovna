@@ -5,6 +5,7 @@ Modul neobsahuje žádné výpočty – jen prezentaci výsledků.
 
 import base64
 import html
+import re
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -649,10 +650,11 @@ def dash_links(slug: str):
     return st.container(key=f"dd_links_{slug}")
 
 
-def dash_section_head(icon: str, title: str, caption: str = "", tone: str = "accent") -> None:
+def dash_section_head(icon: str, title: str, caption: str = "", tone: str = "accent", title_html: str = None) -> None:
+    """Hlavička sekce. title_html = hotové HTML nadpisu (jen pevné texty aplikace), jinak se title escapuje."""
     st.markdown(
         f'<div class="dd-head"><span class="dd-ico-box {tone}">{dash_icon(icon)}</span><div>'
-        f'<div class="dd-title" role="heading" aria-level="3">{html.escape(title)}</div>'
+        f'<div class="dd-title" role="heading" aria-level="3">{title_html or html.escape(title)}</div>'
         + (f'<div class="dd-cap">{caption}</div>' if caption else "")
         + "</div></div>",
         unsafe_allow_html=True,
@@ -951,7 +953,26 @@ FLEET_CSS = JOBS_CSS.replace(_JOBS, _FLEET).replace("</style>", f"""
 ECON_KEY = TAB_KEY_PREFIX + "ekonomika"
 _ECON = f".st-key-{ECON_KEY}"
 
+_ID_TOKEN = re.compile(r"\b[A-Z][A-Z0-9_]*-[A-Z0-9]+\b")
+
+
+def nowrap_ids(text: str) -> str:
+    """Escapovaný text, v němž se identifikátory (FIKT-P05, KOLOVY_BAGR-01) nelámou uprostřed na spojovníku."""
+    return _ID_TOKEN.sub(lambda m: f'<span class="nw">{m.group(0)}</span>', html.escape(text))
+
+
 ECON_CSS = RENTAL_CSS.replace(_RENT, _ECON).replace("</style>", f"""
+{_ECON} .nw {{ white-space: nowrap; }}
+{_ECON} ul.fe-notes {{ margin: 0 !important; padding-left: 1.1rem !important; }}
+{_ECON} ul.fe-notes li {{ margin: 0 0 .2rem 0 !important; }}
+/* Navigační odkazy (tlačítka i st.page_link) ve stejném stylu jako odkaz na stránku */
+{_ECON} [class*="st-key-fe_cal_"] button, {_ECON} .st-key-fe_usage_detail button {{
+  padding: .15rem .3rem; min-height: 0; border-radius: 8px; color: {ACCENT}; }}
+{_ECON} [class*="st-key-fe_cal_"] button p, {_ECON} .st-key-fe_usage_detail button p {{
+  font-size: .88rem; font-weight: 600; color: {ACCENT}; }}
+{_ECON} [class*="st-key-fe_cal_"] button [data-testid="stIconMaterial"],
+{_ECON} .st-key-fe_usage_detail button [data-testid="stIconMaterial"] {{ color: {ACCENT}; }}
+{_ECON} [data-testid="stPageLink"] [data-testid="stIconMaterial"] {{ color: {ACCENT}; }}
 {_ECON} .dd-kpis .dd-val.word {{ font-size: 1.5rem; }}
 {_ECON} .dd-sub .dd-period {{ display: block; margin-top: .3rem; font-weight: 600; color: {INK}; }}
 {_ECON} .dd-row .l .dd-chip {{ margin-top: .25rem; display: inline-block; }}
@@ -960,7 +981,9 @@ ECON_CSS = RENTAL_CSS.replace(_RENT, _ECON).replace("</style>", f"""
 {_ECON} .dd-var-why ul {{ margin: .2rem 0 0 1rem; padding: 0; }}
 @media (max-width: 640px) {{
   {_ECON} .dd-kpis .dd-val.word {{ font-size: 1.1rem; }}
-  {_ECON} .dd-row {{ flex-wrap: wrap; }}
+  /* Na mobilu vždy popisek (s poznámkou) nahoře a částka pod ním – jednotně ve všech řádcích */
+  {_ECON} .dd-row {{ flex-direction: column; align-items: flex-start; gap: .2rem; }}
+  {_ECON} .dd-row .l {{ width: 100%; }}
   {_ECON} .dd-row .v {{ text-align: left; }}
 }}
 </style>""")

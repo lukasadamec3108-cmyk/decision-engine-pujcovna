@@ -410,3 +410,59 @@ def test_methodology_expander():
     for title, desc in fv.METHODOLOGY:
         assert title in text and desc in text, title
     assert kpi_values(at)["Celkový výsledek flotily"] == "nejvýše 829 500 Kč"     # výsledek beze změny
+
+
+# ---------------------------------------------------------------------------
+# K3.4e3a – vzhled a mobilní zobrazení (jen prezentace)
+# ---------------------------------------------------------------------------
+
+def test_nowrap_ids_keeps_identifiers_together_and_escapes():
+    import ui_theme as ui
+    out = ui.nowrap_ids("Silniční válec · dny 15–18 · FIKT-P05 × J006 <b>")
+    assert '<span class="nw">FIKT-P05</span>' in out and "&lt;b&gt;" in out
+    assert "J006" in out and '<span class="nw">J006</span>' not in out          # bez spojovníku není co lámat
+    assert '<span class="nw">KOLOVY_BAGR-01</span>' in ui.nowrap_ids("servis / údržba KOLOVY_BAGR-01 od dne 11")
+    assert ui.nowrap_ids("dny 15–18 a před-běžné") == "dny 15–18 a před-běžné"      # běžná slova beze změny
+
+
+def test_info_banners_are_merged_into_one_block_without_losing_text():
+    at = page()
+    insights = [m for m in body(at) if 'class="de-insight' in m]
+    assert len(insights) == 3                                            # ukázková data, „nejde o čistý zisk“, souhrn
+    view = sample_view()
+    merged = [m for m in insights if 'class="fe-notes"' in m]
+    assert len(merged) == 1
+    for b in view["banners"]:
+        assert b["text"] in plain(insights), b["text"]                   # žádná informace se neztratila
+        if b["tone"] == "info" and b["text"] != fv.FICTITIOUS:
+            assert b["text"] in plain(merged)
+    assert any(fv.NOT_NET_PROFIT in m and "de-insight bad" in m for m in insights)
+    assert "Chybí 8 údajů nebo rozhodnutí" in plain(insights)            # počet beze změny (K3.4e3b)
+
+
+def test_conflict_titles_and_details_do_not_break_identifiers():
+    html_body = " ".join(body(at := page()))
+    assert '<span class="nw">FIKT-P05</span> × J006' in html_body
+    assert '<span class="nw">KOLOVY_BAGR-01</span>' in html_body           # blokující servis ve variantě
+    assert "Silniční válec · dny 15–18 · FIKT-P05 × J006" in plain(body(at))  # viditelný text beze změny
+
+
+def test_navigation_links_have_unified_labels_and_icons():
+    at = page()
+    buttons = {b.key: b for b in at.main.button if b.key.startswith("fe_")}
+    assert buttons["fe_cal_K1"].label == "Zobrazit v kalendáři – Kolový bagr"
+    assert buttons["fe_cal_K2"].label == "Zobrazit v kalendáři – Silniční válec"
+    assert buttons["fe_usage_detail"].label == "Podrobné využití v Plánování kapacity"
+    assert buttons["fe_usage_detail"].proto.icon == ":material/bar_chart:"
+    assert buttons["fe_cal_K2"].proto.icon == ":material/calendar_month:"
+    import ui_theme as ui
+    for rule in ('[class*="st-key-fe_cal_"] button p', ".st-key-fe_usage_detail button p", "font-weight: 600"):
+        assert rule in ui.ECON_CSS, rule
+
+
+def test_mobile_rows_stack_label_above_amount():
+    import ui_theme as ui
+    mobile = ui.ECON_CSS.split("@media (max-width: 640px)")[-1]
+    assert "flex-direction: column" in mobile and "align-items: flex-start" in mobile
+    assert "flex-wrap: wrap" not in mobile                               # dřívější nejednotné zalamování
+    assert ui.ECON_KEY == "de_tab_ekonomika" and ".st-key-de_tab_ekonomika .dd-row" in mobile   # jen tato stránka

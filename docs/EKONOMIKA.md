@@ -286,6 +286,11 @@ se nepočítá a žádná jiná stránka se nemění.
   využití se stejným obdobím (a datem dne 1) pro všechny stroje. Rozbalovací blok **„Jak se počítá“**
   popisuje stavy částek, příspěvek × výsledek, fixní náklady jednou, metody přepočtu, nezapočtené
   závazky, strojodny a proč nejde o čistý zisk (texty ve `fleet_view.METHODOLOGY`).
+- **K3.4e3a – vzhled a mobil (jen prezentace):** navigační odkazy („Zobrazit v kalendáři – stroj“,
+  „Podrobné využití v Plánování kapacity“, „Vlastní zakázky“) mají jednotný styl odkazu; na mobilu je
+  v řádcích vždy popisek nahoře a částka pod ním; identifikátory (např. FIKT-P05) se nelámou na
+  spojovníku; informační upozornění o metodě přepočtu a o konfliktech jsou v jednom bloku (texty beze
+  změny). Výpočty, popisky stavů a počet chybějících údajů se nemění.
 
 Na ukázkových datech (dny 1–25) jsou všechny ekonomické částky **horní meze** nebo „chybí údaje“
 (chybí variabilní náklady pronájmu, nastavení `direct_cost_includes_machines`, režie a rozhodnutí

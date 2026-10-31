@@ -176,7 +176,7 @@
     "90 000": 2,
     "95 000": 2
    },
-   "text": "11b1f28e7f369f36",
+   "text": "4af1a5cf342ddc0c",
    "widgets": [
     {
      "key": "fe_period",
@@ -212,14 +212,14 @@
     },
     {
      "key": "fe_cal_K1",
-     "label": "Zobrazit v kalendáři",
+     "label": "Zobrazit v kalendáři – Kolový bagr",
      "options": [],
      "type": "button",
      "value": "False"
     },
     {
      "key": "fe_cal_K2",
-     "label": "Zobrazit v kalendáři",
+     "label": "Zobrazit v kalendáři – Silniční válec",
      "options": [],
      "type": "button",
      "value": "False"
