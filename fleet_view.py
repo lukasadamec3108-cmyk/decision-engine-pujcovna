@@ -74,6 +74,36 @@ def _cell(status, text, explanation="", value=None) -> dict:
     return dict(status=status, tone=TONE[status], text=text, explanation=explanation, value=value)
 
 
+# K3.4e3b: zobrazované popisky chybějících údajů v přirozené češtině. Štítky z economics.py / fleet_economics
+# se nemění (výpočty i stavy zůstávají) – převádějí se jen pro zobrazení. Fixní náklady a režie hlásí
+# nezvolenou metodu přepočtu každý zvlášť, jde ale o JEDNU volbu → v zobrazení jedna položka.
+METHOD_MISSING = "metoda přepočtu fixních nákladů a režie na období (zvolte ji ve filtru výše)"
+MACHINES_SETTING_MISSING = "údaj, zda přímé náklady zakázek už obsahují náklady vlastních strojů (v nastavení dat chybí)"
+
+
+def human_label(label: str) -> str:
+    """Zobrazovaný text jednoho chybějícího údaje (technické názvy → přirozená čeština, význam beze změny)."""
+    if "metoda přepočtu měsíčních fixních nákladů a režie" in label:
+        return METHOD_MISSING
+    if "direct_cost_includes_machines" in label:
+        return MACHINES_SETTING_MISSING
+    return label
+
+
+def human_labels(labels) -> list:
+    """Převedené popisky bez duplicit (pořadí zachováno)."""
+    out = []
+    for label in labels:
+        text = human_label(label)
+        if text not in out:
+            out.append(text)
+    return out
+
+
+def _missing_text(labels) -> str:
+    return "; ".join(human_labels(labels))
+
+
 def _missing_only_costs(missing) -> bool:
     return not any(m for m in missing if any(x in m for x in REVENUE_MARKERS))
 
@@ -86,8 +116,8 @@ def contribution_cell(result) -> dict:
     if result.complete:
         return _cell(COMPLETE, money(result.value), "", result.value)
     if _missing_only_costs(result.missing):
-        return _cell(UPPER, f"nejvýše {money(result.value)}", "chybí: " + "; ".join(result.missing), result.value)
-    return _cell(MISSING, "nelze určit", "chybí: " + "; ".join(result.missing))
+        return _cell(UPPER, f"nejvýše {money(result.value)}", "chybí: " + _missing_text(result.missing), result.value)
+    return _cell(MISSING, "nelze určit", "chybí: " + _missing_text(result.missing))
 
 
 def cost_cell(result) -> dict:
@@ -98,14 +128,14 @@ def cost_cell(result) -> dict:
     if result.complete:
         return _cell(COMPLETE, money(result.value), "", result.value)
     if result.value == 0:
-        return _cell(MISSING, "nezadáno", "chybí: " + "; ".join(result.missing))
+        return _cell(MISSING, "nezadáno", "chybí: " + _missing_text(result.missing))
     return _cell(MISSING, f"nejméně {money(result.value)}",
-                 "známá je jen část – chybí: " + "; ".join(result.missing), result.value)
+                 "známá je jen část – chybí: " + _missing_text(result.missing), result.value)
 
 
 def bounds_cell(lo, hi, conditional: bool = False, conditions=()) -> dict:
     """Interval (dolní, horní mez) z econ_formula.bounds → text a stav."""
-    cond = "; ".join(conditions)
+    cond = _missing_text(conditions)
     if lo is not None and hi is not None and abs(lo - hi) < 0.5:
         if conditional:
             return _cell(CONDITIONAL, money(hi), "platí jen pokud: " + cond, hi)
@@ -397,12 +427,13 @@ def _breakdown(pr, rentals, jobs, fixed, overhead, result) -> list:
 
 
 def _missing_flat(pr) -> list:
+    """Chybějící údaje a rozhodnutí tak, jak se zobrazí (skutečné duplicity sloučené – viz human_label)."""
     out = []
     for r in (pr.rentals, pr.jobs, pr.fixed_costs, pr.overhead):
         if r is not None:
-            out += [m for m in r.missing if m not in out]
-    out += [m for m in pr.missing if m not in out and _is_decision(m)]
-    return out
+            out += r.missing
+    out += [m for m in pr.missing if _is_decision(m)]
+    return human_labels(out)
 
 
 def _is_decision(text) -> bool:
@@ -415,8 +446,8 @@ def _missing(pr, excluded) -> list:
     for r in (pr.rentals, pr.jobs, pr.fixed_costs, pr.overhead):
         for m in (r.missing if r is not None else ()):
             target = settings if any(x in m for x in SETTING_MARKERS) else costs
-            if m not in target:
-                target.append(m)
+            if human_label(m) not in target:
+                target.append(human_label(m))
     decisions = []
     if excluded.get(fe.CONFLICT):
         decisions.append("řešení konfliktů (" + ", ".join(sorted(excluded[fe.CONFLICT])) + ")")
@@ -446,15 +477,25 @@ def _conflict(case, names, plan_start) -> dict:
         title=f"{', '.join(machines)} · {days_text(days, plan_start)} · "
               + " × ".join([c["ref"] for c in case["commitments"]] + (["servis"] if case["services"] else [])),
         machines=machines, types=list(case["types"]), days=days_text(days, plan_start),
-        services=list(case["services"]), commitments=commitments,
+        services=list(case["services"]), services_text=[service_text(x, names) for x in case["services"]],
+        commitments=commitments,
         jobs=[c["ref"] for c in case["commitments"] if c["kind"] == "job"],
         variants=[_variant(v, plan_start, names) for v in variants],
-        comparisons=[dict(a=c["a"], b=c["b"], text=c["text"],
-                          kind=COMPARISON_KIND.get(c.get("status"), "nelze porovnat"))
+        comparisons=[dict(a=c["a"], b=c["b"], a_label=_variant_name(case, c["a"]), b_label=_variant_name(case, c["b"]),
+                          text=c["text"], kind=COMPARISON_KIND.get(c.get("status"), "nelze porovnat"))
                      for c in case["comparisons"]],
         comparison_note=_comparison_note(case),
         note="Nic se automaticky nevybírá, neruší ani nepřesouvá – rozhodne majitel.",
     )
+
+
+def _variant_name(case, key) -> str:
+    """Čitelný název varianty v porovnání: „posun J006“ → „Posun zakázky J006“ (stejný název jako na kartě)."""
+    v = next((x for x in case["variants"] if x["key"] == key), None)
+    if v is None:
+        return key
+    ref = (v.get("changes") or {}).get("ref", "")
+    return f"{VARIANT_TITLE.get(v['kind'], v['kind'])} {ref}".strip()
 
 
 # Porovnání variant (K3.4d) – jen informace z econ_formula.compare, nic se nevybírá ani nedoporučuje.
@@ -490,7 +531,7 @@ def _contribution_from(c) -> dict:
         amount = "nelze určit"
     return dict(status=EXCLUDED, tone=TONE[EXCLUDED], text=amount,
                 explanation="v konfliktu – do výsledku se nezapočítává" + (
-                    "; chybí: " + "; ".join(missing) if missing else ""))
+                    "; chybí: " + _missing_text(missing) if missing else ""))
 
 
 FEASIBILITY_TEXT = {fe.FEASIBLE: "proveditelná", fe.CONDITIONAL: "podmíněná", fe.PARTIAL: "jen částečně",
@@ -505,20 +546,48 @@ def _variant(v, plan_start, names) -> dict:
         rest = [m for m in v["missing"] if not _is_condition(m)]
         amount = bounds_cell(*v["bounds"], conditional=True, conditions=conds)
         if rest:
-            amount["explanation"] += " · chybí: " + "; ".join(rest)
+            amount["explanation"] += " · chybí: " + _missing_text(rest)
     elif feas == fe.FEASIBLE:
         amount = bounds_cell(*v["bounds"])
         if amount["status"] == UPPER:
-            amount["explanation"] = "chybí: " + "; ".join(v["missing"]) if v["missing"] else amount["explanation"]
+            amount["explanation"] = "chybí: " + _missing_text(v["missing"]) if v["missing"] else amount["explanation"]
     elif feas == fe.MANUAL:
         amount = _cell(EXCLUDED, "nelze vyčíslit", "konflikt trvá – oba závazky nelze splnit současně")
     else:
-        amount = _cell(MISSING, "nelze určit", "chybí: " + "; ".join(v["missing"]))
+        amount = _cell(MISSING, "nelze určit", "chybí: " + _missing_text(v["missing"]))
     return dict(key=v["key"], title=title, feasibility=FEASIBILITY_TEXT.get(feas, feas),
-                resolves={fe.RESOLVED: "ano", fe.PARTLY: "jen částečně", fe.NOT_RESOLVED: "ne"}.get(v["resolves"], "–"),
-                change=_change_text(v, plan_start), warnings=warnings_text(v.get("warnings", []), names, plan_start),
-                blockers=[f"{b['source']} ({days_text(b['days'], plan_start)})" for b in v.get("blockers", [])],
-                missing=list(v.get("missing", [])), amount=amount)
+                resolves={fe.RESOLVED: "ano", fe.PARTLY: "jen částečně", fe.NOT_RESOLVED: "ne"}.get(v["resolves"],
+                                                                                                  RESOLVES_UNKNOWN),
+                change=service_text(_change_text(v, plan_start), names),
+                warnings=warnings_text(v.get("warnings", []), names, plan_start),
+                blockers=[_blocker_text(b, names, plan_start) for b in v.get("blockers", [])],
+                missing=human_labels(v.get("missing", [])), amount=amount)
+
+
+RESOLVES_UNKNOWN = "nelze posoudit"
+_SERVICE = re.compile(r"servis / údržba (?P<unit>\S+) od dne (?P<day>\d+)")
+
+
+def _unit_name(unit_id, names) -> str:
+    """„KOLOVY_BAGR-01“ → „Kolový bagr, kus 01“ (číslo kusu zůstává – rozlišuje kusy stejného typu)."""
+    type_id, _, number = unit_id.rpartition("-")
+    if not type_id:
+        return unit_id
+    return f"{(names or {}).get(type_id, type_id)}, kus {number}"
+
+
+def service_text(text: str, names=None) -> str:
+    """„servis / údržba KOLOVY_BAGR-01 od dne 11“ → „servis – Kolový bagr, kus 01, od dne 11“ (jen zobrazení)."""
+    return _SERVICE.sub(lambda m: f"servis – {_unit_name(m['unit'], names)}, od dne {m['day']}", text or "")
+
+
+def _blocker_text(b, names, plan_start) -> str:
+    """Blokující závazek: „pronájem FIKT-P03 (dny 14–20)“, servis „servis – Kolový bagr, kus 01 (dny 11–12)“."""
+    days = days_text(b["days"], plan_start)
+    m = _SERVICE.fullmatch(b["source"])
+    if m:
+        return f"servis – {_unit_name(m['unit'], names)} ({days})"
+    return f"{b['source']} ({days})"
 
 
 def _change_text(v, plan_start) -> str:
@@ -612,12 +681,47 @@ LEDGER_GROUPS = [
 ]
 
 
+# K3.4e3b: srozumitelné popisky evidence (hodnoty z fleet_economics se nemění)
+DATE_SOURCE_TEXT = {
+    fe.FROM_BOOKING: "termín z rezervace",
+    fe.FROM_PLAN: "termín z návrhu plánu zakázek",
+    fe.NO_DATE: "bez termínu v plánu",
+}
+UNIT_ASSIGNMENT_TEXT = {
+    fe.UNIT_EXACT: "konkrétní stroj: uveden v datech",
+    fe.UNIT_DERIVED: "konkrétní stroj: nelze určit, který kus – všechny kusy tohoto typu jsou v té době obsazené",
+    fe.UNIT_AMBIGUOUS: "konkrétní stroj: nelze určit (data uvádějí jen typ stroje a kusů tohoto typu je víc)",
+    fe.UNIT_NONE: "",                                   # u závazku mimo období / předběžného se neuvádí
+}
+UNIT_SINGLE_TEXT = "konkrétní stroj: určen jednoznačně (jediný kus tohoto typu)"
+
+
+def _unit_counts(led) -> dict:
+    """{type_id: počet kusů ve flotile} z tabulky kusů fleet_usage (jen pro popisek přiřazení)."""
+    usage = getattr(led, "usage", None)
+    by_unit = getattr(usage, "by_unit", None)
+    if by_unit is None or by_unit.empty:
+        return {}
+    return by_unit.groupby("type_id")["unit_id"].nunique().to_dict()
+
+
+def _unit_text(r, counts) -> str:
+    """Odvozený kus je jednoznačný jen tehdy, když jsou všechny potřebné typy jednokusové."""
+    if r.unit_assignment == fe.UNIT_DERIVED:
+        types = [part.partition("×")[0] for part in str(r.needs or "").split("; ") if part]
+        if types and all(counts.get(t) == 1 for t in types):
+            return UNIT_SINGLE_TEXT
+    return UNIT_ASSIGNMENT_TEXT.get(r.unit_assignment, r.unit_assignment)
+
+
 def _pending(led, plan_start, names=None) -> list:
-    return [_entry_row(r, plan_start, names) for r in led.entries.itertuples() if r.state in PENDING_STATES]
+    counts = _unit_counts(led)
+    return [_entry_row(r, plan_start, names, counts) for r in led.entries.itertuples() if r.state in PENDING_STATES]
 
 
 def _ledger(led, plan_start, names=None) -> list:
-    return [_entry_row(r, plan_start, names) for r in led.entries.itertuples()]
+    counts = _unit_counts(led)
+    return [_entry_row(r, plan_start, names, counts) for r in led.entries.itertuples()]
 
 
 def _ledger_groups(led, plan_start, names=None) -> list:
@@ -643,7 +747,7 @@ def _machines_text(needs, names) -> str:
     return ", ".join(out)
 
 
-def _entry_row(r, plan_start, names=None) -> dict:
+def _entry_row(r, plan_start, names=None, counts=None) -> dict:
     res = fe.ec.Result(r.contribution, tuple(r.missing), tuple(r.invalid))
     cell = contribution_cell(res)
     if r.state != fe.CERTAIN:
@@ -655,6 +759,8 @@ def _entry_row(r, plan_start, names=None) -> dict:
                 period=period, date_source=r.date_source, state=r.state,
                 counted=bool(r.counted_as_certain), machines=r.needs, unit_assignment=r.unit_assignment,
                 machines_text=_machines_text(r.needs, names),
+                date_text=DATE_SOURCE_TEXT.get(r.date_source, r.date_source),
+                unit_text=_unit_text(r, counts or {}),
                 reason="započteno do výsledku" if r.state == fe.CERTAIN else STATE_TEXT.get(r.state, r.state),
                 machine_days=r.machine_days, machine_days_in_period=r.md_in_period, **cell)
 
@@ -723,38 +829,54 @@ def _usage_summary(usage, names) -> dict:
 # Metodika „Jak se počítá“ – jen popis skutečné implementace (economics, fleet_usage, fleet_economics,
 # fleet_view). Žádné závěry ani rady majiteli.
 METHODOLOGY = [
-    ("Pět stavů částek",
-     "Úplný – všechny potřebné údaje jsou známé, částka je přesná (i skutečná nula „0 Kč“). "
-     "Horní mez – chybí jen některý náklad (například variabilní náklad nebo režie); skutečná částka může být "
-     "jen nižší, proto „nejvýše“. Podmíněný – platí jen za podmínky, kterou nelze ověřit (souhlas zákazníka, "
-     "storno nebo smluvní náhrada). Chybí údaje – nejde určit ani mez (například chybí tržba, cena nebo "
-     "zvolená metoda přepočtu) nebo nejsou rozhodnuté konflikty; nikdy se nenahrazuje nulou. Nezapočítáno – závazek je vidět, ale do výsledku "
-     "se nepočítá."),
-    ("Příspěvek a celkový výsledek",
-     "Příspěvek pronájmu = tržby − variabilní náklady pronájmu. Příspěvek vlastní zakázky = tržby − přímé "
-     "náklady − penále za zpoždění − variabilní náklady strojů (jen pokud nejsou už v přímých nákladech). "
-     "Příspěvky neobsahují fixní náklady ani režii. Celkový výsledek flotily = jisté příspěvky pronájmů "
-     "a zakázek − fixní náklady flotily − režie."),
-    ("Fixní náklady jen jednou",
-     "Fixní náklady se odečítají jednou za celou flotilu (vlastněné a leasingové kusy) a nerozpočítávají se do "
-     "příspěvků pronájmů ani zakázek. Obsahují i průměrný servis, proto se servis znovu neodečítá."),
-    ("Přepočet na zvolené období",
-     "Fixní náklady a režie jsou v datech měsíční. Aplikace žádnou metodu přepočtu nepředpokládá: "
-     "„Nezadávat“ – neodečtou se a výsledek je jen horní mez; „Zadat počet měsíců“ – měsíční částka × zadaný počet "
-     "měsíců; „Podle kalendáře“ – za každý měsíc dny období v měsíci ÷ počet dní měsíce (vyžaduje datum "
-     "prvního dne plánu). Režie se odečte jen tehdy, když je v datech zadaná."),
-    ("Co se nezapočítává a proč",
-     "Konflikt – stroj nemůže ve stejný den sloužit oběma závazkům a aplikace nerozhoduje, který ustoupí; "
-     "nezapočítávají se obě strany. Předběžné rezervace – nejsou potvrzené a kapacitu neblokují. Přesah mimo "
-     "období – chybí pravidlo, jakou část příspěvku přiřadit zvolenému období; příspěvek se poměrně nedělí. "
-     "Nejistá obsazenost – neplatné nebo chybějící údaje, případně zakázka bez termínu v plánu."),
-    ("Strojodny ve využití",
-     "Strojoden = jeden kus stroje na jeden den. Každý dostupný kus se v každém dni započte do právě jedné "
-     "kategorie (pronájem, vlastní zakázka, servis, konflikt, nelze určit, volno); dohromady dávají kapacitu. "
-     "Termíny vlastních zakázek pocházejí z návrhu plánu. Nárok nad kapacitu a předběžné rezervace jsou "
-     "uvedené zvlášť a do kapacity se nepočítají."),
-    ("Proč zobrazený výsledek není přesný",
-     "Pokud chybí náklady nebo režie, některé závazky nejsou započtené nebo jde o ukázková data, nejde o čistý "
-     "zisk – je to výsledek z jistých závazků se známými položkami. Rozpětí scénářů jen ukazuje možné "
-     "varianty řešení konfliktů; žádnou nevybírá."),
+    ("Pět stavů částek", [
+        "Úplný – všechny potřebné údaje jsou známé, částka je přesná (i skutečná nula „0 Kč“).",
+        "Horní mez – chybí jen některý náklad (například variabilní náklad nebo režie); skutečná částka může "
+        "být jen nižší, proto „nejvýše“.",
+        "Podmíněný – platí jen za podmínky, kterou nelze ověřit (souhlas zákazníka, storno nebo smluvní náhrada).",
+        "Chybí údaje – nejde určit ani mez (například chybí tržba, cena nebo zvolená metoda přepočtu) nebo nejsou "
+        "rozhodnuté konflikty; chybějící údaj se nikdy nenahrazuje nulou.",
+        "Nezapočítáno – závazek je vidět, ale do výsledku se nepočítá.",
+    ]),
+    ("Příspěvek a celkový výsledek", [
+        "Příspěvek pronájmu = tržby − variabilní náklady pronájmu.",
+        "Příspěvek vlastní zakázky = tržby − přímé náklady − penále za zpoždění − variabilní náklady strojů "
+        "(jen pokud nejsou už v přímých nákladech).",
+        "Příspěvky neobsahují fixní náklady ani režii.",
+        "Celkový výsledek flotily = jisté příspěvky pronájmů a zakázek − fixní náklady flotily − režie.",
+    ]),
+    ("Fixní náklady jen jednou", [
+        "Odečítají se jednou za celou flotilu (vlastněné a leasingové kusy).",
+        "Nerozpočítávají se do příspěvků pronájmů ani zakázek.",
+        "Obsahují i průměrný servis, proto se servis znovu neodečítá.",
+    ]),
+    ("Přepočet na zvolené období", [
+        "Fixní náklady a režie jsou v datech měsíční; aplikace žádnou metodu přepočtu nepředpokládá.",
+        "„Nezadávat“ – neodečtou se a výsledek je jen horní mez.",
+        "„Zadat počet měsíců“ – měsíční částka × zadaný počet měsíců.",
+        "„Podle kalendáře“ – za každý měsíc dny období v měsíci ÷ počet dní měsíce (vyžaduje datum prvního dne "
+        "plánu).",
+        "Režie se odečte jen tehdy, když je v datech zadaná.",
+    ]),
+    ("Co se nezapočítává a proč", [
+        "Konflikt – stroj nemůže ve stejný den sloužit oběma závazkům a aplikace nerozhoduje, který ustoupí; "
+        "nezapočítávají se obě strany.",
+        "Předběžné rezervace – nejsou potvrzené a kapacitu neblokují.",
+        "Přesah mimo období – chybí pravidlo, jakou část příspěvku přiřadit zvolenému období; příspěvek se "
+        "poměrně nedělí.",
+        "Nejistá obsazenost – neplatné nebo chybějící údaje, případně zakázka bez termínu v plánu.",
+    ]),
+    ("Strojodny ve využití", [
+        "Strojoden = jeden kus stroje na jeden den.",
+        "Každý dostupný kus se v každém dni započte do právě jedné kategorie (pronájem, vlastní zakázka, servis, "
+        "konflikt, nelze určit, volno); dohromady dávají kapacitu.",
+        "Termíny vlastních zakázek pocházejí z návrhu plánu.",
+        "Nárok nad kapacitu a předběžné rezervace jsou uvedené zvlášť a do kapacity se nepočítají.",
+    ]),
+    ("Proč zobrazený výsledek není přesný", [
+        "Pokud chybí náklady nebo režie, některé závazky nejsou započtené nebo jde o ukázková data, nejde o čistý "
+        "zisk.",
+        "Je to výsledek z jistých závazků se známými položkami.",
+        "Rozpětí scénářů jen ukazuje možné varianty řešení konfliktů; žádnou nevybírá.",
+    ]),
 ]

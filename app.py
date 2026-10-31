@@ -2950,7 +2950,7 @@ def fe_entry_row(r: dict, detail: bool = False) -> tuple:
     label = f"{r['ref']} – {r['kind']}" + (f" · {r['name']}" if r["name"] else "")
     facts = [r["period"], r["machines_text"], r["reason"]]
     if detail:
-        facts += [f"termín: {r['date_source']}", f"kus: {r['unit_assignment']}"]
+        facts += [r["date_text"], r["unit_text"]]
     note = ui.nowrap_ids(" · ".join(x for x in facts if x)) + " · " + fe_chip(r["status"], r["tone"])
     return label, html.escape(r["text"]), note
 
@@ -3068,9 +3068,13 @@ if PAGE == "ekonomika":
                     ui.dash_rows([(f"{c['ref']} – {c['kind']}", html.escape(c["text"]),
                                    html.escape(c["period"]) + " · " + fe_chip(c["status"], c["tone"]))
                                   for c in case["commitments"]]
-                                 + ([("Servis", "", html.escape(", ".join(case["services"])))] if case["services"] else []))
+                                 + ([("Servis", "", ui.nowrap_ids(", ".join(case["services_text"])))]
+                                    if case["services"] else []))
                     ui.dash_variants([dict(
-                        title=v["title"], sub=f"{v['feasibility']} · vyřeší konflikt: {v['resolves']}",
+                        title=v["title"],
+                        sub=(f"{v['feasibility']} · vyřešení konfliktu nelze posoudit"
+                             if v["resolves"] == fv.RESOLVES_UNKNOWN
+                             else f"{v['feasibility']} · vyřeší konflikt: {v['resolves']}"),
                         tag=v["amount"]["status"],
                         rows=[("Příspěvek dotčených závazků", html.escape(v["amount"]["text"]))],
                         why="<ul>" + "".join(f"<li>{ui.nowrap_ids(x)}</li>" for x in
@@ -3086,7 +3090,8 @@ if PAGE == "ekonomika":
                             ui.dash_text(html.escape(case["comparison_note"]))
                         if case["comparisons"]:
                             st.markdown('<ul class="dd-list">' + "".join(
-                                f"<li><b>{ui.nowrap_ids(c['a'])} × {ui.nowrap_ids(c['b'])}</b> · {html.escape(c['kind'])}"
+                                f"<li><b>{ui.nowrap_ids(c['a_label'])} × {ui.nowrap_ids(c['b_label'])}</b> · "
+                                f"{html.escape(c['kind'])}"
                                 f"<small>{ui.nowrap_ids(c['text'])}</small></li>" for c in case["comparisons"])
                                 + "</ul>", unsafe_allow_html=True)
                         ui.dash_text(html.escape(fv.COMPARISON_DISCLAIMER), muted=True)
@@ -3128,7 +3133,8 @@ if PAGE == "ekonomika":
 
         # K3.4e2: metodika – jen popis skutečné implementace, bez závěrů a rad
         with st.expander("Jak se počítá"):
-            ui.explain([(title, html.escape(text)) for title, text in fe_view["methodology"]])
+            ui.explain([(title, '<ul class="fe-points">' + "".join(f"<li>{html.escape(x)}</li>" for x in points)
+                         + "</ul>") for title, points in fe_view["methodology"]])
 
 
 # ==================================================
