@@ -2757,7 +2757,8 @@ if PAGE == "dashboard":
             dict(icon="coins", label="Ekonomický výsledek", tone="accent",
                  value=fmt_czk(dash_sum["profit_after_penalty"]),
                  chip=ui.dash_chip("dílčí údaj – jen vlastní zakázky", "info"),
-                 sub="zisk vlastních zakázek po penále · celkový výsledek půjčovny zatím není k dispozici"),
+                 sub="zisk vlastních zakázek po penále podle plánu, včetně zakázek v kapacitním konfliktu · nejde o "
+                     "čistý zisk půjčovny – jisté a konfliktní zakázky rozlišuje stránka Ekonomika flotily"),
             dict(icon="truck", label="Pronájmy a zakázky", tone="neutral",
                  pair=True,
                  value=(f"<span>{dash_confirmed}<small>{dash_word(dash_confirmed, 'pronájem', 'pronájmy', 'pronájmů')}</small></span> "
@@ -2806,7 +2807,8 @@ if PAGE == "dashboard":
                 ("Zisk zakázek po penále",
                  ('<span class="v neg">' if dash_sum["profit_after_penalty"] < 0 else "")
                  + fmt_czk(dash_sum["profit_after_penalty"])
-                 + ("</span>" if dash_sum["profit_after_penalty"] < 0 else ""), "dílčí výsledek – jen vlastní zakázky",
+                 + ("</span>" if dash_sum["profit_after_penalty"] < 0 else ""),
+                 "dílčí výsledek – jen vlastní zakázky, včetně zakázek v konfliktu",
                  True),
                 (("Relativně lepší stroj" if both_loss else "Doporučený stroj") + " – očekávaný zisk",
                  fmt_czk(dash_rec_profit),
@@ -2818,7 +2820,10 @@ if PAGE == "dashboard":
             ])
             ui.dash_text("Ukázková data. Zisk zakázek nezahrnuje pronájmy ani fixní náklady flotily – nejde o celkový "
                          "zisk půjčovny.", muted=True)
+            ui.dash_text("Výsledek flotily za období (jisté příspěvky pronájmů a zakázek, fixní náklady, konflikty "
+                         "zvlášť) je na stránce Ekonomika flotily.", muted=True)
             with ui.dash_links("ekonomika"):
+                page_link("ekonomika")
                 page_link("investice")
                 page_link("strojovy_park")
 

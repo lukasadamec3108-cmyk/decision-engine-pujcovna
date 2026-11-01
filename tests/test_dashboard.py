@@ -56,7 +56,11 @@ def test_dashboard_is_transparent_about_partial_data():
     at = app()
     shown = plain(" ".join(m.value for m in at.main.markdown if "<style>" not in m.value))
     assert "dílčí údaj – jen vlastní zakázky" in shown
-    assert "celkový výsledek půjčovny zatím není k dispozici" in shown
+    # K4a: celkový výsledek už existuje (Ekonomika flotily) – žádné zastaralé „není k dispozici“
+    assert "celkový výsledek půjčovny zatím není k dispozici" not in shown
+    assert "včetně zakázek v kapacitním konfliktu" in shown and "nejde o čistý zisk půjčovny" in shown
+    assert "jisté a konfliktní zakázky rozlišuje stránka Ekonomika flotily" in shown
+    assert "dílčí výsledek – jen vlastní zakázky, včetně zakázek v konfliktu" in shown
     assert "stav k dnešku nelze určit" in shown
     assert "Ukázková data" in " ".join(m.value for m in at.sidebar.markdown)
 
@@ -82,6 +86,22 @@ def test_dashboard_has_no_inputs_only_links():
     assert not [w for kind in kinds for w in at.main.get(kind)]          # žádné nové ovládací prvky
     assert not at.main.button                                            # ani tlačítka
     links = [p.proto.label for p in at.get("page_link")]
-    for name in ("Plánování kapacity", "Vlastní zakázky", "Pronájem strojů", "Investice", "Strojový park",
+    for name in ("Ekonomika flotily", "Plánování kapacity", "Vlastní zakázky", "Pronájem strojů", "Investice",
+                 "Strojový park",
                  "Rozhodovací centrum", "Otevřít Investice", "Otevřít kalendář kapacity", "Nový pronájem"):
         assert name in links, name
+
+
+
+def test_dashboard_links_to_fleet_economics_without_new_amounts():
+    """K4a: odkaz v sekci Ekonomika a hospodaření vede na stránku Ekonomika flotily; žádná nová částka."""
+    import navigace
+    at = app()
+    [link] = [p for p in at.get("page_link") if p.proto.label == "Ekonomika flotily"]
+    url = next(page[5] for page in navigace.PAGES if page[0] == "ekonomika")
+    assert link.proto.page == url == "ekonomika-flotily"
+    section = [m.value for m in at.main.markdown if "Výsledek flotily za období" in m.value]
+    assert section and "Kč" not in plain(" ".join(section))               # jen text, žádná nová částka
+    assert dash_kpi(at, "Ekonomický výsledek") == "892 000 Kč"            # částka beze změny
+    open_page(at, "ekonomika")                                            # cíl odkazu funguje
+    assert not at.exception and any("Ekonomika flotily" in m.value for m in at.main.markdown)

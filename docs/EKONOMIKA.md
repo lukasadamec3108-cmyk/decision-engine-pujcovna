@@ -13,7 +13,9 @@ pro sjednocení ekonomiky (etapa E2.2). Pojmy jsou vysvětlené ve [slovníku](S
 2. **Příspěvek** pronájmu nebo zakázky – tržba − variabilní náklady (u zakázky i přímé náklady
    a penále). **Bez fixních nákladů** a bez režie (`economics.py`).
 3. **Výsledek celé flotily** – příspěvky z evidovaných pronájmů a zakázek − fixní náklady flotily
-   (jednou) − režie, za stejné období (`economics.total_result`). **V aplikaci se zatím nezobrazuje.**
+   (jednou) − režie, za stejné období. Zobrazuje se na stránce **Ekonomika flotily** přes
+   `fleet_economics.period_result` (K3.3–K3.4, jen jisté závazky, konflikty zvlášť); samotný
+   `economics.total_result` se nezobrazuje.
 
 ## Kde se co počítá
 
@@ -25,8 +27,8 @@ pro sjednocení ekonomiky (etapa E2.2). Pojmy jsou vysvětlené ve [slovníku](S
 | Pořadí starého plánu (jen pro srovnání) | Vlastní zakázky | `app.py` | (tržba − přímé náklady) × koeficient rizika | pravidlo | – (jen řazení, žádná zobrazená částka) |
 | Příspěvek pronájmu a zakázky, verdikt | Pronájem strojů, Rozhodovací centrum | `planner.py`, `econ_formula.py` → **`economics.py`** | rezervace, požadavky uživatele, data | evidence + vstup | přímo `economics.py` (`test_planner_*`) |
 | Kapacita, využití, konflikty | Plánování kapacity, Dashboard | `capacity.py` | flotila, rezervace, servis, plán | evidence | žádné částky (strojodny) |
-| Fixní náklady flotily, režie, celkový výsledek | – (nezobrazuje se) | `economics.py` | data | – | `test_total_result_is_incomplete_on_current_data` |
-| Využití fyzických strojů za období (strojodny po kusech a typech, konflikty) | – (nezobrazuje se, K2) | `fleet_usage.py` nad `capacity.py` | flotila, rezervace, plán zakázek, servis | evidence | žádné částky; shoda s kalendářem a přehledem využití (`tests/test_fleet_usage.py`) |
+| Fixní náklady flotily, režie, celkový výsledek | Ekonomika flotily (přes `fleet_economics.period_result`); Dashboard na ni odkazuje | `economics.py` | data | – | `test_total_result_is_incomplete_on_current_data` |
+| Využití fyzických strojů za období (strojodny po kusech a typech, konflikty) | Ekonomika flotily – souhrn využití (K3.4e2) | `fleet_usage.py` nad `capacity.py` | flotila, rezervace, plán zakázek, servis | evidence | žádné částky; shoda s kalendářem a přehledem využití (`tests/test_fleet_usage.py`) |
 
 ## Pravidla proti dvojímu započtení
 
@@ -54,7 +56,7 @@ Změna kteréhokoli z nich mění zobrazené částky a vyžaduje **schválení 
 | 2 | Investice a Nákup strojů nepočítají s variabilními náklady pronájmu; `economics.py` je bez nich označí jako chybějící. | Modelové tržby/zisky jsou horní mez, pokud variabilní náklady existují. | `test_purchase_model_revenue_equals_economics_rental_revenue` |
 | 3 | Plán zakázek nezná náklady strojů na zakázce; v datech chybí `direct_cost_includes_machines`. | „Zisk zakázek po penále“ (892 000 Kč) je dílčí údaj – `economics.py` ho bez nastavení označí jako neúplný. | `test_known_difference_plan_does_not_know_machine_costs` |
 | 4 | Bod zvratu = fixní náklad ÷ cena (bez servisu), minimální cena = (fixní náklad + servis) ÷ dny. Aplikace to uvádí v textu. | Při bodu zvratu je zisk se servisem záporný. | `test_known_difference_break_even_ignores_service_but_minimum_price_includes_it` |
-| 5 | Období: plán zakázek trvá ~20 dní, rezervace dny 1–25, fixní náklady a režie jsou měsíční. | `total_result` nad současnými daty míchá období – proto se nezobrazuje. | – (rozhodnutí majitele) |
+| 5 | Období: plán zakázek trvá ~20 dní, rezervace dny 1–25, fixní náklady a režie jsou měsíční. | `total_result` nad současnými daty míchá období – proto se samotný nezobrazuje; stránka Ekonomika flotily používá `period_result` s výslovně zvolenou metodou přepočtu (K3.3). | – (rozhodnutí majitele) |
 | 6 | Servis: v simulaci Investic náhodně kolísá (průměr + rozptyl), jinde se bere průměr; `economics.py` ho řadí k provozním fixním nákladům. | Průměrně stejná částka, jiný rozptyl. | `test_legacy_fixed_and_service_costs_equal_economics_unit_costs` |
 
 Poznámka: v `investice.py` se prostá návratnost (pořizovací cena ÷ měsíční zisk, v měsících) jmenuje
@@ -76,8 +78,8 @@ Poznámka: v `investice.py` se prostá návratnost (pořizovací cena ÷ měsí�
 ## Využití strojů za období (K2)
 
 Funkce `fleet_usage.machine_days(kalendář, začátek, konec)` (případně `fleet_usage.from_model(...)`
-přímo z dat) vyhodnotí každý fyzický kus v každém dni zvoleného období. Zatím se **nikde nezobrazuje**
-a nic v aplikaci nemění – je připravená pro výsledek flotily za období (K3).
+přímo z dat) vyhodnotí každý fyzický kus v každém dni zvoleného období. Nic v aplikaci nemění; souhrn
+se od K3.4e2 zobrazuje na stránce Ekonomika flotily (výpočet výsledku flotily za období ho používá od K3).
 
 **Strojodny.** 1 strojoden = 1 kus na 1 den; období zahrnuje oba krajní dny, dny mohou být čísla
 plánu i kalendářní data (přes hranici měsíce a roku). Dostupná kapacita = kusy ve flotile, které jsou
@@ -128,7 +130,8 @@ zakázka J006) – stejné jako na stránce Plánování kapacity.
 ## Evidence závazků za období (K3.1)
 
 `fleet_economics.period_ledger(model, začátek, konec, job_starts=…, plan_start=…)` propojí kapacitu
-z `fleet_usage.py` s příspěvky z `economics.py`. **Nezobrazuje se** a nic nerozhoduje.
+z `fleet_usage.py` s příspěvky z `economics.py`. Nic nerozhoduje; od K3.4e1 se zobrazuje jako „Evidence závazků“
+na stránce Ekonomika flotily.
 
 - Každý pronájem a každá zakázka z dat má právě jeden řádek: termín, zdroj termínu (rezervace /
   **návrh plánu** / bez termínu), strojodny celkem, v období, mimo období a v konfliktu, přiřazení kusu,
@@ -150,7 +153,8 @@ penále potvrzené zakázky bez termínu.
 ## Varianty řešení konfliktů (K3.2)
 
 `fleet_economics.conflict_options(model, začátek, konec, job_starts)` (čísla dní plánu) připraví pro
-každý konflikt potvrzených závazků podklad pro rozhodnutí majitele. **Nezobrazuje se a nic nevybírá.**
+každý konflikt potvrzených závazků podklad pro rozhodnutí majitele. **Nic nevybírá**; od K3.4c/K3.4d se zobrazuje
+na stránce Ekonomika flotily (jen pro čtení).
 
 - Případ konfliktu: dotčené pronájmy a zakázky (příspěvek, úplnost, vzorec), servis, stroje a dny.
   Konflikty se společným závazkem tvoří jeden případ.
@@ -185,7 +189,7 @@ s podmíněnými variantami nelze rozhodnout, dokud není známa smluvní náhra
 
 `fleet_economics.period_result(model, začátek, konec, job_starts, fixed_cost_method=…, months=…, plan_start=…)`
 skládá evidenci (K3.1) a varianty konfliktů (K3.2) s fixními náklady a režií z `economics.py`.
-**Nezobrazuje se a nic nevybírá.**
+**Nic nevybírá**; od K3.4c se zobrazuje na stránce Ekonomika flotily.
 
 **Výsledek z jistých závazků** = jisté příspěvky pronájmů + jisté příspěvky zakázek − fixní náklady
 flotily za období − režie za období.
@@ -226,8 +230,7 @@ chybí náklady a smluvní náhrady).
 ## Zobrazovací vrstva „Ekonomika flotily“ (K3.4a)
 
 `fleet_view.build(period_result, názvy_strojů, plan_start)` převádí výsledek K3.3 na řádky, texty,
-stavy a upozornění pro budoucí stránku „Ekonomika flotily“ (K3.4b+). **Nic nepočítá jinak a zatím
-se nikde nezobrazuje.** Výstup jsou jen obyčejné hodnoty (lze uložit do mezipaměti).
+stavy a upozornění pro stránku „Ekonomika flotily“ (používá ji od K3.4c). **Nic nepočítá jinak.** Výstup jsou jen obyčejné hodnoty (lze uložit do mezipaměti).
 
 Každá částka má právě jeden z pěti stavů:
 
@@ -303,6 +306,14 @@ se nepočítá a žádná jiná stránka se nemění.
 Na ukázkových datech (dny 1–25) jsou všechny ekonomické částky **horní meze** nebo „chybí údaje“
 (chybí variabilní náklady pronájmu, nastavení `direct_cost_includes_machines`, režie a rozhodnutí
 konfliktů); přesný výsledek ani čistý zisk z nich určit nelze.
+
+## Dashboard → Ekonomika flotily (K4a)
+
+Karta „Ekonomický výsledek“ na Dashboardu dál ukazuje **dílčí údaj** – zisk vlastních zakázek po penále podle
+plánu (ukázková data: 892 000 Kč, částka beze změny). Text karty uvádí, že částka **zahrnuje i zakázky
+v kapacitním konfliktu** a nejde o čistý zisk půjčovny; jisté a konfliktní zakázky rozlišuje stránka
+**Ekonomika flotily**, na kterou vede odkaz v sekci „Ekonomika a hospodaření“. Dashboard žádnou novou částku
+nepočítá ani nezobrazuje.
 
 ## Regrese
 
