@@ -247,7 +247,7 @@ def test_comparison_is_information_only_and_says_when_not_possible():
     p05 = plain(m.value for m in expander(at, "Porovnání variant", 1).markdown)
     assert "Varianty nelze spolehlivě porovnat" in p05
     assert p05.count("nelze porovnat") == 3 and "storno / smluvní náhrada" in p05
-    assert "posun J006 × zrušení FIKT-P05" in p05
+    assert "Posun zakázky J006 × Zrušení pronájmu FIKT-P05" in p05
     for text in (j005, p05):
         assert fv.COMPARISON_DISCLAIMER in text
         assert "lepší" not in text                                    # na ukázkových datech nic „jistě lepší“
@@ -256,7 +256,7 @@ def test_comparison_is_information_only_and_says_when_not_possible():
 
 def test_blocking_commitments_are_shown_for_job_shift():
     text = plain(body(page()))
-    assert ("Bližší termíny blokují: pronájem FIKT-P03 (dny 14–20), servis / údržba KOLOVY_BAGR-01 od dne 11 "
+    assert ("Bližší termíny blokují: pronájem FIKT-P03 (dny 14–20), servis – Kolový bagr, kus 01 "
             "(dny 11–12), vlastní zakázka J001 (dny 1–5), vlastní zakázka J007 (dny 1–5), vlastní zakázka J009 "
             "(dny 13–16), vlastní zakázka J011 (dny 17–20)") in text
     assert "Bližší termíny blokují: pronájem FIKT-P05 (dny 15–19)" in text
@@ -354,7 +354,9 @@ def test_ledger_lists_all_commitments_once_grouped_by_state():
     assert groups == ["Jisté využití – započteno do výsledku (14)", "V konfliktu – nezapočítáno, rozhodne majitel (3)",
                       "Předběžné – nezapočítáno, jen potenciál (2)"]
     text = plain(m.value for m in exp.markdown)
-    assert "termín: návrh plánu" in text and "termín: rezervace" in text and "kus: nejednoznačné přiřazení" in text
+    assert "termín z návrhu plánu zakázek" in text and "termín z rezervace" in text
+    assert "konkrétní stroj: nelze určit (data uvádějí jen typ stroje a kusů tohoto typu je víc)" in text
+    assert "konkrétní stroj: určen jednoznačně (jediný kus tohoto typu)" in text
     assert "zisk" not in text.lower()
 
 
@@ -407,8 +409,9 @@ def test_methodology_expander():
     at = page()
     [exp] = [e for e in at.main.expander if e.label == "Jak se počítá"]
     text = plain(m.value for m in exp.markdown)
-    for title, desc in fv.METHODOLOGY:
-        assert title in text and desc in text, title
+    for title, points in fv.METHODOLOGY:
+        assert title in text and all(p in text for p in points), title
+    assert len([m for m in exp.markdown if 'class="fe-points"' in m.value]) == 1      # body jako seznamy
     assert kpi_values(at)["Celkový výsledek flotily"] == "nejvýše 829 500 Kč"     # výsledek beze změny
 
 
@@ -437,13 +440,13 @@ def test_info_banners_are_merged_into_one_block_without_losing_text():
         if b["tone"] == "info" and b["text"] != fv.FICTITIOUS:
             assert b["text"] in plain(merged)
     assert any(fv.NOT_NET_PROFIT in m and "de-insight bad" in m for m in insights)
-    assert "Chybí 8 údajů nebo rozhodnutí" in plain(insights)            # počet beze změny (K3.4e3b)
+    assert "Chybí 7 údajů nebo rozhodnutí" in plain(insights)            # K3.4e3b: sloučená duplicita metody
 
 
 def test_conflict_titles_and_details_do_not_break_identifiers():
     html_body = " ".join(body(at := page()))
     assert '<span class="nw">FIKT-P05</span> × J006' in html_body
-    assert '<span class="nw">KOLOVY_BAGR-01</span>' in html_body           # blokující servis ve variantě
+    assert "Kolový bagr, kus 01" in html_body and "KOLOVY_BAGR-01" not in html_body   # K3.4e3b: bez kódu kusu
     assert "Silniční válec · dny 15–18 · FIKT-P05 × J006" in plain(body(at))  # viditelný text beze změny
 
 
@@ -466,3 +469,21 @@ def test_mobile_rows_stack_label_above_amount():
     assert "flex-direction: column" in mobile and "align-items: flex-start" in mobile
     assert "flex-wrap: wrap" not in mobile                               # dřívější nejednotné zalamování
     assert ui.ECON_KEY == "de_tab_ekonomika" and ".st-key-de_tab_ekonomika .dd-row" in mobile   # jen tato stránka
+
+
+
+# ---------------------------------------------------------------------------
+# K3.4e3b – srozumitelné popisky na stránce
+# ---------------------------------------------------------------------------
+
+def test_page_has_no_technical_codes_and_merged_method_item():
+    at = page()
+    text = plain(body(at))
+    for code in ("direct_cost_includes_machines", "servis / údržba", "kus odvozen", "termín: ", "kus: ",
+                 "vyřeší konflikt: –"):
+        assert code not in text, code
+    missing = section(at, "Co chybí k přesnému výsledku")
+    assert missing.count(fv.METHOD_MISSING) == 1 and fv.MACHINES_SETTING_MISSING in missing
+    assert "nelze vyhodnotit · vyřešení konfliktu nelze posoudit" in text
+    assert "Servis servis – Kolový bagr, kus 01, od dne 11" in text
+    assert kpi_values(at) == {h["label"]: h["text"].replace("\xa0", " ") for h in sample_view()["headline"]}

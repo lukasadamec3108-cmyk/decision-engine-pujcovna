@@ -495,7 +495,7 @@ def test_methodology_matches_implementation_and_wording_rules():
     assert titles == ["Pět stavů částek", "Příspěvek a celkový výsledek", "Fixní náklady jen jednou",
                       "Přepočet na zvolené období", "Co se nezapočítává a proč", "Strojodny ve využití",
                       "Proč zobrazený výsledek není přesný"]
-    text = " ".join(d for _, d in SAMPLE["methodology"])
+    text = " ".join(x for _, points in SAMPLE["methodology"] for x in points)
     for status in fv.STATUSES:                                          # všech pět stavů
         assert status.capitalize() in text, status
     assert "jen jednou" not in text or "jednou za celou flotilu" in text
@@ -503,3 +503,95 @@ def test_methodology_matches_implementation_and_wording_rules():
     assert text.lower().count("zisk") == text.lower().count("nejde o čistý zisk") == 1
     assert "doporuč" not in text.lower()
     assert fv.build(fe.period_result(BASE, 5, 1, STARTS))["methodology"] == SAMPLE["methodology"]
+
+
+
+# ---------------------------------------------------------------------------
+# K3.4e3b – srozumitelné popisky (jen zobrazení)
+# ---------------------------------------------------------------------------
+
+RAW_KEYS = {"key", "a", "b", "services", "machines", "unit_assignment", "date_source", "state"}   # data, ne texty
+
+
+def shown_texts(obj):
+    """Zobrazované texty – bez vnitřních klíčů a surových dat (ta stránka nevykresluje)."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k not in RAW_KEYS:
+                yield from shown_texts(v)
+    elif isinstance(obj, (list, tuple)):
+        for v in obj:
+            yield from shown_texts(v)
+    elif isinstance(obj, str):
+        yield obj
+
+
+def all_texts(v):
+    return " ".join(shown_texts(v))
+
+
+def test_technical_labels_are_translated_everywhere():
+    for v in (SAMPLE, SAMPLE_M):
+        text = all_texts(v)
+        for code in ("direct_cost_includes_machines", "servis / údržba", "kus odvozen", "nejednoznačné přiřazení"):
+            assert code not in text, code
+        assert fv.MACHINES_SETTING_MISSING in text
+    assert fv.human_label("zda přímé náklady zakázek obsahují vlastní stroje (direct_cost_includes_machines)") \
+        == fv.MACHINES_SETTING_MISSING
+    assert fv.human_label("Mini bagr: variabilní náklad pronájmu/den") == "Mini bagr: variabilní náklad pronájmu/den"
+
+
+def test_only_the_real_duplicate_is_merged():
+    # bez metody: fixní náklady i režie hlásí tutéž nezvolenou metodu → jedna položka, počet 8 → 7
+    settings = next(g for g in SAMPLE["missing"] if g["group"] == "Nastavení")["items"]
+    assert settings.count(fv.METHOD_MISSING) == 1 and len(settings) == 2
+    assert any("Chybí 7 údajů nebo rozhodnutí" in b["text"] for b in SAMPLE["banners"])
+    labels = ("fixní náklady flotily: metoda přepočtu měsíčních fixních nákladů a režie na období (nezadána)",
+              "režie: metoda přepočtu měsíčních fixních nákladů a režie na období (nezadána)")
+    assert fv.human_labels(labels) == [fv.METHOD_MISSING]
+    # s metodou: chybí jen režie z dat – nic se neslučuje, samostatná položka zůstává
+    costs = next(g for g in SAMPLE_M["missing"] if g["group"] == "Náklady a ceny")["items"]
+    assert "společná režie/měs." in costs and fv.METHOD_MISSING not in all_texts(SAMPLE_M["missing"])
+    assert any("Chybí 7 údajů nebo rozhodnutí" in b["text"] for b in SAMPLE_M["banners"])   # jako na main
+    # různé údaje se nikdy neslučují
+    assert len(fv.human_labels(["Mini bagr: variabilní náklad pronájmu/den",
+                                "Kolový bagr: variabilní náklad pronájmu/den"])) == 2
+
+
+def test_service_and_blocker_texts():
+    assert fv.service_text("přesunout servis / údržba KOLOVY_BAGR-01 od dne 11", NAMES) \
+        == "přesunout servis – Kolový bagr, kus 01, od dne 11"
+    k1 = SAMPLE["conflicts"][0]
+    assert k1["services_text"] == ["servis – Kolový bagr, kus 01, od dne 11"]
+    assert "servis – Kolový bagr, kus 01 (dny 11–12)" in k1["variants"][0]["blockers"]
+    service_variant = next(v for v in k1["variants"] if v["title"] == "Posun servisu")
+    assert service_variant["resolves"] == fv.RESOLVES_UNKNOWN == "nelze posoudit"
+
+
+def test_ledger_unit_and_date_texts():
+    rows = {r["ref"]: r for r in SAMPLE["ledger"]}
+    assert rows["FIKT-P01"]["date_text"] == "termín z rezervace"
+    assert rows["J001"]["date_text"] == "termín z návrhu plánu zakázek"
+    assert rows["FIKT-P01"]["unit_text"] == fv.UNIT_SINGLE_TEXT                 # mini bagr má jediný kus
+    assert rows["FIKT-P04"]["unit_text"].startswith("konkrétní stroj: nelze určit (data uvádějí jen typ")
+    assert rows["J008"]["unit_text"].startswith("konkrétní stroj: nelze určit, který kus")   # 2 desky, obě obsazené
+    assert rows["FIKT-P06"]["unit_text"] == ""                                   # předběžný – neuvádí se
+    assert [r["unit_assignment"] for r in SAMPLE["ledger"]] == [r.unit_assignment for r in
+                                                                 fe.period_result(BASE, 1, 25, STARTS).options.ledger
+                                                                 .entries.itertuples()]   # data beze změny
+
+
+def test_comparison_names_match_variant_cards():
+    k2 = SAMPLE["conflicts"][1]
+    assert [(c["a_label"], c["b_label"]) for c in k2["comparisons"]] == [
+        ("Posun zakázky J006", "Zrušení pronájmu FIKT-P05"), ("Posun zakázky J006", "Zkrácení pronájmu FIKT-P05"),
+        ("Zrušení pronájmu FIKT-P05", "Zkrácení pronájmu FIKT-P05")]
+    assert [c["a"] for c in k2["comparisons"]] == ["posun J006", "posun J006", "zrušení FIKT-P05"]   # klíče beze změny
+
+
+def test_methodology_points_keep_all_meanings():
+    for title, points in fv.METHODOLOGY:
+        assert isinstance(points, list) and points, title
+        assert all(len(p) <= 180 for p in points), title                         # krátké body
+    states = dict(fv.METHODOLOGY)["Pět stavů částek"]
+    assert [p.split(" – ")[0] for p in states] == ["Úplný", "Horní mez", "Podmíněný", "Chybí údaje", "Nezapočítáno"]

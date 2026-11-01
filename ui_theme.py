@@ -965,6 +965,8 @@ ECON_CSS = RENTAL_CSS.replace(_RENT, _ECON).replace("</style>", f"""
 {_ECON} .nw {{ white-space: nowrap; }}
 {_ECON} ul.fe-notes {{ margin: 0 !important; padding-left: 1.1rem !important; }}
 {_ECON} ul.fe-notes li {{ margin: 0 0 .2rem 0 !important; }}
+{_ECON} ul.fe-points {{ margin: .15rem 0 0 0 !important; padding-left: 1.1rem !important; }}
+{_ECON} ul.fe-points li {{ margin: 0 0 .3rem 0 !important; line-height: 1.45; }}
 /* Navigační odkazy (tlačítka i st.page_link) ve stejném stylu jako odkaz na stránku */
 {_ECON} [class*="st-key-fe_cal_"] button, {_ECON} .st-key-fe_usage_detail button {{
   padding: .15rem .3rem; min-height: 0; border-radius: 8px; color: {ACCENT}; }}

@@ -291,6 +291,14 @@ se nepočítá a žádná jiná stránka se nemění.
   v řádcích vždy popisek nahoře a částka pod ním; identifikátory (např. FIKT-P05) se nelámou na
   spojovníku; informační upozornění o metodě přepočtu a o konfliktech jsou v jednom bloku (texty beze
   změny). Výpočty, popisky stavů a počet chybějících údajů se nemění.
+- **K3.4e3b – srozumitelné popisky (jen zobrazení, `fleet_view`):** technické názvy chybějících údajů
+  v přirozené češtině (např. „údaj, zda přímé náklady zakázek už obsahují náklady vlastních strojů“);
+  nezvolená metoda přepočtu hlášená fixními náklady i režií je jedna volba, proto jedna položka
+  (počet chybějících údajů na ukázkových datech bez metody 8 → 7, s metodou beze změny 7); servis
+  jako „servis – Kolový bagr, kus 01“; v evidenci „termín z rezervace / z návrhu plánu zakázek“ a
+  srozumitelné přiřazení konkrétního stroje („určen jednoznačně (jediný kus tohoto typu)“ jen u
+  jednokusových typů, jinak „nelze určit…“); porovnání variant s názvy karet; metodika jako krátké
+  body. Štítky z `economics.py` / `fleet_economics.py`, výpočty i stavy se nemění.
 
 Na ukázkových datech (dny 1–25) jsou všechny ekonomické částky **horní meze** nebo „chybí údaje“
 (chybí variabilní náklady pronájmu, nastavení `direct_cost_includes_machines`, režie a rozhodnutí
