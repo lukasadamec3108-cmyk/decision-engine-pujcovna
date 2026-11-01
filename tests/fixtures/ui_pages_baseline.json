@@ -571,7 +571,7 @@
     "9": 6,
     "96": 2
    },
-   "text": "5bb5dd287141d362",
+   "text": "8756db5305929c6a",
    "widgets": [
     {
      "key": "cap_types",
@@ -612,6 +612,13 @@
      ],
      "type": "radio",
      "value": "Kalendář dostupnosti"
+    },
+    {
+     "key": "cap_reset",
+     "label": "Obnovit výchozí nastavení",
+     "options": [],
+     "type": "button",
+     "value": "False"
     },
     {
      "key": "cap_detail_type",

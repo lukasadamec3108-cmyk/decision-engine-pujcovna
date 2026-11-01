@@ -227,6 +227,10 @@ M2_ADDED_KEYS = {"Stroj 1": "inv_machine_1", "Stroj 2": "inv_machine_2",
                  "Odhad poptávky pro rychlý výpočet (dny/měsíc)": "inv_expected_days",
                  "Počet simulací (měsíců)": "inv_n"}
 M2_MOVED_TO_SETTINGS = ("admin_pw1", "admin_pw2")
+# Schválený doplněk původní záložky 7 (Plánování kapacity): tlačítko „Obnovit výchozí nastavení“ za volbou
+# zobrazení. Ostatní widgety záložky (klíče, popisky, výchozí hodnoty, volby, pořadí) se porovnávají beze změny.
+CAP_RESET_WIDGET = {"key": "cap_reset", "label": "Obnovit výchozí nastavení", "options": [], "type": "button",
+                    "value": "False"}
 
 
 def m2_expected(state: dict) -> dict:
@@ -241,5 +245,7 @@ def m2_expected(state: dict) -> dict:
             w = dict(w, key=M2_ADDED_KEYS[w["label"]])
         side.append(w)
     out["sidebar"]["widgets"] = side
+    cap = out["tabs"]["7"]["widgets"]
+    cap.insert([w["key"] for w in cap].index("cap_view") + 1, dict(CAP_RESET_WIDGET))
     out["tab_labels"] = state["tab_labels"][:5]
     return out
