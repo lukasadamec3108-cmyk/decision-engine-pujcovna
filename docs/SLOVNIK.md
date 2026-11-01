@@ -16,7 +16,7 @@ Přehled všech výpočtů, jejich zdrojů a známých rozdílů je v [`EKONOMIK
 |---|---|---|---|
 | **Model jednoho stroje** | Očekávaný průměrný měsíc **jednoho kusu** pro rozhodnutí o nákupu. Fixní náklad kusu už obsahuje. | Investice, Nákup strojů, Strojový park | **Ne** – součet by dvakrát započítal fixní náklady a „prodal“ stejné dny stroje pronájmu i zakázce. |
 | **Příspěvek** pronájmu / zakázky | Tržba − variabilní náklady (u zakázky i přímé náklady a penále). **Bez fixních nákladů** strojů a bez režie. | Pronájem strojů, Rozhodovací centrum (`economics.py`); zisk zakázek ve Vlastních zakázkách je stejný vzorec | Ano, ale výsledek není zisk – fixní náklady a režie ještě chybí. |
-| **Výsledek celé flotily** | Příspěvky z evidovaných pronájmů a zakázek − fixní náklady flotily (jednou) − režie, za stejné období. | Připraveno v `economics.py` (`total_result`), **v aplikaci se zatím nezobrazuje** | Je to sám součet – nic dalšího se k němu nepřičítá. |
+| **Výsledek celé flotily** | Příspěvky z evidovaných pronájmů a zakázek − fixní náklady flotily (jednou) − režie, za stejné období. | Stránka **Ekonomika flotily** (přes `fleet_economics.period_result` – jen jisté závazky, konflikty a předběžné zvlášť) | Je to sám součet – nic dalšího se k němu nepřičítá. |
 
 > **Neúplný výsledek není čistý zisk.** Pokud chybí některý náklad (např. variabilní náklad pronájmu,
 > režie nebo informace, zda přímé náklady zakázek obsahují stroje), známá částka je jen **horní mez**.
@@ -32,7 +32,7 @@ Přehled všech výpočtů, jejich zdrojů a známých rozdílů je v [`EKONOMIK
 | **Očekávaný měsíční provozní zisk** (jednoho kusu / sestavy) | Investice – Nákup strojů, Strojový park, Dashboard (doporučená sestava) | Tržby z průměrné poptávky po odečtení poruch − fixní náklady jednotlivých strojů **z dat** − průměrný servis. | Fixní náklad z panelu (nepoužívá se), variabilní náklady, společné náklady, úroky, daně, sezónnost. Na Strojovém parku jen **jeden kus** – nesčítá se za flotilu. |
 | **Zisk zakázky**, **zisk zakázek po penále** | Vlastní zakázky, Dashboard („Ekonomický výsledek“ – dílčí údaj) | Tržba zakázky − přímé náklady zakázky (z dat); po penále navíc − penále za zpoždění. Stejný vzorec jako příspěvek zakázky v `economics.py`. | Fixní náklady strojů, režie, pronájmy. Data neuvádějí, zda přímé náklady obsahují náklady vlastních strojů – proto **není to čistý zisk**. |
 | **Příspěvek** | Pronájem strojů, Rozhodovací centrum | Pronájem: tržba − variabilní náklad pronájmu × strojodny. Zakázka: tržba − přímé náklady − variabilní náklady strojů (jen pokud nejsou v přímých nákladech) − penále. | Fixní náklady flotily a režie. **Není to čistý zisk.** |
-| **Výsledek flotily** | zatím nezobrazuje | Viz tři úrovně výše. | – |
+| **Výsledek flotily** | Ekonomika flotily | Viz tři úrovně výše. Neúplný výsledek je jen horní mez. | – |
 | **Čistý zisk firmy** | aplikace ho nepočítá | – | Chybí režie, daně a úplné náklady. Tento pojem v aplikaci nepoužívejte. |
 
 ## Náklady
