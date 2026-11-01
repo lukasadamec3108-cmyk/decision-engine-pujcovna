@@ -12,7 +12,8 @@ Etapa M2 (vícestránková aplikace): původní záložky 1–8 se hledají tam,
 (navigace.ORIGINAL_TABS) a porovnávají se s PŮVODNÍM základem z verze se záložkami
 (tests/fixtures/ui_baseline.json – v M2 se nemění). Jediné povolené rozdíly jsou vyjmenované níže:
   - investiční vstupy v panelu dostaly klíče (inv_*), aby se jejich hodnoty zachovaly mezi stránkami,
-  - správa účtů (admin_pw1, admin_pw2) se přesunula z panelu na stránku Nastavení – beze změny.
+  - správa účtů (admin_pw1, admin_pw2) se přesunula z panelu na stránku Nastavení – beze změny,
+  - záložka 7 (Plánování kapacity) má navíc tlačítko „Obnovit výchozí nastavení“ (cap_reset).
 Nové stránky (Dashboard, Pronájem strojů, Strojový park, Nastavení) a panel každé stránky hlídá
 základ tests/fixtures/ui_pages_baseline.json. Po ZÁMĚRNÉ a schválené změně ho obnovte:
     python tests/test_ui_regression.py --update

@@ -315,7 +315,7 @@ v kapacitním konfliktu** a nejde o čistý zisk půjčovny; jisté a konfliktn�
 **Ekonomika flotily**, na kterou vede odkaz v sekci „Ekonomika a hospodaření“. Dashboard žádnou novou částku
 nepočítá ani nezobrazuje.
 
-## Zapamatování filtrů stránky Ekonomika flotily
+## Zapamatování filtrů (Ekonomika flotily, Plánování kapacity)
 
 Období, datum prvního dne plánu, metoda fixních nákladů a počet měsíců zůstávají nastavené i po přechodu
 na jinou stránku a zpět (stejný princip jako vstupy Investic: hodnota se ukládá v `st.session_state` pod
@@ -323,6 +323,13 @@ klíčem `_keep_fe_…`). Počet měsíců se pamatuje i při přepnutí na jino
 použitím ověří (období v rozsahu dostupných dnů, existující volba metody, datum, počet měsíců 0,01–24);
 neplatná se zahodí a použije se výchozí. Tlačítko „Obnovit výchozí nastavení“ vrátí na výchozí jen tyto
 čtyři filtry; odhlášení je vymaže. Výpočty ani výsledky se nemění – při stejných vstupech je výsledek stejný.
+
+Stejný mechanismus (`kept_input` v `app.py`) používá i stránka **Plánování kapacity**: typy strojů, datum
+prvního dne, období, zobrazení, detail dne, ověření nového požadavku a výběr stroje v Přehledu využití se
+zachovají při přechodu na jinou stránku i při přepnutí zobrazení. Neplatné uložené hodnoty (např. období
+mimo rozsah dat, neexistující stroj) se nahradí výchozími. Odkazy z Ekonomiky flotily a tlačítko „Zobrazit
+v kalendáři“ nastavené hodnoty přepíší jako dosud. „Obnovit výchozí nastavení“ vrátí jen vstupy této
+stránky; odhlášení je vymaže. Kapacitní výpočty se nemění.
 
 ## Regrese
 
