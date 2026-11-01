@@ -315,6 +315,15 @@ v kapacitním konfliktu** a nejde o čistý zisk půjčovny; jisté a konfliktn�
 **Ekonomika flotily**, na kterou vede odkaz v sekci „Ekonomika a hospodaření“. Dashboard žádnou novou částku
 nepočítá ani nezobrazuje.
 
+## Zapamatování filtrů stránky Ekonomika flotily
+
+Období, datum prvního dne plánu, metoda fixních nákladů a počet měsíců zůstávají nastavené i po přechodu
+na jinou stránku a zpět (stejný princip jako vstupy Investic: hodnota se ukládá v `st.session_state` pod
+klíčem `_keep_fe_…`). Počet měsíců se pamatuje i při přepnutí na jinou metodu. Uložená hodnota se před
+použitím ověří (období v rozsahu dostupných dnů, existující volba metody, datum, počet měsíců 0,01–24);
+neplatná se zahodí a použije se výchozí. Tlačítko „Obnovit výchozí nastavení“ vrátí na výchozí jen tyto
+čtyři filtry; odhlášení je vymaže. Výpočty ani výsledky se nemění – při stejných vstupech je výsledek stejný.
+
 ## Regrese
 
 - `tests/test_econ_consistency.py` – shoda modulů s `economics.py`, ochrana před dvojím započtením,

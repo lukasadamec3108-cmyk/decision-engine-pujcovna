@@ -487,3 +487,165 @@ def test_page_has_no_technical_codes_and_merged_method_item():
     assert "nelze vyhodnotit · vyřešení konfliktu nelze posoudit" in text
     assert "Servis servis – Kolový bagr, kus 01, od dne 11" in text
     assert kpi_values(at) == {h["label"]: h["text"].replace("\xa0", " ") for h in sample_view()["headline"]}
+
+
+# ---------------------------------------------------------------------------
+# Zapamatování filtrů (období, datum prvního dne, metoda fixních nákladů, počet měsíců)
+# ---------------------------------------------------------------------------
+
+FE_KEYS = ("fe_period", "fe_plan_start", "fe_method", "fe_months")
+
+
+def filters(at):
+    """Aktuálně zobrazené hodnoty filtrů stránky (počet měsíců jen je-li pole vidět)."""
+    values = {"fe_period": [s.value for s in at.slider if s.key == "fe_period"][0],
+              "fe_plan_start": [d.value for d in at.date_input if d.key == "fe_plan_start"][0],
+              "fe_method": methods()[[r.value for r in at.radio if r.key == "fe_method"][0]]}
+    months = [n.value for n in at.number_input if n.key == "fe_months"]
+    values["fe_months"] = months[0] if months else None
+    return values
+
+
+def set_filters(at, period=(3, 20), plan_start=date(2026, 1, 30), method="months", months=0.75):
+    [s for s in at.slider if s.key == "fe_period"][0].set_value(period)
+    [d for d in at.date_input if d.key == "fe_plan_start"][0].set_value(plan_start)
+    [r for r in at.radio if r.key == "fe_method"][0].set_value(method_label(method)).run()
+    if method == "months":
+        [n for n in at.number_input if n.key == "fe_months"][0].set_value(months).run()
+    assert not at.exception, [e.value for e in at.exception]
+    return at
+
+
+def period_view(start, end, **kw):
+    model = dm.load_model()
+    return fv.build(fe.period_result(model, start, end, sample_starts(), **kw), cv.type_names(model),
+                    kw.get("plan_start"))
+
+
+def headline_texts(view):
+    return {h["label"]: h["text"].replace("\xa0", " ") for h in view["headline"]}
+
+
+CHANGED = {"fe_period": (3, 20), "fe_plan_start": date(2026, 1, 30), "fe_method": "months", "fe_months": 0.75}
+DEFAULTS = {"fe_period": (1, 25), "fe_plan_start": None, "fe_method": None, "fe_months": None}
+
+
+def test_filters_survive_switching_to_other_pages_and_back():
+    at = set_filters(page())
+    assert filters(at) == CHANGED
+    before_kpis, before_text = kpi_values(at), plain(body(at))
+    for key in ("dashboard", "kapacita", "investice", "rozhodovaci_centrum"):
+        open_page(at, key)
+        assert not at.exception, key
+        open_page(at, KEY)
+        assert not at.exception and not at.warning, key
+        assert filters(at) == CHANGED, key                              # nic se nevrátilo na výchozí
+        assert kpi_values(at) == before_kpis and plain(body(at)) == before_text, key
+    # stejné vstupy → stejný výsledek jako přímý výpočet (výpočty se nezměnily)
+    view = period_view(3, 20, fixed_cost_method="months", months=0.75, plan_start=date(2026, 1, 30))
+    assert kpi_values(at) == headline_texts(view)
+
+
+def test_calendar_method_and_date_survive_page_switch():
+    at = set_filters(page(), period=(2, 18), method="calendar_days")
+    open_page(at, "dashboard")
+    open_page(at, KEY)
+    assert not at.exception
+    assert filters(at) == {"fe_period": (2, 18), "fe_plan_start": date(2026, 1, 30),
+                           "fe_method": "calendar_days", "fe_months": None}
+    view = period_view(2, 18, fixed_cost_method="calendar_days", plan_start=date(2026, 1, 30))
+    assert kpi_values(at) == headline_texts(view)
+
+
+def test_months_value_is_kept_when_switching_methods():
+    at = set_filters(page(), months=0.75)
+    radio = lambda: [r for r in at.radio if r.key == "fe_method"][0]     # noqa: E731
+    for method in (None, "calendar_days", None):
+        radio().set_value(method_label(method)).run()
+        assert not at.exception and not [n for n in at.number_input if n.key == "fe_months"]
+    radio().set_value(method_label("months")).run()
+    assert filters(at)["fe_months"] == 0.75                               # ne výchozí 1,00
+    assert kpi_values(at) == headline_texts(period_view(3, 20, fixed_cost_method="months", months=0.75,
+                                                        plan_start=date(2026, 1, 30)))
+    radio().set_value(method_label(None)).run()                          # skryté pole přežije i přechod stránky
+    open_page(at, "kapacita")
+    open_page(at, KEY)
+    radio().set_value(method_label("months")).run()
+    assert filters(at)["fe_months"] == 0.75
+
+
+def test_invalid_stored_values_fall_back_to_defaults_without_error():
+    at = page()
+    at.session_state["_keep_fe_period"] = (5, 999)                       # mimo dostupné období
+    at.session_state["_keep_fe_method"] = "Neexistující metoda"
+    at.session_state["_keep_fe_plan_start"] = "30.01.2026"               # není datum
+    at.session_state["_keep_fe_months"] = 0                              # mimo povolený rozsah
+    open_page(at, "dashboard")
+    open_page(at, KEY)
+    assert not at.exception, [e.value for e in at.exception]
+    assert filters(at) == DEFAULTS
+    [r for r in at.radio if r.key == "fe_method"][0].set_value(method_label("months")).run()
+    assert not at.exception and filters(at)["fe_months"] == 1.0
+    assert kpi_values(at) == headline_texts(sample_view(fixed_cost_method="months", months=1.0))
+
+
+def test_valid_part_of_stored_values_is_kept_when_other_part_is_invalid():
+    at = set_filters(page())
+    at.session_state["_keep_fe_period"] = (0, 20)                        # neplatné jen období
+    open_page(at, "dashboard")
+    open_page(at, KEY)
+    assert not at.exception
+    assert filters(at) == {**CHANGED, "fe_period": (1, 25)}
+
+
+def test_reset_button_restores_defaults_and_only_page_filters():
+    at = page()
+    open_page(at, "investice")
+    at.number_input(key="inv_fixed_cost").set_value(120000).run()
+    open_page(at, "kapacita")
+    [s for s in at.slider if s.key == "cap_period"][0].set_value((2, 10)).run()
+    open_page(at, KEY)
+    set_filters(at)
+    cap = at.session_state["cap_period"] if "cap_period" in at.session_state else None
+    [button] = [b for b in at.main.button if b.key == "fe_reset"]
+    assert button.label == "Obnovit výchozí nastavení"
+    button.click().run()
+    assert not at.exception and not at.warning
+    assert filters(at) == DEFAULTS
+    assert kpi_values(at) == headline_texts(sample_view())               # stejné jako při prvním otevření
+    [r for r in at.radio if r.key == "fe_method"][0].set_value(method_label("months")).run()
+    assert filters(at)["fe_months"] == 1.0                               # i uložený počet měsíců je pryč
+    # ostatní stránky beze změny
+    assert at.session_state["_keep_inv_fixed_cost"] == 120000
+    assert (at.session_state["cap_period"] if "cap_period" in at.session_state else None) == cap
+    open_page(at, "investice")
+    assert at.number_input(key="inv_fixed_cost").value == 120000
+
+
+def test_fresh_session_starts_with_defaults():
+    set_filters(page())
+    at = page()                                                          # nová relace
+    assert filters(at) == DEFAULTS
+    assert kpi_values(at) == headline_texts(sample_view())
+
+
+def test_logout_clears_stored_filters():
+    at = login_user(app(users=True), "lukas", LEGACY)
+    open_page(at, KEY)
+    set_filters(at)
+    assert all("_keep_" + k in at.session_state for k in FE_KEYS)
+    [b for b in at.sidebar.button if b.key == "logout"][0].click().run()
+    assert not at.exception
+    assert not [k for k in at.session_state if str(k).startswith(("fe_", "_keep_fe_"))]
+    login_user(at, "honza", TESTER)
+    open_page(at, KEY)
+    assert not at.exception
+    assert filters(at) == DEFAULTS
+
+
+def test_filter_widgets_do_not_trigger_streamlit_value_warning():
+    at = set_filters(page())
+    open_page(at, "dashboard")
+    open_page(at, KEY)
+    messages = [e.value for e in at.exception] + [w.value for w in at.warning]
+    assert not [m for m in messages if "default value" in str(m) or "Session State API" in str(m)]

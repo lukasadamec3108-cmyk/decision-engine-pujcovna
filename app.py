@@ -1,4 +1,5 @@
 import contextlib
+import datetime
 import hashlib
 import html
 import importlib
@@ -154,6 +155,8 @@ def _log_out() -> None:
     st.session_state["login_nonce"] = nonce + 1
     for key in [k for k in st.session_state if str(k).startswith((INV_KEEP, "inv_"))]:   # vstupy předch. uživatele
         del st.session_state[key]
+    for key in [k for k in st.session_state if str(k).startswith("fe_")]:   # filtry Ekonomiky flotily (uložené
+        del st.session_state[key]                                           # INV_KEEP + "fe_…" smazány výše)
 
 
 if not auth.can_log_in(AUTH):
@@ -2960,6 +2963,52 @@ def fe_entry_row(r: dict, detail: bool = False) -> tuple:
     return label, html.escape(r["text"]), note
 
 
+# Filtry Ekonomiky flotily si pamatují hodnotu i po přechodu na jinou stránku (stejný princip jako
+# investiční vstupy – _inv_input): Streamlit stav nevykresleného widgetu smaže, proto se hodnota ukládá
+# i pod INV_KEEP + klíč a po návratu se obnoví. Uložená hodnota se před použitím ověří (rozsah období,
+# existující volba metody, počet měsíců) – neplatná se zahodí a použije se výchozí. Výpočty se nemění.
+FE_FILTER_KEYS = ("fe_period", "fe_plan_start", "fe_method", "fe_months")
+FE_MONTHS_RANGE = (0.01, 24.0)
+
+
+def fe_kept_input(widget, key: str, label: str, default_kwargs: dict, valid, **kwargs):
+    """Vstup stránky Ekonomika flotily, jehož hodnota přežije přepnutí stránky i skrytí pole."""
+    store = INV_KEEP + key
+    for k in (store, key):
+        if k in st.session_state and not valid(st.session_state[k]):
+            del st.session_state[k]                  # např. po změně dat mimo rozsah – výchozí hodnota
+    if key not in st.session_state and store in st.session_state:
+        st.session_state[key] = st.session_state[store]
+    if key not in st.session_state:
+        kwargs.update(default_kwargs)
+    value = widget(label, key=key, **kwargs)
+    st.session_state[store] = value
+    return value
+
+
+def fe_reset_filters(default_end: int) -> None:
+    """Tlačítko „Obnovit výchozí nastavení“: vrátí jen filtry Ekonomiky flotily na výchozí hodnoty.
+
+    Hodnoty se nastaví výslovně (ne smazáním klíče), aby se změna projevila i v zobrazených polích prohlížeče.
+    """
+    defaults = {"fe_period": (1, default_end), "fe_plan_start": None,
+                "fe_method": next(iter(FLEET_ECON_METHODS)), "fe_months": 1.0}
+    for key in FE_FILTER_KEYS:
+        st.session_state[key] = defaults[key]
+        st.session_state.pop(INV_KEEP + key, None)
+
+
+def fe_valid_period(value, max_day: int) -> bool:
+    return (isinstance(value, (tuple, list)) and len(value) == 2
+            and all(isinstance(v, int) and not isinstance(v, bool) for v in value)
+            and 1 <= value[0] <= value[1] <= max_day)
+
+
+def fe_valid_months(value) -> bool:
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and FE_MONTHS_RANGE[0] <= value <= FE_MONTHS_RANGE[1])
+
+
 def fe_banners(banners: list) -> None:
     """Upozornění stránky (K3.4e3a): ukázková data a „nejde o čistý zisk“ samostatně a výrazně, ostatní
     informační upozornění (metoda přepočtu, konflikty) v jednom kompaktním bloku – texty beze změny."""
@@ -2991,19 +3040,25 @@ if PAGE == "ekonomika":
         with ui.filter_box("ekonomika", "Období a fixní náklady"):
             f1, f2 = st.columns([3, 2])
             with f1:
-                fe_from, fe_to = st.slider("Období (dny plánu)", min_value=1, max_value=fe_max_day,
-                                           value=(1, fe_default_end), key="fe_period")
+                fe_from, fe_to = fe_kept_input(
+                    st.slider, "fe_period", "Období (dny plánu)", dict(value=(1, fe_default_end)),
+                    lambda v: fe_valid_period(v, fe_max_day), min_value=1, max_value=fe_max_day)
             with f2:
-                fe_start = st.date_input("Datum prvního dne plánu (nepovinné)", value=None, key="fe_plan_start",
-                                         format="DD.MM.YYYY")
-            fe_label = st.radio("Fixní náklady a režie za období", list(FLEET_ECON_METHODS), key="fe_method")
+                fe_start = fe_kept_input(
+                    st.date_input, "fe_plan_start", "Datum prvního dne plánu (nepovinné)", dict(value=None),
+                    lambda v: v is None or isinstance(v, datetime.date), format="DD.MM.YYYY")
+            fe_label = fe_kept_input(st.radio, "fe_method", "Fixní náklady a režie za období", dict(index=0),
+                                     lambda v: v in FLEET_ECON_METHODS, options=list(FLEET_ECON_METHODS))
             fe_method = FLEET_ECON_METHODS[fe_label]
             fe_months = None
             if fe_method == "months":
-                fe_months = st.number_input("Počet měsíců", min_value=0.01, max_value=24.0, value=1.0, step=0.25,
-                                            format="%.2f", key="fe_months")
+                fe_months = fe_kept_input(
+                    st.number_input, "fe_months", "Počet měsíců", dict(value=1.0), fe_valid_months,
+                    min_value=FE_MONTHS_RANGE[0], max_value=FE_MONTHS_RANGE[1], step=0.25, format="%.2f")
             ui.hint("Metodu přepočtu měsíčních fixních nákladů a režie na období volíte vy – aplikace žádnou "
                     "nepředpokládá. Režie se odečte jen tehdy, když je v datech zadaná.")
+            st.button("Obnovit výchozí nastavení", key="fe_reset", on_click=fe_reset_filters, args=(fe_default_end,),
+                      icon=":material/restart_alt:", help="Vrátí jen filtry této stránky na výchozí hodnoty.")
 
         fe_view = fleet_economics_view(data_version, code_version, tuple(sorted(fe_starts.items())),
                                        int(fe_from), int(fe_to), fe_method, fe_months, fe_start)
