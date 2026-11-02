@@ -157,6 +157,9 @@ def _log_out() -> None:
         del st.session_state[key]
     for key in [k for k in st.session_state if str(k).startswith("fe_")]:   # filtry Ekonomiky flotily (uložené
         del st.session_state[key]                                           # INV_KEEP + "fe_…" smazány výše)
+    for key in [k for k in st.session_state                                 # vstupy Plánování kapacity
+                if str(k).startswith("cap_") or k == "use_detail_type"]:
+        del st.session_state[key]
 
 
 if not auth.can_log_in(AUTH):
@@ -2027,7 +2030,60 @@ def capacity_grid(data_version: str, code_version: str, job_starts: tuple, start
             cv.conflicts_table(cal, start, end, list(types), names, cv.job_info(model), plan_start))
 
 
+# Vstupy stránek Ekonomika flotily a Plánování kapacity si pamatují hodnotu i po přechodu na jinou stránku
+# (stejný princip jako investiční vstupy – _inv_input): Streamlit stav nevykresleného widgetu smaže, proto se
+# hodnota ukládá i pod INV_KEEP + klíč a po návratu se obnoví. Uložená hodnota se před použitím ověří
+# (rozsah, existující volba) – neplatná se zahodí a použije se výchozí. Výpočty se nemění.
+def kept_restore(key: str, valid) -> None:
+    """Zahodí neplatnou hodnotu vstupu a obnoví uloženou, pokud widget právě nemá stav."""
+    store = INV_KEEP + key
+    for k in (store, key):
+        if k in st.session_state and not valid(st.session_state[k]):
+            del st.session_state[k]                  # např. po změně dat mimo rozsah – výchozí hodnota
+    if key not in st.session_state and store in st.session_state:
+        st.session_state[key] = st.session_state[store]
+
+
+def kept_input(widget, key: str, label: str, default_kwargs: dict, valid, **kwargs):
+    """Vstup, jehož hodnota přežije přepnutí stránky i dočasné skrytí pole."""
+    kept_restore(key, valid)
+    if key not in st.session_state:
+        kwargs.update(default_kwargs)
+    value = widget(label, key=key, **kwargs)
+    st.session_state[INV_KEEP + key] = value
+    return value
+
+
+def valid_period(value, max_day: int) -> bool:
+    return (isinstance(value, (tuple, list)) and len(value) == 2
+            and all(isinstance(v, int) and not isinstance(v, bool) for v in value)
+            and 1 <= value[0] <= value[1] <= max_day)
+
+
+def valid_int(value, low: int, high: int) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and low <= value <= high
+
+
 CAP_VIEWS = ["Kalendář dostupnosti", "Přehled využití"]
+CAP_REQ_DEFAULTS = {"cap_req_from": 13, "cap_req_to": 16, "cap_req_qty": 1, "cap_req_tent": False}
+CAP_KEPT_KEYS = ("cap_types", "cap_plan_start", "cap_period", "cap_view", "cap_detail_type", "cap_detail_day",
+                 "cap_req_type", "cap_req_from", "cap_req_to", "cap_req_qty", "cap_req_tent", "use_detail_type")
+
+
+def cap_reset_inputs(default_end: int, first_type: str) -> None:
+    """Tlačítko „Obnovit výchozí nastavení“: vrátí jen vstupy Plánování kapacity na výchozí hodnoty.
+
+    Hodnoty se nastaví výslovně (ne smazáním klíče), aby se změna projevila i v polích v prohlížeči.
+    Výběr stroje v Přehledu využití se po resetu nezobrazuje (výchozí je kalendář) – jen se smaže.
+    """
+    defaults = {"cap_types": [], "cap_plan_start": None, "cap_period": (1, default_end), "cap_view": CAP_VIEWS[0],
+                "cap_detail_type": first_type, "cap_detail_day": 1, "cap_req_type": first_type, **CAP_REQ_DEFAULTS}
+    for key in CAP_KEPT_KEYS:
+        st.session_state.pop(INV_KEEP + key, None)
+        if key in defaults:
+            st.session_state[key] = defaults[key]
+        else:
+            st.session_state.pop(key, None)
 
 
 def show_in_calendar(type_id: str) -> None:
@@ -2065,22 +2121,29 @@ if PAGE == "kapacita":                                    # sekce Plánování k
         with ui.filter_box("kapacita", "Období, stroje a zobrazení"):
             f1, f2 = st.columns([3, 2])
             with f1:
-                cap_pick = st.multiselect(
-                    "Typy strojů", cap_types_all, default=[], format_func=lambda t: cap_names[t],
-                    key="cap_types", placeholder="Všechny typy strojů",
+                cap_pick = kept_input(
+                    st.multiselect, "cap_types", "Typy strojů", dict(default=[]),
+                    lambda v: isinstance(v, list) and len(set(v)) == len(v) and all(t in cap_types_all for t in v),
+                    options=cap_types_all, format_func=lambda t: cap_names[t], placeholder="Všechny typy strojů",
                 )
             cap_types = [t for t in cap_types_all if t in cap_pick] or cap_types_all
             with f2:
-                cap_start = st.date_input(
-                    "Datum prvního dne plánu (nepovinné)", value=None, key="cap_plan_start", format="DD.MM.YYYY",
+                cap_start = kept_input(
+                    st.date_input, "cap_plan_start", "Datum prvního dne plánu (nepovinné)", dict(value=None),
+                    lambda v: v is None or isinstance(v, datetime.date), format="DD.MM.YYYY",
                     help="Jen pro zobrazení kalendářních dat a dnů v týdnu. Plán počítá ve dnech od začátku.",
                 )
-            cap_from, cap_to = st.slider(
-                "Období (dny plánu)", min_value=1, max_value=cap_max_day, value=(1, cap_default_end), key="cap_period",
+            cap_from, cap_to = kept_input(
+                st.slider, "cap_period", "Období (dny plánu)", dict(value=(1, cap_default_end)),
+                lambda v: valid_period(v, cap_max_day), min_value=1, max_value=cap_max_day,
             )
-            cap_view = st.radio(
-                "Zobrazení", CAP_VIEWS, horizontal=True, key="cap_view", label_visibility="collapsed",
+            cap_view = kept_input(
+                st.radio, "cap_view", "Zobrazení", dict(index=0), lambda v: v in CAP_VIEWS,
+                options=CAP_VIEWS, horizontal=True, label_visibility="collapsed",
             )
+            st.button("Obnovit výchozí nastavení", key="cap_reset", on_click=cap_reset_inputs,
+                      args=(cap_default_end, next(iter(cap_types_all), None)), icon=":material/restart_alt:",
+                      help="Vrátí filtry, detail dne i ověření požadavku na této stránce na výchozí hodnoty.")
 
         with cap_summary:
             st.markdown(ui.scope_html(*cv.scope_texts(cap_from, cap_to, cap_types, cap_types_all, cap_names, cap_start)),
@@ -2150,12 +2213,15 @@ if PAGE == "kapacita":                                    # sekce Plánování k
             st.markdown("### Detail dne")
             d1, d2 = st.columns([3, 2])
             with d1:
-                cap_dt = st.selectbox("Stroj", cap_types, format_func=lambda t: cap_names[t], key="cap_detail_type")
+                cap_dt = kept_input(st.selectbox, "cap_detail_type", "Stroj", dict(index=0), lambda v: v in cap_types,
+                                    options=cap_types, format_func=lambda t: cap_names[t])
+            kept_restore("cap_detail_day", lambda v: valid_int(v, 1, cap_max_day))
             if "cap_detail_day" in st.session_state:          # po změně období držet den v rozsahu
                 st.session_state["cap_detail_day"] = min(max(int(st.session_state["cap_detail_day"]), cap_from), cap_to)
             with d2:
-                cap_dd = st.number_input("Den plánu", min_value=cap_from, max_value=cap_to, value=cap_from, step=1,
-                                         key="cap_detail_day")
+                cap_dd = kept_input(st.number_input, "cap_detail_day", "Den plánu", dict(value=cap_from),
+                                    lambda v: valid_int(v, cap_from, cap_to),
+                                    min_value=cap_from, max_value=cap_to, step=1)
             cap_row = cap_grid[(cap_grid["type_id"] == cap_dt) & (cap_grid["day"] == cap_dd)].iloc[0]
             st.markdown(
                 f"**{html.escape(cap_names[cap_dt])}, {cv.day_label(int(cap_dd), cap_start)}:** "
@@ -2177,15 +2243,23 @@ if PAGE == "kapacita":                                    # sekce Plánování k
                     "Ekonomiku a porovnání více požadavků řeší záložka Rozhodovací plánovač.")
             q1, q2, q3, q4 = st.columns([3, 1, 1, 1])
             with q1:
-                req_type = st.selectbox("Typ stroje", cap_types_all, format_func=lambda t: cap_names[t], key="cap_req_type")
+                req_type = kept_input(st.selectbox, "cap_req_type", "Typ stroje", dict(index=0),
+                                      lambda v: v in cap_types_all, options=cap_types_all,
+                                      format_func=lambda t: cap_names[t])
             with q2:
-                req_from = st.number_input("Od dne", min_value=1, max_value=365, value=13, step=1, key="cap_req_from")
+                req_from = kept_input(st.number_input, "cap_req_from", "Od dne",
+                                      dict(value=CAP_REQ_DEFAULTS["cap_req_from"]), lambda v: valid_int(v, 1, 365),
+                                      min_value=1, max_value=365, step=1)
             with q3:
-                req_to = st.number_input("Do dne (včetně)", min_value=1, max_value=365, value=16, step=1,
-                                         key="cap_req_to")
+                req_to = kept_input(st.number_input, "cap_req_to", "Do dne (včetně)",
+                                    dict(value=CAP_REQ_DEFAULTS["cap_req_to"]), lambda v: valid_int(v, 1, 365),
+                                    min_value=1, max_value=365, step=1)
             with q4:
-                req_qty = st.number_input("Počet kusů", min_value=1, max_value=10, value=1, step=1, key="cap_req_qty")
-            req_tent = st.checkbox("Počítat i s předběžnými rezervacemi (opatrnější pohled)", key="cap_req_tent")
+                req_qty = kept_input(st.number_input, "cap_req_qty", "Počet kusů",
+                                     dict(value=CAP_REQ_DEFAULTS["cap_req_qty"]), lambda v: valid_int(v, 1, 10),
+                                     min_value=1, max_value=10, step=1)
+            req_tent = kept_input(st.checkbox, "cap_req_tent", "Počítat i s předběžnými rezervacemi (opatrnější pohled)",
+                                  dict(value=CAP_REQ_DEFAULTS["cap_req_tent"]), lambda v: isinstance(v, bool))
             req = cv.check_request(cap_cal, req_type, int(req_from), int(req_to), int(req_qty), req_tent,
                                    cap_jobs, cap_start)
             st.markdown(
@@ -2310,8 +2384,10 @@ if PAGE == "kapacita":                                    # sekce Plánování k
 
             n1, n2 = st.columns([3, 2])
             with n1:
-                use_pick = st.selectbox("Detail stroje v kalendáři", use_table["type_id"].tolist(),
-                                        format_func=lambda t: cap_names.get(t, t), key="use_detail_type")
+                use_types = use_table["type_id"].tolist()
+                use_pick = kept_input(st.selectbox, "use_detail_type", "Detail stroje v kalendáři", dict(index=0),
+                                      lambda v: v in use_types, options=use_types,
+                                      format_func=lambda t: cap_names.get(t, t))
             with n2:
                 st.button("Zobrazit v kalendáři", key="use_to_calendar", on_click=show_in_calendar,
                           args=(use_pick,), width="stretch")
@@ -2963,27 +3039,9 @@ def fe_entry_row(r: dict, detail: bool = False) -> tuple:
     return label, html.escape(r["text"]), note
 
 
-# Filtry Ekonomiky flotily si pamatují hodnotu i po přechodu na jinou stránku (stejný princip jako
-# investiční vstupy – _inv_input): Streamlit stav nevykresleného widgetu smaže, proto se hodnota ukládá
-# i pod INV_KEEP + klíč a po návratu se obnoví. Uložená hodnota se před použitím ověří (rozsah období,
-# existující volba metody, počet měsíců) – neplatná se zahodí a použije se výchozí. Výpočty se nemění.
+# Filtry Ekonomiky flotily si pamatují hodnotu i po přechodu na jinou stránku – viz kept_input.
 FE_FILTER_KEYS = ("fe_period", "fe_plan_start", "fe_method", "fe_months")
 FE_MONTHS_RANGE = (0.01, 24.0)
-
-
-def fe_kept_input(widget, key: str, label: str, default_kwargs: dict, valid, **kwargs):
-    """Vstup stránky Ekonomika flotily, jehož hodnota přežije přepnutí stránky i skrytí pole."""
-    store = INV_KEEP + key
-    for k in (store, key):
-        if k in st.session_state and not valid(st.session_state[k]):
-            del st.session_state[k]                  # např. po změně dat mimo rozsah – výchozí hodnota
-    if key not in st.session_state and store in st.session_state:
-        st.session_state[key] = st.session_state[store]
-    if key not in st.session_state:
-        kwargs.update(default_kwargs)
-    value = widget(label, key=key, **kwargs)
-    st.session_state[store] = value
-    return value
 
 
 def fe_reset_filters(default_end: int) -> None:
@@ -2996,12 +3054,6 @@ def fe_reset_filters(default_end: int) -> None:
     for key in FE_FILTER_KEYS:
         st.session_state[key] = defaults[key]
         st.session_state.pop(INV_KEEP + key, None)
-
-
-def fe_valid_period(value, max_day: int) -> bool:
-    return (isinstance(value, (tuple, list)) and len(value) == 2
-            and all(isinstance(v, int) and not isinstance(v, bool) for v in value)
-            and 1 <= value[0] <= value[1] <= max_day)
 
 
 def fe_valid_months(value) -> bool:
@@ -3040,19 +3092,19 @@ if PAGE == "ekonomika":
         with ui.filter_box("ekonomika", "Období a fixní náklady"):
             f1, f2 = st.columns([3, 2])
             with f1:
-                fe_from, fe_to = fe_kept_input(
+                fe_from, fe_to = kept_input(
                     st.slider, "fe_period", "Období (dny plánu)", dict(value=(1, fe_default_end)),
-                    lambda v: fe_valid_period(v, fe_max_day), min_value=1, max_value=fe_max_day)
+                    lambda v: valid_period(v, fe_max_day), min_value=1, max_value=fe_max_day)
             with f2:
-                fe_start = fe_kept_input(
+                fe_start = kept_input(
                     st.date_input, "fe_plan_start", "Datum prvního dne plánu (nepovinné)", dict(value=None),
                     lambda v: v is None or isinstance(v, datetime.date), format="DD.MM.YYYY")
-            fe_label = fe_kept_input(st.radio, "fe_method", "Fixní náklady a režie za období", dict(index=0),
+            fe_label = kept_input(st.radio, "fe_method", "Fixní náklady a režie za období", dict(index=0),
                                      lambda v: v in FLEET_ECON_METHODS, options=list(FLEET_ECON_METHODS))
             fe_method = FLEET_ECON_METHODS[fe_label]
             fe_months = None
             if fe_method == "months":
-                fe_months = fe_kept_input(
+                fe_months = kept_input(
                     st.number_input, "fe_months", "Počet měsíců", dict(value=1.0), fe_valid_months,
                     min_value=FE_MONTHS_RANGE[0], max_value=FE_MONTHS_RANGE[1], step=0.25, format="%.2f")
             ui.hint("Metodu přepočtu měsíčních fixních nákladů a režie na období volíte vy – aplikace žádnou "
