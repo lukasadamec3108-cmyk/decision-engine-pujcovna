@@ -340,7 +340,8 @@ def test_module_is_standalone_and_not_connected_to_ui():
                                                          "econ_formula", "planner", "calendar", "itertools",
                                                          "datetime"}
     names = {n.name for n in tree.body if isinstance(n, ast.FunctionDef) and not n.name.startswith("_")}
-    assert names == {"period_ledger", "conflict_options", "period_result"}   # jen K3.1–K3.3, žádné další kroky
+    # K3.1–K3.3 a schválené E3.1 (job_vs_rental – zakázka, nebo pronájem?, jen informace); žádné další kroky
+    assert names == {"period_ledger", "conflict_options", "period_result", "job_vs_rental"}
         # K3.4c: app.py modul používá jen na stránce Ekonomika flotily (výpočet v mezipaměti); jinde nikde
     sys.path.insert(0, str(ROOT / "tests"))
     from app_pages import outside_economics_page
