@@ -28,6 +28,7 @@ pro sjednocení ekonomiky (etapa E2.2). Pojmy jsou vysvětlené ve [slovníku](S
 | Příspěvek pronájmu a zakázky, verdikt | Pronájem strojů, Rozhodovací centrum | `planner.py`, `econ_formula.py` → **`economics.py`** | rezervace, požadavky uživatele, data | evidence + vstup | přímo `economics.py` (`test_planner_*`) |
 | Kapacita, využití, konflikty | Plánování kapacity, Dashboard | `capacity.py` | flotila, rezervace, servis, plán | evidence | žádné částky (strojodny) |
 | Fixní náklady flotily, režie, celkový výsledek | Ekonomika flotily (přes `fleet_economics.period_result`); Dashboard na ni odkazuje | `economics.py` | data | – | `test_total_result_is_incomplete_on_current_data` |
+| Zakázka, nebo pronájem? – příspěvek zakázky bez penále × pronájem stejných strojodnů za ceník, hranice využití (E3.1, jen informace) | Ekonomika flotily | `fleet_economics.job_vs_rental` nad `economics.py` | zakázky, stroje zakázek, ceník, variabilní náklady | evidence + ceník | přímo `economics.job_contribution`, `rental_contribution`, `job_machine_days` (`tests/test_job_vs_rental.py`) |
 | Využití fyzických strojů za období (strojodny po kusech a typech, konflikty) | Ekonomika flotily – souhrn využití (K3.4e2) | `fleet_usage.py` nad `capacity.py` | flotila, rezervace, plán zakázek, servis | evidence | žádné částky; shoda s kalendářem a přehledem využití (`tests/test_fleet_usage.py`) |
 
 ## Pravidla proti dvojímu započtení
@@ -314,6 +315,28 @@ plánu (ukázková data: 892 000 Kč, částka beze změny). Text karty uvádí,
 v kapacitním konfliktu** a nejde o čistý zisk půjčovny; jisté a konfliktní zakázky rozlišuje stránka
 **Ekonomika flotily**, na kterou vede odkaz v sekci „Ekonomika a hospodaření“. Dashboard žádnou novou částku
 nepočítá ani nezobrazuje.
+
+## Zakázka, nebo pronájem? (E3.1)
+
+Blok na stránce **Ekonomika flotily** – **jen informace**, nic nedoporučuje ani nerozhoduje. Funkce
+`fleet_economics.job_vs_rental(model)` (texty `fleet_view.job_rental`) pro každou zakázku z dat (jednou, v pořadí
+dat, celé zakázky – nezávisí na zvoleném období) porovná:
+
+- **příspěvek zakázky bez penále** – `economics.job_contribution(…, days_late=0)`,
+- **tržbu z pronájmu stejných strojodnů** – strojodny (`economics.job_machine_days`: délka × kusy) × ceníková
+  cena pronájmu/den (`economics.rental_contribution`),
+- **hranici využití pronájmu** = příspěvek zakázky ÷ příspěvek z pronájmu všech těchto strojodnů. Pod hranicí
+  vychází v modelu lépe zakázka, nad ní pronájem; nad 100 % ani plný pronájem nepřinese víc.
+
+Zásady: poptávka po pronájmu se nepředpokládá (`rental_demand` se nepoužívá); penále, fixní náklady flotily
+a režie nejsou na žádné straně (nezapočtou se dvakrát). Variabilní náklady strojů se odečtou **na obou
+stranách, nebo na žádné**: chybějí-li na obou, je srovnání **orientační** (obě strany bez nich, výslovně
+uvedeno); zadané jen zčásti = **nelze spolehlivě vyhodnotit**. Chybějící nebo neplatná tržba, přímé náklady,
+ceník, délka zakázky nebo počet kusů = nelze spolehlivě vyhodnotit (chybějící údaj nikdy není nula; skutečná
+nula se použije). Obsluha a doprava strojů se v datech neevidují.
+
+Ukázková data: všech 12 zakázek je orientačních (chybí variabilní náklady a nastavení
+`direct_cost_includes_machines`). Hranice pod 100 %: J007 67 %, J009 88 %, J005 96 %; ostatní nad 100 %.
 
 ## Zapamatování filtrů (Ekonomika flotily, Plánování kapacity)
 

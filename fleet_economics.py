@@ -955,3 +955,128 @@ def _check_combo(cal, combo, before, start, end) -> tuple:
     if outside:
         return True, False, "přesah mimo období: " + ", ".join(outside) + " – chybí pravidlo časového rozlišení"
     return True, True, ""
+
+
+# ===========================================================================
+# E3.1 – Zakázka, nebo pronájem? (jen informace, nic nerozhoduje)
+# ===========================================================================
+# Pro každou zakázku z dat porovná její příspěvek BEZ PENÁLE s pronájmem stejných strojodnů za ceník
+# a určí hranici využití pronájmu = příspěvek zakázky ÷ příspěvek z pronájmu všech těchto strojodnů.
+# Pod hranicí (pronajato méně dní) vychází v modelu lépe zakázka, nad ní pronájem.
+# - Částky jsou jen z economics.py (job_contribution, rental_contribution, job_machine_days) – žádná
+#   druhá ekonomická logika. Fixní náklady flotily ani režie nejsou na žádné straně (příspěvky je
+#   neobsahují), penále se nezapočítává → nic se nezapočte dvakrát.
+# - Poptávka po pronájmu se NEPŘEDPOKLÁDÁ (rental_demand se nepoužívá) – hranice jen říká, kolik
+#   dní by se muselo pronajmout; kolik se jich skutečně pronajme, aplikace neví.
+# - Variabilní náklady strojů se odečtou na OBOU stranách, nebo na žádné: chybějí-li na obou stranách,
+#   je srovnání „orientační“ (obě strany bez nich, výslovně uvedeno); jiná kombinace = nelze spolehlivě
+#   vyhodnotit (jedna strana by byla zvýhodněná). Chybějící údaj se nikdy nepovažuje za nulu.
+JR_FULL = "modelové srovnání"
+JR_ORIENTATION = "orientační"
+JR_NONE = "nelze spolehlivě vyhodnotit"
+JR_STATES = (JR_FULL, JR_ORIENTATION, JR_NONE)
+JR_MACHINES_IN_DIRECT = "zda přímé náklady zakázek obsahují vlastní stroje (direct_cost_includes_machines)"  # = economics
+
+
+def _jr_amount(raw, label):
+    """Buňka jako economics.Result (stejná pravidla: prázdná = chybí, text / záporná = neplatná)."""
+    return ec._amount(raw, label, False)
+
+
+def _jr_requirements(model, job_id, dur) -> tuple:
+    """Strojodny zakázky {type_id: dny} přes economics.job_machine_days – po kontrole vstupů."""
+    req = model.job_requirements
+    req = req[(req["job_id"] == job_id) & (req["resource_kind"] == "machine")]
+    problems = []
+    known = set(model.machine_types["type_id"])
+    for r in req.itertuples():
+        qty = cp._int(r.quantity)
+        if not isinstance(qty, int) or qty < 1:
+            problems.append(f"počet kusů stroje {r.resource_id} („{r.quantity}“)")
+        if r.resource_id not in known:
+            problems.append(f"neznámý stroj {r.resource_id}")
+    if req.empty:
+        return {}, ["zakázka nemá v datech žádné stroje"]
+    if problems or dur is None:
+        return {}, problems
+    return ec.job_machine_days(model, job_id), []
+
+
+def job_vs_rental(model) -> list:
+    """Zakázka, nebo pronájem? Pro každou zakázku z dat (v pořadí dat) jeden řádek – jen informace.
+
+    Řádek: ref, name, booking_status, machine_days [(type_id, strojodny)], total_days, contribution
+    (příspěvek zakázky bez penále), rental_revenue (tržba z pronájmu stejných strojodnů za ceník),
+    rental_contribution (tržba − variabilní náklady pronájmu; v orientačním srovnání = tržba),
+    threshold (podíl 0–∞; None = nelze), state (JR_STATES), missing / invalid (popisy), machine_costs
+    (zda jsou variabilní náklady strojů v srovnání odečtené).
+    """
+    includes = ec.direct_cost_includes_machines(model)
+    out = []
+    for j in model.jobs.itertuples():
+        job_id = str(j.job_id)
+        row = dict(ref=job_id, name=str(j.name), booking_status=str(j.status), machine_days=[], total_days=None,
+                   contribution=None, rental_revenue=None, rental_contribution=None, threshold=None,
+                   state=JR_NONE, missing=(), invalid=(), machine_costs=False)
+        invalid, missing = [], []
+        dur = cp._int(j.duration_days)
+        if not isinstance(dur, int) or dur < 1:
+            invalid.append(f"délka zakázky („{j.duration_days}“)")
+            dur = None
+        days, problems = _jr_requirements(model, job_id, dur)
+        invalid += problems
+        for raw, label in ((j.revenue, "tržba zakázky"), (j.direct_cost, "přímé náklady zakázky")):
+            res = _jr_amount(raw, label)
+            invalid += [f"{label} („{raw}“)" for _ in res.invalid]
+            missing += list(res.missing)            # bez tržby / přímých nákladů nelze příspěvek odhadnout
+        types = model.machine_types.set_index("type_id")
+        rent_var, job_var = [], []
+        for t in days:
+            name = types.loc[t, "name"]
+            price = _jr_amount(types.loc[t, "rental_price_day"], f"{name}: cena pronájmu/den (ceník)")
+            invalid += list(price.invalid)
+            missing += list(price.missing)
+            for raw, label, bucket in ((types.loc[t, "variable_cost_rental_day"],
+                                        f"{name}: variabilní náklad pronájmu/den", rent_var),
+                                       (types.loc[t, "variable_cost_job_day"],
+                                        f"{name}: variabilní náklad na zakázce/den", job_var)):
+                res = _jr_amount(raw, label)
+                invalid += list(res.invalid)
+                bucket.append(label if res.missing else None)
+        row.update(machine_days=sorted(days.items()), total_days=sum(days.values()) if days else None)
+        if invalid or missing:
+            row.update(invalid=tuple(invalid), missing=tuple(missing))
+            out.append(row)
+            continue
+        # Variabilní náklady strojů: na obou stranách, nebo na žádné (jinak by byla jedna strana zvýhodněná).
+        rent_known = all(x is None for x in rent_var)
+        job_side_known = includes is True or (includes is False and all(x is None for x in job_var))
+        all_missing = all(x is not None for x in rent_var) and includes is not True and (
+            includes is None or all(x is not None for x in job_var))
+        rentals = [ec.rental_contribution(model, t, d) for t, d in days.items()]
+        revenue = sum(r.parts["tržba z pronájmu"] for r in rentals)
+        if rent_known and job_side_known:
+            state, machine_costs = JR_FULL, True
+            job = ec.job_contribution(model, job_id, 0)
+            rental = ec.total(rentals).value
+        elif all_missing:
+            state, machine_costs = JR_ORIENTATION, False
+            job = ec.job_contribution(model, job_id, 0, includes_machines=True)   # bez nákladů strojů
+            rental = revenue                                                       # bez nákladů strojů
+            missing = [x for x in rent_var + job_var if x] + ([JR_MACHINES_IN_DIRECT] if includes is None else [])
+        else:
+            missing = [x for x in rent_var + job_var if x] + ([JR_MACHINES_IN_DIRECT] if includes is None else [])
+            row.update(rental_revenue=revenue, missing=tuple(missing),
+                       invalid=("variabilní náklady strojů jsou zadané jen zčásti – srovnání by jednu stranu "
+                                "zvýhodnilo",))
+            out.append(row)
+            continue
+        row.update(contribution=job.value, rental_revenue=revenue, rental_contribution=rental,
+                   machine_costs=machine_costs, missing=tuple(missing))
+        if rental is None or rental <= 0:
+            row.update(invalid=("pronájem stejných strojodnů nepřinese kladný příspěvek – hranici nelze určit",))
+            out.append(row)
+            continue
+        row.update(threshold=max(job.value, 0.0) / rental, state=state)
+        out.append(row)
+    return out

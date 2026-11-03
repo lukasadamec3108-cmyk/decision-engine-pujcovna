@@ -880,3 +880,107 @@ METHODOLOGY = [
         "Rozpětí scénářů jen ukazuje možné varianty řešení konfliktů; žádnou nevybírá.",
     ]),
 ]
+
+
+# ---------------------------------------------------------------------------
+# E3.1 – Zakázka, nebo pronájem? (jen informace) – texty k fleet_economics.job_vs_rental
+# ---------------------------------------------------------------------------
+JR_TITLE = "Zakázka, nebo pronájem?"
+JR_SUBTITLE = "jen informace · orientační modelové srovnání na ukázkových datech · celé zakázky, nezávisí na období"
+JR_INTRO = ("U každé vlastní zakázky: její příspěvek bez penále a tržba, kterou by přinesl pronájem stejných strojů "
+            "na stejný počet strojodnů za ceník. Hranice využití říká, jakou část těchto strojodnů by bylo nutné "
+            "pronajmout, aby pronájem v modelu přinesl víc než zakázka.")
+JR_DISCLAIMER = ("Jen informace – nejde o čistý zisk ani o rozhodnutí. Poptávka po pronájmu se nepředpokládá – "
+                 "kolik dní by se stroje skutečně pronajaly, aplikace neví.")
+JR_NO_MACHINE_COSTS = "Srovnání je bez variabilních nákladů strojů na obou stranách – v datech nejsou zadané."
+JR_STATE_TONE = {fe.JR_FULL: "info", fe.JR_ORIENTATION: "warn", fe.JR_NONE: "bad"}
+JR_NOT_EVALUABLE = "Nelze spolehlivě vyhodnotit"
+JR_BOOKING_STATUS = {"confirmed": "potvrzená zakázka", "tentative": "předběžná zakázka",
+                     "opportunity": "příležitost"}
+JR_METHOD = [
+    "Příspěvek zakázky = tržba − přímé náklady (− variabilní náklady strojů, jen jsou-li zadané a nejsou "
+    "v přímých nákladech). Penále za zpoždění se nezapočítává.",
+    "Strojodny = délka zakázky × počet kusů každého stroje. Tržba z pronájmu = strojodny × ceníková cena "
+    "pronájmu/den daného stroje.",
+    "Hranice využití = příspěvek zakázky ÷ příspěvek z pronájmu všech těchto strojodnů. Pod hranicí vychází "
+    "v modelu lépe zakázka, nad ní pronájem; nad 100 % ani plný pronájem nepřinese víc.",
+    "Variabilní náklady strojů se odečtou na obou stranách, nebo na žádné. Zadané jen zčásti = nelze "
+    "spolehlivě vyhodnotit.",
+    "Fixní náklady flotily a režie platí v obou případech stejně, proto ve srovnání nejsou – nic se "
+    "nezapočte dvakrát.",
+    "Obsluha a doprava strojů se v datech samostatně neevidují a ve srovnání nejsou.",
+]
+
+
+def _pct(share) -> str:
+    return fmt_num(share * 100, 0) + "\xa0%"
+
+
+def _jr_machines(row, names) -> str:
+    return ", ".join(f"{names.get(t, t)} {fmt_num(d, 0)}" for t, d in row["machine_days"])
+
+
+def _jr_explanation(row) -> str:
+    n = fmt_num(row["total_days"], 0)
+    if row["contribution"] is not None and row["contribution"] <= 0:
+        return ("Příspěvek zakázky bez penále není kladný – pronájem stejných strojů by v tomto srovnání "
+                "přinesl víc při jakémkoli pronajatém dni.")
+    if row["threshold"] >= 1:
+        return (f"Ani kdyby se stroje pronajaly na všech {n} strojodnů za ceník, pronájem by v tomto srovnání "
+                "nepřinesl víc než zakázka.")
+    return (f"Pronájem stejných strojů by v tomto srovnání přinesl víc, jen kdyby se pronajaly alespoň na "
+            f"{_pct(row['threshold'])} z {n} strojodnů. Kolik dní by se skutečně pronajalo, aplikace neví.")
+
+
+def job_rental_card(row, names=None) -> dict:
+    """Karta jedné zakázky: title, sub, tag, tone, rows [(popisek, hodnota)], why (texty bez HTML)."""
+    names = names or {}
+    status = JR_BOOKING_STATUS.get(row["booking_status"], row["booking_status"])
+    machines = _jr_machines(row, names)
+    days = (f"{fmt_num(row['total_days'], 0)} strojodnů: {machines}" if row["total_days"] else "strojodny nelze určit")
+    card = dict(ref=row["ref"], title=f"{row['ref']} – {row['name']}", sub=f"{status} · {days}",
+                tag=row["state"], tone=JR_STATE_TONE[row["state"]], value=row["threshold"])
+    if row["state"] == fe.JR_NONE:
+        why = []
+        if row["invalid"]:
+            why.append("Neplatné nebo nepoužitelné údaje: " + "; ".join(row["invalid"]) + ".")
+        if row["missing"]:
+            why.append("Chybí: " + "; ".join(human_labels(row["missing"])) + ".")
+        revenue = money(row["rental_revenue"]) if row["rental_revenue"] is not None else JR_NOT_EVALUABLE
+        card.update(rows=[("Příspěvek zakázky (bez penále)", JR_NOT_EVALUABLE),
+                          ("Tržba z pronájmu stejných strojodnů", revenue),
+                          ("Hranice využití pronájmu", JR_NOT_EVALUABLE)], why=why)
+        return card
+    orientation = row["state"] == fe.JR_ORIENTATION
+    rows = [("Příspěvek zakázky (bez penále)",
+             ("nejvýše " if orientation else "") + money(row["contribution"])),
+            ("Tržba z pronájmu stejných strojodnů", money(row["rental_revenue"]))]
+    if not orientation:
+        rows.append(("Příspěvek z pronájmu (po variabilních nákladech)", money(row["rental_contribution"])))
+    rows.append(("Hranice využití pronájmu", ("orientačně " if orientation else "") + _pct(row["threshold"])))
+    card.update(rows=rows, why=[_jr_explanation(row)])
+    return card
+
+
+def _jr_missing_summary(labels) -> list:
+    """Chybějící údaje seskupené podle druhu („variabilní náklad pronájmu/den – Mini bagr, Pásový dumper“)."""
+    groups = {}
+    for label in human_labels(labels):
+        name, sep, what = label.partition(": ")
+        key, item = (what, name) if sep else (label, None)
+        groups.setdefault(key, [])
+        if item and item not in groups[key]:
+            groups[key].append(item)
+    return [f"{key} – {', '.join(items)}" if items else key for key, items in groups.items()]
+
+
+def job_rental(rows, names=None) -> dict:
+    """Blok „Zakázka, nebo pronájem?“: úvod, upozornění, chybějící údaje (souhrn) a karty zakázek."""
+    cards = [job_rental_card(r, names) for r in rows]
+    missing = _jr_missing_summary(m for r in rows if r["state"] == fe.JR_ORIENTATION for m in r["missing"])
+    notes = []
+    if any(r["state"] == fe.JR_ORIENTATION for r in rows):
+        notes.append(JR_NO_MACHINE_COSTS)
+    counts = {s: sum(r["state"] == s for r in rows) for s in fe.JR_STATES}
+    return dict(title=JR_TITLE, subtitle=JR_SUBTITLE, intro=JR_INTRO, disclaimer=JR_DISCLAIMER, notes=notes,
+                missing=missing, cards=cards, counts=counts, method=list(JR_METHOD))

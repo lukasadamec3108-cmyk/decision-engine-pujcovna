@@ -3005,6 +3005,16 @@ def fleet_economics_view(data_version: str, code_version: str, job_starts: tuple
     return fv.build(pr, cv.type_names(model), plan_start)
 
 
+@st.cache_data(show_spinner=False, max_entries=8)
+def fleet_job_rental_view(data_version: str, code_version: str) -> dict:
+    """E3.1 – blok „Zakázka, nebo pronájem?“ (fleet_view.job_rental nad fleet_economics.job_vs_rental).
+
+    Celé zakázky z dat – nezávisí na období ani plánu; jen obyčejné hodnoty (viz load_data_model)."""
+    tables, _ = load_data_model(data_version, code_version)
+    model = dm.DataModel(**tables)
+    return fv.job_rental(fe.job_vs_rental(model), cv.type_names(model))
+
+
 def fe_chip(status: str, tone: str) -> str:
     return ui.dash_chip(status, FE_CHIP_TONE.get(tone, "info"))
 
@@ -3242,6 +3252,27 @@ if PAGE == "ekonomika":
                     st.markdown(f'<div class="dd-group">{html.escape(grp["title"])} ({len(grp["rows"])})</div>',
                                 unsafe_allow_html=True)
                     ui.dash_rows([fe_entry_row(r, detail=True) for r in grp["rows"]])
+
+        # E3.1: Zakázka, nebo pronájem? – jen informace (fleet_economics.job_vs_rental), nic nedoporučuje
+        fe_jr = fleet_job_rental_view(data_version, code_version)
+        st.markdown(f'<div class="dd-section-title">{html.escape(fe_jr["title"])} <small>'
+                    f'{html.escape(fe_jr["subtitle"])}</small></div>', unsafe_allow_html=True)
+        with ui.dash_section("ekon_zakazka_pronajem_neutral"):
+            ui.dash_text(html.escape(fe_jr["intro"]))
+            ui.dash_text("<b>" + html.escape(fe_jr["disclaimer"]) + "</b>")
+            for note in fe_jr["notes"]:
+                ui.dash_text(html.escape(note), muted=True)
+            if fe_jr["missing"]:
+                st.markdown('<div class="dd-group">Chybí k přesnějšímu srovnání</div><ul class="dd-list">'
+                            + "".join(f"<li>{html.escape(m)}</li>" for m in fe_jr["missing"]) + "</ul>",
+                            unsafe_allow_html=True)
+        ui.dash_variants([dict(title=c["title"], sub=c["sub"], tag=c["tag"],
+                               rows=[(lbl, html.escape(val)) for lbl, val in c["rows"]],
+                               why="<ul>" + "".join(f"<li>{ui.nowrap_ids(x)}</li>" for x in c["why"]) + "</ul>")
+                          for c in fe_jr["cards"]])
+        with st.expander("Jak se srovnání zakázky a pronájmu počítá"):
+            st.markdown('<ul class="fe-points">' + "".join(f"<li>{html.escape(x)}</li>" for x in fe_jr["method"])
+                        + "</ul>", unsafe_allow_html=True)
 
         # K3.4e2: metodika – jen popis skutečné implementace, bez závěrů a rad
         with st.expander("Jak se počítá"):
