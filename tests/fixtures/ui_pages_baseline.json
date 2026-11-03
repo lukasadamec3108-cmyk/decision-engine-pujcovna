@@ -1,4 +1,79 @@
 {
+ "chybejici_udaje": {
+  "main": {
+   "elements": {
+    "dataframe": 1,
+    "download_button": 0,
+    "plotly_chart": 0
+   },
+   "expanders": [
+    "Všechny položky v tabulce (26)"
+   ],
+   "numbers": {
+    "0": 64,
+    "1": 37,
+    "10": 9,
+    "11": 3,
+    "12": 69,
+    "13": 1,
+    "14": 3,
+    "15": 7,
+    "16": 7,
+    "17": 31,
+    "18": 7,
+    "19": 1,
+    "2": 11,
+    "20": 1,
+    "21": 1,
+    "22": 1,
+    "23": 1,
+    "24": 37,
+    "25": 1,
+    "26": 2,
+    "3": 49,
+    "4": 57,
+    "5": 13,
+    "6": 13,
+    "7": 9,
+    "8": 51,
+    "9": 7
+   },
+   "text": "dff00349eda8e82d",
+   "widgets": []
+  },
+  "sidebar": {
+   "elements": {
+    "dataframe": 0,
+    "download_button": 0,
+    "plotly_chart": 0
+   },
+   "expanders": [],
+   "numbers": {
+    "0": 60,
+    "1": 2,
+    "2": 26,
+    "3": 16,
+    "4": 18,
+    "41": 2,
+    "5": 6,
+    "53": 2,
+    "64": 2,
+    "8": 10,
+    "9": 28
+   },
+   "text": "032d51508654d6ce",
+   "widgets": [
+    {
+     "key": "logout",
+     "label": "Odhlásit se",
+     "options": [],
+     "type": "button",
+     "value": "False"
+    }
+   ]
+  },
+  "tab_labels": []
+ },
  "dashboard": {
   "main": {
    "elements": {
@@ -767,7 +842,7 @@
     "841": 2,
     "9": 2
    },
-   "text": "a1eb58e0f5fd6018",
+   "text": "f0d01af74397302c",
    "widgets": [
     {
      "key": "logout_nastaveni",

@@ -989,3 +989,16 @@ ECON_CSS = RENTAL_CSS.replace(_RENT, _ECON).replace("</style>", f"""
   {_ECON} .dd-row .v {{ text-align: left; }}
 }}
 </style>""")
+
+
+# ---------------------------------------------------------------------------
+# Chybějící údaje (E3.2): stejné karty a řádky jako Ekonomika flotily, omezené na vlastní kontejner.
+# ---------------------------------------------------------------------------
+GAPS_KEY = TAB_KEY_PREFIX + "chybejici_udaje"
+_GAPS = f".st-key-{GAPS_KEY}"
+GAPS_CSS = ECON_CSS.replace(_ECON, _GAPS).replace("</style>", f"""
+{_GAPS} .dg-items {{ display: flex; flex-wrap: wrap; gap: .3rem; margin: .1rem 0 .2rem 0; }}
+{_GAPS} .dg-items .dd-chip {{ white-space: normal; }}
+{_GAPS} .dg-meta {{ font-size: .85rem; color: {UI_MUTED}; line-height: 1.45; margin: .15rem 0; }}
+{_GAPS} .dg-meta b {{ color: {INK}; font-weight: 600; }}
+</style>""")

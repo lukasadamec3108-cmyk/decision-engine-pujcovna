@@ -16,6 +16,8 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 import auth
 import capacity as cp
 import capacity_view as cv
+import data_gaps as dg
+import data_gaps_view as dgv
 import datamodel as dm
 import econ_formula as ef
 import fleet_economics as fe
@@ -49,6 +51,8 @@ ef = importlib.reload(ef)
 fu = importlib.reload(fu)                   # pořadí: využití → ekonomika → zobrazení (závisí na sobě)
 fe = importlib.reload(fe)
 fv = importlib.reload(fv)
+dg = importlib.reload(dg)                   # E3.2: vyhodnocení chybějících údajů → zobrazení
+dgv = importlib.reload(dgv)
 pv = importlib.reload(pv)
 rv = importlib.reload(rv)
 inv = importlib.reload(inv)
@@ -3446,6 +3450,76 @@ if PAGE == "nastaveni":
         ui.hint("Všechny údaje jsou fiktivní ukázková data (složka data/model). Aplikace je jen čte – nic se neukládá.")
         for issue in data_issues:
             st.markdown(f"- {html.escape(str(issue))}")
+        page_link("chybejici_udaje", "Chybějící údaje – co doplnit a proč")
+
+
+# ==================================================
+# CHYBĚJÍCÍ ÚDAJE (E3.2) – přehled chybějících a neplatných údajů, jen pro čtení
+# ==================================================
+# Vyhodnocení data_gaps.evaluate (bez Streamlitu), texty data_gaps_view.build. Nic se nedoplňuje, neodhaduje
+# ani neukládá; žádný formulář. Výpočty ostatních stránek se nemění.
+if PAGE == "chybejici_udaje":
+    st.markdown(ui.GAPS_CSS, unsafe_allow_html=True)
+    with ui.tab_container("chybejici_udaje"):
+        dg_view = dgv.build(dg.evaluate(data_model), cv.type_names(data_model))
+        ui.tab_header(dg_view["title"], html.escape(dg_view["intro"]))
+        if dg_view["fictitious"]:
+            st.markdown(ui.status_chip("Ukázková data", "warn") + " " + html.escape(dg_view["fictitious_text"]),
+                        unsafe_allow_html=True)
+        for note in dg_view["notes"]:
+            ui.dash_text(html.escape(note), muted=True)
+
+        st.markdown('<div class="dd-section-title">Souhrn</div>', unsafe_allow_html=True)
+        ui.dash_kpis([dict(icon={"celkem": "alert", "stroje": "truck", "zakazky": "route", "oblasti": "gauge"}[k["key"]],
+                           label=k["label"], value=html.escape(k["value"]), cls="word", sub=html.escape(k["sub"]),
+                           tone="bad" if k.get("negative") else "neutral") for k in dg_view["kpis"]])
+
+        if dg_view["first"]:
+            st.markdown('<div class="dd-section-title">Co doplnit jako první</div>', unsafe_allow_html=True)
+            with ui.dash_section("dg_prvni_accent"):
+                st.markdown('<ol class="dd-list">' + "".join(
+                    f"<li><b>{html.escape(f['text'])}</b> · {ui.dash_chip(f['priority'] + ' priorita', dgv.PRIORITY_TONE[f['priority']])}"
+                    f"<small>{html.escape(f['why'])}</small></li>" for f in dg_view["first"]) + "</ol>",
+                    unsafe_allow_html=True)
+                ui.dash_text(html.escape(dg_view["no_form"]), muted=True)
+
+        for prio in dg_view["priorities"]:
+            st.markdown(f'<div class="dd-section-title">{html.escape(prio["title"])} <small>'
+                        f'{prio["count"]} {dgv._plural(prio["count"], "údaj", "údaje", "údajů")}</small></div>',
+                        unsafe_allow_html=True)
+            ui.dash_text(html.escape(" ".join(prio["rules"])), muted=True)
+            if not prio["groups"]:
+                ui.dash_text("Žádné údaje s touto prioritou.", muted=True)
+            for i, grp in enumerate(prio["groups"]):
+                with ui.dash_section(f"dg_{prio['priority'][:3]}_{i}_" + {"bad": "bad", "warn": "accent"}.get(
+                        prio["tone"], "neutral")):
+                    ui.dash_section_head("alert" if prio["tone"] == "bad" else "spark", grp["label"],
+                                         html.escape(f"{grp['count_text']} · {grp['status_text']}"),
+                                         tone="bad" if prio["tone"] == "bad" else "neutral")
+                    st.markdown('<div class="dg-items">' + "".join(
+                        ui.dash_chip(f"{it['record']} – {it['status_text']}", it["tone"]) for it in grp["items"])
+                        + "</div>"
+                        + f'<div class="dg-meta"><b>Proč:</b> {html.escape(grp["why"])}</div>'
+                        + f'<div class="dg-meta"><b>Ovlivňuje:</b> {html.escape(grp["areas_text"])}</div>'
+                        + f'<div class="dg-meta"><b>Kde doplnit:</b> {html.escape(grp["where"])}</div>',
+                        unsafe_allow_html=True)
+
+        st.markdown('<div class="dd-section-title">Zatím není evidováno <small>do počtu chybějících údajů se '
+                    "nezapočítává</small></div>", unsafe_allow_html=True)
+        with ui.dash_section("dg_neevidovano_neutral"):
+            ui.dash_rows([(t["label"], "", html.escape(t["detail"])
+                           + (html.escape(f" Ovlivnilo by: {t['areas_text']}.") if t["areas_text"] else ""))
+                          for t in dg_view["not_tracked"]])
+
+        st.markdown('<div class="dd-section-title">Nula, chybějící a neplatný údaj</div>', unsafe_allow_html=True)
+        with ui.dash_section("dg_vysvetleni_neutral"):
+            ui.dash_rows([(title, "", html.escape(text)) for title, text in dg_view["explain"]])
+
+        with st.expander(f"Všechny položky v tabulce ({len(dg_view['table'])})"):
+            if dg_view["table"]:
+                st.dataframe(pd.DataFrame(dg_view["table"]), width="stretch", hide_index=True)
+            else:
+                ui.dash_text("V datech nechybí žádný údaj, který výpočty používají.", muted=True)
 
 
 # Spuštění aktivní stránky (soubor stránky je jen značka – obsah vykreslil kód výše)
