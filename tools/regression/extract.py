@@ -229,6 +229,13 @@ M2_ADDED_KEYS = {"Stroj 1": "inv_machine_1", "Stroj 2": "inv_machine_2",
 M2_MOVED_TO_SETTINGS = ("admin_pw1", "admin_pw2")
 # Schválený doplněk původní záložky 7 (Plánování kapacity): tlačítko „Obnovit výchozí nastavení“ za volbou
 # zobrazení. Ostatní widgety záložky (klíče, popisky, výchozí hodnoty, volby, pořadí) se porovnávají beze změny.
+# Schválené rozdíly UX optimalizace (jen texty, žádná hodnota výpočtu): přesné změny počtu číslic v textu
+# původních záložek. Každá číslice z hodnot výpočtů zůstává; mění se jen číslice, které nejsou údajem:
+#   – zastaralý název „záložka 6 / záložky 6 a 7“ → „plán vlastních zakázek“, „Vlastní zakázky a Plánování kapacity“
+#     (záložka 7: 4 výskyty, záložka 8: 2 + 1; každý text se v snímku stránky počítá dvakrát),
+#   – jednotné záhlaví stránky (ui.tab_header) u Vlastních zakázek a Rozhodovacího centra nese atribut
+#     aria-level="2" (1 výskyt, počítaný dvakrát).
+UX_NUMBER_CHANGES = {"6": {"2": +2}, "7": {"6": -8}, "8": {"6": -4, "7": -2, "2": +2}}
 CAP_RESET_WIDGET = {"key": "cap_reset", "label": "Obnovit výchozí nastavení", "options": [], "type": "button",
                     "value": "False"}
 
@@ -247,5 +254,11 @@ def m2_expected(state: dict) -> dict:
     out["sidebar"]["widgets"] = side
     cap = out["tabs"]["7"]["widgets"]
     cap.insert([w["key"] for w in cap].index("cap_view") + 1, dict(CAP_RESET_WIDGET))
+    for tab, changes in UX_NUMBER_CHANGES.items():
+        nums = out["tabs"][tab]["numbers"]
+        for number, delta in changes.items():
+            nums[number] = nums.get(number, 0) + delta
+            if nums[number] == 0:
+                del nums[number]
     out["tab_labels"] = state["tab_labels"][:5]
     return out

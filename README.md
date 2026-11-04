@@ -285,6 +285,14 @@ password_hash = "pbkdf2_sha256$600000$…"
 Aplikace používá vlastní neutrální symbol **Decision Engine** (jednoduchý sloupcový graf se symbolem
 rozhodnutí) uložený v `assets/decision_engine_mark.svg`. Nepoužívá logo žádné společnosti.
 
+**Princip stránek: první pohled → klíčové informace → volitelný detail.** Společné komponenty jsou
+centrálně v `ui_theme.py`: záhlaví stránky (`tab_header`), nadpis sekce (`section_title`), KPI karty
+(`dash_kpis` – hodnota, stav, jedna krátká věta, volitelný detail „Co ukazatel zahrnuje“), karty variant
+(`dash_variants` – podrobnosti sbalené, počet varování vidět v souhrnu) a rozbalovací detail `more` /
+`more_html` (nativní HTML `<details>`, funguje myší, klávesnicí i dotykem). Metodika a dlouhá vysvětlení jsou
+v detailech; chybějící údaje, omezení spolehlivosti a upozornění („nejde o čistý zisk“, konflikty, zakázky
+po termínu) zůstávají viditelné. KPI karty se neroztahují na výšku nejvyšší karty v řadě.
+
 ### Online verze
 
 Pilotní verze běží na adrese <https://decision-engine-pujcovna.streamlit.app>.

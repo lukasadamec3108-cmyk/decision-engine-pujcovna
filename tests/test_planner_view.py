@@ -242,7 +242,7 @@ def panels(at):
 def test_tab_in_app_full_flow_without_changing_data():
     before = files_hash()
     at = app()
-    assert len(at.tabs) == 0 and any("### Rozhodovací plánovač" in m.value for m in at.main.markdown)
+    assert len(at.tabs) == 0 and any("de-section-title" in m.value and "Rozhodovací plánovač" in m.value for m in at.main.markdown)
     text = " ".join(m.value for m in at.main.markdown)
     assert "Ukázková data" in text and "nikam neukládají" in text
     # 1) samostatný pronájem ve volném termínu

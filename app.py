@@ -1022,7 +1022,7 @@ if PAGE == "investice":
     # ==================================================
 
     with tab2:
-        st.markdown("### Jak mohou vypadat jednotlivé měsíce")
+        ui.section_title("Jak mohou vypadat jednotlivé měsíce")
         st.markdown(
             f'<div class="de-intro">Simulace {fmt_num(n)} možných měsíců ukazuje, jak se může měnit '
             "měsíční zisk stroje (tržby − fixní náklad − servis) při různém počtu dní pronájmu, poruchách, "
@@ -1052,7 +1052,7 @@ if PAGE == "investice":
             tag="Relativně lepší" if both_loss else "Doporučeno",
         )
 
-        st.markdown("### Rozložení měsíčního výsledku")
+        ui.section_title("Rozložení měsíčního výsledku")
         fig_mc = go.Figure()
         for name, arr, med in ((machine_1, profit_mini, p50_mini), (machine_2, profit_dumper, p50_dumper)):
             fig_mc.add_trace(
@@ -1120,7 +1120,7 @@ if PAGE == "investice":
     # ==================================================
 
     with tab3:
-        st.markdown("### Jak velké je riziko")
+        ui.section_title("Jak velké je riziko")
 
         def risk_chip(prob: float) -> str:
             """Štítek kategorie rizika podle stejných hranic jako semafor (risk_light)."""
@@ -1171,7 +1171,7 @@ if PAGE == "investice":
                 tone="bad",
             )
 
-        st.markdown("### Riziko a očekávaný zisk")
+        ui.section_title("Riziko a očekávaný zisk")
         fig_rr = go.Figure()
         # Bod s vyšším rizikem (vpravo) má název vlevo, aby se na úzkém displeji vešel do grafu.
         right_name = machine_1 if rr_x1 > rr_x2 else machine_2
@@ -1233,7 +1233,7 @@ if PAGE == "investice":
         days_text = fmt_days(expected_days, 0)
 
         # --- Co nejvíc mění měsíční zisk ---
-        st.markdown("### Co nejvíc mění měsíční zisk")
+        ui.section_title("Co nejvíc mění měsíční zisk")
         st.markdown(
             '<div class="de-intro">Graf ukazuje, jak moc se změní měsíční zisk stroje, když se jeden údaj '
             "změní o 10 % nahoru nebo dolů a ostatní zůstanou stejné. Délka pruhu je rozdíl zisku "
@@ -1329,7 +1329,7 @@ if PAGE == "investice":
             ui.insight("Při zadaných hodnotách změna žádného údaje o 10 % zisk nemění.")
 
         # --- Minimální denní cena pronájmu ---
-        st.markdown("### Minimální denní cena pronájmu")
+        ui.section_title("Minimální denní cena pronájmu")
 
         def price_rows(required: float, actual: float) -> list:
             """Řádky karty: stav, minimum, aktuální cena a rozdíl (jen zobrazení)."""
@@ -1380,7 +1380,7 @@ if PAGE == "investice":
         )
 
         # --- Zisk podle počtu dní pronájmu ---
-        st.markdown("### Kdy stroj pokryje fixní náklad")
+        ui.section_title("Kdy stroj pokryje fixní náklad")
         be_values = {machine_1: break_even_mini, machine_2: break_even_dumper}
         be_finite = {k: v for k, v in be_values.items() if np.isfinite(v)}
         # Popisky míří od bodů ven (levý bod doleva nahoru, pravý doprava dolů), kde nevedou čáry.
@@ -1596,7 +1596,7 @@ if PAGE == "investice":
                 tone="bad" if stress < 0 else "",
             )
 
-            st.markdown("### Stroje v sestavě")
+            ui.section_title("Stroje v sestavě")
             ui.results_cards(
                 [
                     dict(
@@ -1635,7 +1635,7 @@ if PAGE == "investice":
                 )
 
         # --- Graf: nejlepší zisk podle rozpočtu (stejný výpočet jako doporučení) ---
-        st.markdown("### Jak roste zisk s rozpočtem")
+        ui.section_title("Jak roste zisk s rozpočtem")
         x_max = max(3_000_000, budget * 1.25)
         steps = [(x, p) for x, p in purchase_frontier if x <= x_max]
         xs = [x for x, _ in steps] + [x_max]
@@ -1727,13 +1727,9 @@ if PAGE == "zakazky":                                     # sekce Vlastní zaká
     # scheduling.summary/evaluate/conflicts/utilization) a přínos zakázek jsou beze změny.
     st.markdown(ui.JOBS_CSS, unsafe_allow_html=True)
     with ui.tab_container("zakazky"):
-        st.markdown("### Plán zakázek a vytížení strojů")
-        st.markdown(
-            '<div class="de-intro">Aplikace rozvrhne 12 zakázek ze zásobníku (fiktivní data) tak, '
-            "aby žádný stroj nebyl ve stejný den využit víckrát, než kolik je kusů, a aby byl "
-            "<b>zisk zakázek po penále co nejvyšší</b>.</div>",
-            unsafe_allow_html=True,
-        )
+        ui.tab_header("Plán zakázek a vytížení strojů",
+                      "Rozvrh 12 zakázek ze zásobníku (fiktivní data): žádný stroj není ve stejný den využit víckrát, "
+                      "než kolik je kusů, a <b>zisk zakázek po penále</b> je co nejvyšší.")
         ui.note(
             "<b>Plán zatím nezohledňuje pronájmy a servis</b> – hlídá kapacitu jen mezi vlastními zakázkami. "
             "Konflikty s pronájmy a servisem ukazuje sekce <b>Plánování kapacity</b>."
@@ -1784,11 +1780,10 @@ if PAGE == "zakazky":                                     # sekce Vlastní zaká
                      f"{fmt_czk(plan_sum['profit_after_penalty'])}"),
         ])
         if plan_result["optimal"]:
-            ui.insight(
-                "Výpočet <b>ověřil</b>, že při zadaných délkách zakázek, termínech a počtech strojů "
-                "neexistuje plán s nižším celkovým penále. Nejde o záruku – skutečné zakázky se "
-                "mohou zdržet nebo změnit."
-            )
+            ui.more("Jak spolehlivý je plán",
+                    "Výpočet <b>ověřil</b>, že při zadaných délkách zakázek, termínech a počtech strojů "
+                    "neexistuje plán s nižším celkovým penále. Nejde o záruku – skutečné zakázky se "
+                    "mohou zdržet nebo změnit.", "ověřené nejlepší řešení")
         else:
             ui.insight(
                 "Zobrazený plán je <b>nejlepší nalezený</b> – v časovém limitu se nepodařilo ověřit, "
@@ -1823,16 +1818,16 @@ if PAGE == "zakazky":                                     # sekce Vlastní zaká
                      jobs_delta(len(plan_conflicts), len(old_conflicts), "", better_lower=True)),
                 ],
             )
-            ui.dash_text(
-                f"Obě varianty plánují stejných {plan_sum['scheduled']} zakázek na stejných ukázkových "
-                f"datech. Nový plán je o <b>{fmt_czk(gain)}</b> výhodnější jen díky jinému pořadí a "
-                "využití volných dní strojů. Původní plán řadil zakázky podle skóre bez ohledu na "
-                "termíny a stroj nevyužil, dokud nebyl volný pro další zakázku v pořadí.", muted=True)
-        ui.insight(
-            "<b>Kolize mezi zakázkami plánu</b> počítá jen překrytí vlastních zakázek navzájem. Pronájmy "
-            "strojů a servis plán nezná, takže s nimi se zakázky překrývat mohou – takové konflikty ukazuje "
-            "sekce <b>Plánování kapacity</b>. Další krok: zkontrolovat tam konfliktní dny a vyřešit je ručně."
-        )
+            ui.more("Proč je nový plán výhodnější",
+                    f"Obě varianty plánují stejných {plan_sum['scheduled']} zakázek na stejných ukázkových "
+                    f"datech. Nový plán je o <b>{fmt_czk(gain)}</b> výhodnější jen díky jinému pořadí a "
+                    "využití volných dní strojů. Původní plán řadil zakázky podle skóre bez ohledu na "
+                    "termíny a stroj nevyužil, dokud nebyl volný pro další zakázku v pořadí.")
+            ui.more("Co kolize mezi zakázkami nehlídá",
+                    "<b>Kolize mezi zakázkami plánu</b> počítá jen překrytí vlastních zakázek navzájem. Pronájmy "
+                    "strojů a servis plán nezná, takže s nimi se zakázky překrývat mohou – takové konflikty "
+                    "ukazuje sekce <b>Plánování kapacity</b>. Další krok: zkontrolovat tam konfliktní dny a "
+                    "vyřešit je ručně.")
 
         # ---- Harmonogram --------------------------------------------------------------------------
         st.markdown('<div class="dd-section-title">Harmonogram<small>pruh = doba zakázky, svislá čárka = '
@@ -1907,10 +1902,10 @@ if PAGE == "zakazky":                                     # sekce Vlastní zaká
                     ("Čistý přínos pro plán", fmt_czk(top["contribution"]),
                      "zisk zakázky − přidané penále celého plánu", True),
                 ])
-                ui.dash_text(
-                    "Čistý přínos = zisk zakázky − o kolik se kvůli ní zvýší nejnižší možné penále "
-                    "celého plánu (její vlastní zpoždění i zdržení ostatních zakázek). Tuto zakázku "
-                    "je proto nejméně výhodné ztratit nebo odložit.", muted=True)
+                ui.more("Jak se počítá čistý přínos",
+                        "Čistý přínos = zisk zakázky − o kolik se kvůli ní zvýší nejnižší možné penále "
+                        "celého plánu (její vlastní zpoždění i zdržení ostatních zakázek). Tuto zakázku "
+                        "je proto nejméně výhodné ztratit nebo odložit.")
             with st.expander("Přínos všech zakázek pro plán"):
                 ctab = job_contrib.assign(
                     **{
@@ -2106,10 +2101,8 @@ if PAGE == "kapacita":                                    # sekce Plánování k
         st.markdown(cv.TAB_CSS + cv.CALENDAR_TAB_CSS, unsafe_allow_html=True)
         ui.tab_header(
             "Kapacita strojů po dnech",
-            "Kolik kusů každého stroje je v jednotlivých dnech volných a co je drží: "
-            "<b>potvrzené</b> pronájmy, vlastní zakázky podle plánu ze záložky 6 a servis. <b>Předběžné</b> "
-            "rezervace kapacitu neblokují – jsou vyznačené zvlášť jako možné riziko. Pronájmy a servis jsou "
-            "<b>fiktivní ukázková data</b>.",
+            "Kolik kusů je v jednotlivých dnech volných a co je drží: <b>potvrzené</b> pronájmy, plán vlastních "
+            "zakázek a servis. <b>Předběžné</b> rezervace kapacitu neblokují. <b>Ukázková data</b>.",
         )
 
         _, cap_plan, _ = plan_jobs(jobs_df, machine_capacity, code_version)
@@ -2180,16 +2173,15 @@ if PAGE == "kapacita":                                    # sekce Plánování k
                     ]
                 )
             st.markdown(cap_html, unsafe_allow_html=True)
-            ui.hint(
-                "Číslo v buňce = <b>volné kusy / kusy k dispozici</b> ten den; pruh ukazuje jednotlivé kusy. "
-                "Konec rezervace i zakázky je včetně posledního dne. Na mobilu kalendář posuňte do strany; "
-                "po podržení buňky (na počítači najetí myší) se zobrazí podrobnosti."
-            )
-            ui.hint(cv.data_info(data_model, data_version))
+            ui.hint("Číslo v buňce = <b>volné kusy / kusy k dispozici</b> ten den; pruh ukazuje jednotlivé kusy.")
+            ui.more("Jak číst kalendář",
+                    "<ul><li>Konec rezervace i zakázky je včetně posledního dne.</li><li>Na mobilu kalendář posuňte "
+                    "do strany; po podržení buňky (na počítači najetí myší) se zobrazí podrobnosti.</li>"
+                    f"<li>{cv.data_info(data_model, data_version)}</li></ul>")
             cap_late = cv.late_jobs(cap_cal, cap_jobs, cap_types, cap_from, cap_to)
             if cap_late:
                 ui.insight(
-                    "Plán záložky 6 dokončí některé zakázky <b>po termínu</b> – kalendář je ukazuje až do "
+                    "Plán vlastních zakázek dokončí některé zakázky <b>po termínu</b> – kalendář je ukazuje až do "
                     "skutečného konce: "
                     + "; ".join(
                         f"{html.escape(name)} do {cv.day_label(end, cap_start)} (termín {cv.day_label(dl, cap_start)})"
@@ -2198,7 +2190,7 @@ if PAGE == "kapacita":                                    # sekce Plánování k
                     + "."
                 )
 
-            st.markdown("### Konflikty v období")
+            ui.section_title("Konflikty v období")
             if cap_conf.empty:
                 st.markdown(ui.status_chip(ui.status_text("Bez konfliktu", "good"), "good")
                             + " Ve zvoleném období a u vybraných strojů "
@@ -2209,12 +2201,13 @@ if PAGE == "kapacita":                                    # sekce Plánování k
                     f"{n_rows} {'konflikt' if n_rows == 1 else 'konflikty' if n_rows < 5 else 'konfliktů'}", "bad"), "bad"),
                     unsafe_allow_html=True)
                 st.dataframe(cap_conf, width="stretch", hide_index=True)
-                ui.hint("Konflikt = potvrzené nároky (pronájmy, zakázky z plánu, servis) převyšují počet kusů. "
-                        "Vzniká hlavně tím, že plán záložky 6 zatím o pronájmech a servisu neví. Aplikace "
-                        "konflikty jen ukazuje – nic nepřesouvá a neurčuje, kdo má přednost. "
-                        "<b>Další krok:</b> vyřešit ručně, např. posunem zakázky, pronájmu nebo servisu.")
+                ui.hint("<b>Další krok:</b> vyřešit ručně, např. posunem zakázky, pronájmu nebo servisu.")
+                ui.more("Co je konflikt",
+                        "Konflikt = potvrzené nároky (pronájmy, zakázky z plánu, servis) převyšují počet kusů. "
+                        "Vzniká hlavně tím, že plán vlastních zakázek zatím o pronájmech a servisu neví. Aplikace "
+                        "konflikty jen ukazuje – nic nepřesouvá a neurčuje, kdo má přednost.")
 
-            st.markdown("### Detail dne")
+            ui.section_title("Detail dne")
             d1, d2 = st.columns([3, 2])
             with d1:
                 cap_dt = kept_input(st.selectbox, "cap_detail_type", "Stroj", dict(index=0), lambda v: v in cap_types,
@@ -2241,10 +2234,11 @@ if PAGE == "kapacita":                                    # sekce Plánování k
                     "počty kusů výše.")
 
         if cap_view == CAP_VIEWS[0]:
-            st.markdown("### Ověřit nový požadavek")
-            ui.hint("Rychlá kontrola kapacity: vejde se požadavek na stroj v daném termínu? Předběžné rezervace "
-                    "kapacitu neblokují, dokud je nezapočtete volbou níže. Nic se nerezervuje ani nepřesouvá. "
-                    "Ekonomiku a porovnání více požadavků řeší záložka Rozhodovací plánovač.")
+            ui.section_title("Ověřit nový požadavek")
+            ui.hint("Vejde se požadavek na stroj v daném termínu? Nic se nerezervuje ani nepřesouvá.")
+            ui.more("Více o ověření",
+                    "Předběžné rezervace kapacitu neblokují, dokud je nezapočtete volbou níže. Ekonomiku a porovnání "
+                    "více požadavků řeší Rozhodovací centrum.")
             q1, q2, q3, q4 = st.columns([3, 1, 1, 1])
             with q1:
                 req_type = kept_input(st.selectbox, "cap_req_type", "Typ stroje", dict(index=0),
@@ -2295,11 +2289,11 @@ if PAGE == "kapacita":                                    # sekce Plánování k
                          "plánovači soutěží předběžné rezervace o volnou kapacitu stejně jako nové požadavky. "
                          "Zakázka bez termínu v plánu (nebo neplatný údaj) znamená „nelze určit“ – nikdy volno."),
                         ("Zakázky",
-                         "Termíny zakázek jsou z plánu záložky 6 včetně zpoždění. Plán zatím nebere ohled na "
+                         "Termíny zakázek jsou z plánu vlastních zakázek včetně zpoždění. Plán zatím nebere ohled na "
                          "pronájmy a servis, proto tu mohou být konflikty."),
                         ("Data",
                          "Pronájmy (FIKT-…) a servisní odstávky jsou fiktivní ukázka; dva konflikty jsou v nich "
-                         "záměrně. Ostatní záložky je nepoužívají."),
+                         "záměrně."),
                     ]
                 )
 
@@ -2316,8 +2310,8 @@ if PAGE == "kapacita":                                    # sekce Plánování k
             pct = lambda v: (fmt_pct(100.0 * v / cap_total, 0) if cap_total else "nelze určit")
 
             ui.note(
-                "<b>Ukázková data</b> – přehled vychází z fiktivních pronájmů, servisu a plánu zakázek "
-                "ze záložky 6. Výsledky jsou ilustrativní."
+                "<b>Ukázková data</b> – přehled vychází z fiktivních pronájmů, servisu a plánu vlastních zakázek. "
+                "Výsledky jsou ilustrativní."
             )
             with cap_summary:
                 st.markdown(
@@ -2346,7 +2340,7 @@ if PAGE == "kapacita":                                    # sekce Plánování k
                     dict(label="Pronájmy", value=f"{fmt_num(use_fleet['rental'])} strojodnů",
                          sub=f"{pct(use_fleet['rental'])} kapacity · potvrzené rezervace"),
                     dict(label="Vlastní zakázky", value=f"{fmt_num(use_fleet['job'])} strojodnů",
-                         sub=f"{pct(use_fleet['job'])} kapacity · podle plánu záložky 6"),
+                         sub=f"{pct(use_fleet['job'])} kapacity · podle plánu vlastních zakázek"),
                     dict(label="Servis", value=f"{fmt_num(use_fleet['maintenance'])} strojodnů",
                          sub=f"{pct(use_fleet['maintenance'])} kapacity · stroj nedostupný"),
                 ]
@@ -2383,7 +2377,7 @@ if PAGE == "kapacita":                                    # sekce Plánování k
                     "a do využití se nepočítají."
                 )
 
-            st.markdown("### Využití podle typu stroje")
+            ui.section_title("Využití podle typu stroje")
             st.dataframe(cv.utilization_display(use_table), width="stretch", hide_index=True)
 
             n1, n2 = st.columns([3, 2])
@@ -2401,7 +2395,7 @@ if PAGE == "kapacita":                                    # sekce Plánování k
                     [
                         ("Zdroj",
                          "Denní kapacita z kapacitního modulu – stejná jako v kalendáři (stejné filtry, data "
-                         "a plán zakázek ze záložky 6)."),
+                         "a plán vlastních zakázek)."),
                         ("Kapacita",
                          "Součet kusů k dispozici v jednotlivých dnech ve strojodnech (1 strojoden = 1 kus "
                          "stroje na 1 den). Objednaný stroj se počítá až od dodání."),
@@ -2447,7 +2441,7 @@ DP_JOB_ROWS = 3
 # Pronájem strojů ve skupinách – texty jsou stejné (doplněné o dvě věty z dřívějšího úvodu stránky).
 DP_EXPLAIN = [
     ("Zdroj", "Rozhodovací pravidla aplikace nad kapacitním a ekonomickým výpočtem – stejná data a plán "
-              "zakázek jako záložky 6 a 7."),
+              "zakázek jako Vlastní zakázky a Plánování kapacity."),
     ("Provoz", "Potvrzené pronájmy, zakázky v plánu a servis blokují kapacitu. Požadavek je proveditelný, "
                "jen když se vejde do zbytku; žádná doporučená varianta nepřekročí kapacitu."),
     ("Ekonomika", "Odděleně od provozu: příspěvek = tržba − variabilní náklady (u zakázky také přímé "
@@ -2539,29 +2533,27 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
     DP_RENT = PAGE == "pronajem"
     if DP_RENT:
         st.markdown(ui.RENTAL_CSS, unsafe_allow_html=True)
-    with (ui.tab_container("pronajem") if DP_RENT else contextlib.nullcontext()):
+    with ui.tab_container("pronajem" if DP_RENT else "rozhodovaci_centrum"):
         if DP_RENT:
             ui.tab_header("Pronájem strojů", "Ověřte, zda se nový pronájem vejde do kapacity a zda se vyplatí.")
             st.markdown(pv.CSS, unsafe_allow_html=True)
             ui.note("<b>Ukázková data</b> – požadavky se nikam neukládají ani nic nemění v rezervacích či "
                     "zakázkách; po obnovení stránky zmizí. Podrobnosti v části „Jak plánovač rozhoduje“.")
         else:
-            st.markdown("### Rozhodovací plánovač" if PAGE == "rozhodovaci_centrum" else "### Pronájem strojů – nový požadavek")
+            ui.tab_header("Rozhodovací centrum", "Vejde se nový pronájem nebo vlastní zakázka do kapacity "
+                          "a která varianta přinese víc?")
             st.markdown(pv.CSS, unsafe_allow_html=True)
             ui.note(
                 "<b>Ukázková data</b> – pronájmy, servis a zakázky jsou fiktivní. Požadavky zadané zde se "
                 "<b>nikam neukládají</b>, nic se nepotvrzuje ani nemění v rezervacích či zakázkách; po obnovení "
                 "stránky zmizí."
             )
-            st.markdown(
-                '<div class="de-intro">Zadejte požadavek na pronájem nebo vlastní zakázku. Plánovač odpovídá zvlášť na '
-                "dvě otázky: <b>Provoz</b> – vejde se požadavek do kapacity, kterou nechávají potvrzené pronájmy, "
-                "zakázky z plánu záložky 6 a servis? <b>Ekonomika</b> – která varianta přinese nejvyšší příspěvek "
-                "(tržba − variabilní náklady; nejde o čistý zisk)? Požadavek se může vejít, a přesto být ekonomicky "
-                "méně výhodný. Předběžné rezervace z dat soutěží o volnou kapacitu stejně jako nové požadavky "
-                "a nikdy se automaticky neruší.</div>",
-                unsafe_allow_html=True,
-            )
+            ui.more("Jak plánovač odpovídá",
+                    "Plánovač odpovídá zvlášť na dvě otázky: <b>Provoz</b> – vejde se požadavek do kapacity, kterou "
+                    "nechávají potvrzené pronájmy, zakázky z plánu vlastních zakázek a servis? <b>Ekonomika</b> – "
+                    "která varianta přinese nejvyšší příspěvek (tržba − variabilní náklady; nejde o čistý zisk)? "
+                    "Požadavek se může vejít, a přesto být ekonomicky méně výhodný. Předběžné rezervace z dat "
+                    "soutěží o volnou kapacitu stejně jako nové požadavky a nikdy se automaticky neruší.")
 
         dp_names = cv.type_names(data_model)
         dp_types = [t for t in dp_names if t in set(data_model.fleet_units["type_id"])]
@@ -2570,7 +2562,7 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
         dp_requests = st.session_state.setdefault("dp_requests", [])
 
         if not DP_RENT:
-            st.markdown("#### Nový požadavek")
+            ui.section_title("Rozhodovací plánovač", "nový požadavek na pronájem nebo vlastní zakázku")
         if PAGE == "pronajem":
             dp_kind = DP_KINDS[0]
         else:
@@ -2693,7 +2685,7 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
                     ui.dash_section_head("route", "Porovnávané požadavky",
                                          "Vyhodnocují se společně – soupeří o stejnou volnou kapacitu", tone="neutral")
                 else:
-                    st.markdown("#### Porovnávané požadavky")
+                    ui.section_title("Porovnávané požadavky")
                 for r in dp_requests:
                     c1, c2 = st.columns([5, 1])
                     what = "pronájem" if r["kind"] == "rental" else "zakázka"
@@ -2719,7 +2711,7 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
                 st.markdown('<div class="dd-section-title">Podrobné zdůvodnění<small>ekonomické porovnání, karty '
                             'požadavků, kalendář a konflikty</small></div>', unsafe_allow_html=True)
             else:
-                st.markdown("#### Výsledek")
+                ui.section_title("Výsledek")
             # E2.5c 4D-B: „Co kdyby“ – hypotetická hodnota se drží jen v relaci; klíč obsahuje otisk dat
             # a požadavků, takže se po jejich změně hodnota sama vymaže (staré klíče se odstraní)
             dp_sig = hashlib.sha256(repr((data_version, sorted(dp_starts.items()), pv.freeze(dp_requests)))
@@ -2748,7 +2740,7 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
             dp_lo = max(1, min(r["start"] for r in dp_requests) - 2)
             dp_hi = max(r["end"] for r in dp_requests) + 2
             if not DP_RENT:
-                st.markdown("#### Dostupnost dotčených strojů")
+                ui.section_title("Dostupnost dotčených strojů")
             _, dp_html, _ = capacity_grid(data_version, code_version, tuple(sorted(dp_starts.items())), dp_lo, dp_hi,
                                           dp_types_used, None)
             with (st.expander("Dostupnost dotčených strojů – kalendář") if DP_RENT else contextlib.nullcontext()):
@@ -2759,7 +2751,7 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
             if DP_RENT:
                 st.markdown('<div class="dd-section-title">Konflikty potvrzených závazků</div>', unsafe_allow_html=True)
             else:
-                st.markdown("#### Konflikty potvrzených závazků")
+                ui.section_title("Konflikty potvrzených závazků")
             if related:
                 for m in related:
                     ui.insight(f"<b>K ručnímu řešení:</b> {html.escape(m['text'])}"
@@ -2840,8 +2832,11 @@ if PAGE == "dashboard":
             dict(icon="coins", label="Ekonomický výsledek", tone="accent",
                  value=fmt_czk(dash_sum["profit_after_penalty"]),
                  chip=ui.dash_chip("dílčí údaj – jen vlastní zakázky", "info"),
-                 sub="zisk vlastních zakázek po penále podle plánu, včetně zakázek v kapacitním konfliktu · nejde o "
-                     "čistý zisk půjčovny – jisté a konfliktní zakázky rozlišuje stránka Ekonomika flotily"),
+                 sub="zisk vlastních zakázek po penále, včetně zakázek v kapacitním konfliktu · nejde o čistý zisk "
+                     "půjčovny",
+                 more_summary="Kde je celý výsledek",
+                 more="Částka vychází z plánu vlastních zakázek; jisté a konfliktní zakázky rozlišuje stránka "
+                      "Ekonomika flotily."),
             dict(icon="truck", label="Pronájmy a zakázky", tone="neutral",
                  pair=True,
                  value=(f"<span>{dash_confirmed}<small>{dash_word(dash_confirmed, 'pronájem', 'pronájmy', 'pronájmů')}</small></span> "
@@ -2901,10 +2896,9 @@ if PAGE == "dashboard":
                  f"investice {fmt_czk(purchase_best['investment'])}" if purchase_best["units"] > 0
                  else "žádná zisková sestava v rozpočtu"),
             ])
-            ui.dash_text("Ukázková data. Zisk zakázek nezahrnuje pronájmy ani fixní náklady flotily – nejde o celkový "
-                         "zisk půjčovny.", muted=True)
-            ui.dash_text("Výsledek flotily za období (jisté příspěvky pronájmů a zakázek, fixní náklady, konflikty "
-                         "zvlášť) je na stránce Ekonomika flotily.", muted=True)
+            ui.more("Poznámky k číslům", "<ul><li>Ukázková data. Zisk zakázek nezahrnuje pronájmy ani fixní náklady "
+                    "flotily – nejde o celkový zisk půjčovny.</li><li>Výsledek flotily za období (jisté příspěvky "
+                    "pronájmů a zakázek, fixní náklady, konflikty zvlášť) je na stránce Ekonomika flotily.</li></ul>")
             with ui.dash_links("ekonomika"):
                 page_link("ekonomika")
                 page_link("investice")
@@ -3139,8 +3133,8 @@ if PAGE == "ekonomika":
                 ui.dash_kpis([dict(
                     icon=FE_KPI_ICONS[h["key"]], label=h["label"], value=html.escape(h["text"]), cls="word",
                     chip=fe_chip(h["status"], h["tone"]),
-                    sub=html.escape(h["meaning"]) + f'<span class="dd-period">Období: {html.escape(h["period"])}</span>',
-                    tone="neutral") for h in fe_view["headline"]])
+                    sub=f'<span class="dd-period">Období: {html.escape(h["period"])}</span>',
+                    more=html.escape(h["meaning"]), tone="neutral") for h in fe_view["headline"]])
 
         if fe_view["computable"]:
             st.markdown('<div class="dd-section-title">Rozpad výsledku <small>jen podložené částky – neznámé '
@@ -3173,9 +3167,8 @@ if PAGE == "ekonomika":
                 with ui.dash_section("ekon_vyuziti_neutral"):
                     ui.dash_rows([(r["label"], html.escape(r["text"]), html.escape(r["meaning"]))
                                   for r in fe_use["rows"]])
-                    ui.dash_text(html.escape(fe_use["composition"]), muted=True)
-                    for note in fe_use["notes"]:
-                        ui.dash_text(html.escape(note), muted=True)
+                    ui.more("Jak číst využití", "<ul>" + "".join(
+                        f"<li>{html.escape(x)}</li>" for x in [fe_use["composition"], *fe_use["notes"]]) + "</ul>")
                     with ui.dash_links("ekon_vyuziti"):
                         if st.button("Podrobné využití v Plánování kapacity", key="fe_usage_detail",
                                      icon=":material/bar_chart:", type="tertiary"):
@@ -3203,13 +3196,17 @@ if PAGE == "ekonomika":
                              else f"{v['feasibility']} · vyřeší konflikt: {v['resolves']}"),
                         tag=v["amount"]["status"],
                         rows=[("Příspěvek dotčených závazků", html.escape(v["amount"]["text"]))],
-                        why="<ul>" + "".join(f"<li>{ui.nowrap_ids(x)}</li>" for x in
-                                             ([v["change"]] if v["change"] else [])
-                                             + ([f"Bližší termíny blokují: {', '.join(v['blockers'])}"]
-                                                if v["blockers"] else [])
-                                             + [f"Varování: {w}" for w in v["warnings"]]
-                                             + ([v["amount"]["explanation"]] if v["amount"]["explanation"] else []))
-                        + "</ul>") for v in case["variants"]])
+                        more="<ul>" + "".join(f"<li>{ui.nowrap_ids(x)}</li>" for x in
+                                              ([v["change"]] if v["change"] else [])
+                                              + ([f"Bližší termíny blokují: {', '.join(v['blockers'])}"]
+                                                 if v["blockers"] else [])
+                                              + [f"Varování: {w}" for w in v["warnings"]]
+                                              + ([v["amount"]["explanation"]] if v["amount"]["explanation"] else []))
+                        + "</ul>", more_summary="Podrobnosti varianty",
+                        more_meta=" · ".join(x for x in (
+                            f"varování: {len(v['warnings'])}" if v["warnings"] else "",
+                            "chybí údaje" if "chybí" in (v["amount"]["explanation"] or "") else "") if x))
+                        for v in case["variants"]])
                     # K3.4d: porovnání variant – jen informace (econ_formula), nic se nevybírá ani nedoporučuje
                     with st.expander(f"Porovnání variant – jen informace ({len(case['comparisons'])})"):
                         if case["comparison_note"]:
@@ -3262,14 +3259,14 @@ if PAGE == "ekonomika":
         st.markdown(f'<div class="dd-section-title">{html.escape(fe_jr["title"])} <small>'
                     f'{html.escape(fe_jr["subtitle"])}</small></div>', unsafe_allow_html=True)
         with ui.dash_section("ekon_zakazka_pronajem_neutral"):
-            ui.dash_text(html.escape(fe_jr["intro"]))
             ui.dash_text("<b>" + html.escape(fe_jr["disclaimer"]) + "</b>")
             for note in fe_jr["notes"]:
                 ui.dash_text(html.escape(note), muted=True)
-            if fe_jr["missing"]:
-                st.markdown('<div class="dd-group">Chybí k přesnějšímu srovnání</div><ul class="dd-list">'
-                            + "".join(f"<li>{html.escape(m)}</li>" for m in fe_jr["missing"]) + "</ul>",
-                            unsafe_allow_html=True)
+            st.markdown(ui.more_html("Co srovnání ukazuje", html.escape(fe_jr["intro"]))
+                        + (ui.more_html("Chybí k přesnějšímu srovnání", "<ul>" + "".join(
+                            f"<li>{html.escape(m)}</li>" for m in fe_jr["missing"]) + "</ul>",
+                            f"{len(fe_jr['missing'])} {fv._plural(len(fe_jr['missing']), 'položka', 'položky', 'položek')}")
+                           if fe_jr["missing"] else ""), unsafe_allow_html=True)
         ui.dash_variants([dict(title=c["title"], sub=c["sub"], tag=c["tag"],
                                rows=[(lbl, html.escape(val)) for lbl, val in c["rows"]],
                                why="<ul>" + "".join(f"<li>{ui.nowrap_ids(x)}</li>" for x in c["why"]) + "</ul>")
@@ -3413,14 +3410,14 @@ if PAGE == "strojovy_park":
 if PAGE == "nastaveni":
     with ui.tab_container("nastaveni"):
         ui.tab_header("Nastavení", "Přihlášený uživatel, správa účtů a informace o datech.")
-        st.markdown("### Uživatel")
+        ui.section_title("Uživatel")
         st.markdown(
             f'Přihlášen: <b>{html.escape(st.session_state.get("user_name", ""))}</b>'
             f' · {html.escape(auth.ROLES.get(st.session_state.get("user_role", ""), ""))}',
             unsafe_allow_html=True,
         )
         st.button("Odhlásit se", key="logout_nastaveni", on_click=_log_out)
-        st.markdown("### Správa účtů")
+        ui.section_title("Správa účtů")
         if st.session_state.get("user_role") != "admin":
             ui.hint("Správu účtů vidí jen administrátor.")
         if st.session_state.get("user_role") == "admin":
@@ -3445,7 +3442,7 @@ if PAGE == "nastaveni":
                     else:
                         st.code(auth.hash_password(pw1), language=None)
                         st.caption("Hash zkopírujte do password_hash v secrets. Heslo se nikam neukládá.")
-        st.markdown("### Data")
+        ui.section_title("Data")
         ui.hint(cv.data_info(data_model, data_version))
         ui.hint("Všechny údaje jsou fiktivní ukázková data (složka data/model). Aplikace je jen čte – nic se neukládá.")
         for issue in data_issues:
@@ -3500,19 +3497,22 @@ if PAGE == "chybejici_udaje":
                         ui.dash_chip(f"{it['record']} – {it['status_text']}", it["tone"]) for it in grp["items"])
                         + "</div>"
                         + f'<div class="dg-meta"><b>Proč:</b> {html.escape(grp["why"])}</div>'
-                        + f'<div class="dg-meta"><b>Ovlivňuje:</b> {html.escape(grp["areas_text"])}</div>'
-                        + f'<div class="dg-meta"><b>Kde doplnit:</b> {html.escape(grp["where"])}</div>',
+                        + ui.more_html("Dopad a kde doplnit",
+                                       f'<b>Ovlivňuje:</b> {html.escape(grp["areas_text"])}<br>'
+                                       f'<b>Kde doplnit:</b> {html.escape(grp["where"])}'),
                         unsafe_allow_html=True)
 
         st.markdown('<div class="dd-section-title">Zatím není evidováno <small>do počtu chybějících údajů se '
                     "nezapočítává</small></div>", unsafe_allow_html=True)
         with ui.dash_section("dg_neevidovano_neutral"):
-            ui.dash_rows([(t["label"], "", html.escape(t["detail"])
-                           + (html.escape(f" Ovlivnilo by: {t['areas_text']}.") if t["areas_text"] else ""))
-                          for t in dg_view["not_tracked"]])
+            ui.dash_text(html.escape(", ".join(t["label"] for t in dg_view["not_tracked"])), muted=True)
+            ui.more("Podrobnosti", "<ul>" + "".join(
+                f"<li><b>{html.escape(t['label'])}</b> – {html.escape(t['detail'])}"
+                + (html.escape(f" Ovlivnilo by: {t['areas_text']}.") if t["areas_text"] else "") + "</li>"
+                for t in dg_view["not_tracked"]) + "</ul>",
+                f"{len(dg_view['not_tracked'])} {dgv._plural(len(dg_view['not_tracked']), 'údaj', 'údaje', 'údajů')}")
 
-        st.markdown('<div class="dd-section-title">Nula, chybějící a neplatný údaj</div>', unsafe_allow_html=True)
-        with ui.dash_section("dg_vysvetleni_neutral"):
+        with st.expander("Nula, chybějící a neplatný údaj"):
             ui.dash_rows([(title, "", html.escape(text)) for title, text in dg_view["explain"]])
 
         with st.expander(f"Všechny položky v tabulce ({len(dg_view['table'])})"):
