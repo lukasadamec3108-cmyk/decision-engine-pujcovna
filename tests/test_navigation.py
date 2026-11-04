@@ -53,8 +53,8 @@ def inv_values(at):
 def test_registry_has_all_sections_in_required_order():
     assert [p[2] for p in navigace.PAGES] == [
         "Dashboard", "Ekonomika flotily", "Pronájem strojů", "Vlastní zakázky", "Strojový park",
-        "Plánování kapacity", "Rozhodovací centrum", "Investice", "Nastavení"]
-    assert len(navigace.PAGES) == 9
+        "Plánování kapacity", "Rozhodovací centrum", "Investice", "Nastavení", "Chybějící údaje"]   # E3.2
+    assert len(navigace.PAGES) == 10
     assert navigace.DEFAULT_PAGE == "dashboard"
     for key in navigace.KEYS:
         assert navigace.page_file(key).is_file(), key
@@ -77,6 +77,7 @@ def test_every_section_renders_and_has_expected_content():
         "rozhodovaci_centrum": ("Rozhodovací plánovač",),
         "investice": (),
         "nastaveni": ("Správa účtů", "Data"),
+        "chybejici_udaje": ("Chybějící údaje", "Co doplnit jako první", "Zatím není evidováno"),   # E3.2
     }
     for _ in range(2):                                                   # tam i zpět
         for key in navigace.KEYS:

@@ -26,6 +26,8 @@ PAGES = [
      "rozhodovaci-centrum"),
     ("investice", "stranka_investice.py", "Investice", ":material/savings:", "Investice", "investice"),
     ("nastaveni", "stranka_nastaveni.py", "Nastavení", ":material/settings:", "Systém", "nastaveni"),
+    ("chybejici_udaje", "stranka_chybejici_udaje.py", "Chybějící údaje", ":material/fact_check:", "Systém",
+     "chybejici-udaje"),
 ]
 DEFAULT_PAGE = "dashboard"
 KEYS = [p[0] for p in PAGES]

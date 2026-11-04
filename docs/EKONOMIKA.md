@@ -338,6 +338,32 @@ nula se použije). Obsluha a doprava strojů se v datech neevidují.
 Ukázková data: všech 12 zakázek je orientačních (chybí variabilní náklady a nastavení
 `direct_cost_includes_machines`). Hranice pod 100 %: J007 67 %, J009 88 %, J005 96 %; ostatní nad 100 %.
 
+## Přehled chybějících údajů (E3.2)
+
+Stránka **Chybějící údaje** (menu Systém, pod Nastavením; odkaz i z Nastavení → Data) je jen pro čtení.
+`data_gaps.evaluate(model)` (bez Streamlitu) najde údaje, které **používají už implementované výpočty**
+a chybějí nebo jsou neplatné; `data_gaps_view.build` je seskupí pro stránku. Nic nedoplňuje, neodhaduje
+ani neukládá a žádný výpočet nemění.
+
+- **Stavy** podle stejných pravidel jako `economics.py` / `capacity.py`: chybí (prázdná buňka, chybějící
+  řádek nastavení nebo sloupec), neplatný (text místo čísla, záporná částka, pravděpodobnost mimo 0–1,
+  celé číslo < 1, nepovolená volba, duplicitní záznam). Skutečná nula „0“ je údaj a v přehledu není.
+- **Priority** (`data_gaps.PRIORITY_RULES`): vysoká – H1 neplatná hodnota / duplicita, H2 chybí povinný údaj,
+  H3 chybí nastavení blokující úplný výsledek všech zakázek (`direct_cost_includes_machines`); střední –
+  M1 chybí náklad, výsledek je jen horní mez (variabilní náklady, režie); nízká – L1 doplňující údaj, který
+  výpočty nemění (rozdělení fixních nákladů).
+- Každý problém je v seznamu jednou; duplicitní záznam se hlásí jednou a jeho buňky se nevyhodnocují znovu.
+  Variabilní náklad na zakázce se nehlásí, když jsou stroje v přímých nákladech (nastavení „ano“).
+- **Zatím není evidováno** (do počtu se nezapočítává): doprava, obsluha (tabulka je, výpočty ji nepoužívají),
+  skutečná poptávka, přiřazení ke konkrétním kusům, smluvní náhrada při zrušení pronájmu, pravděpodobnost
+  získání zakázky, pracovní dny a horizont plánování.
+- Dotčené zakázky = zakázky s vlastním chybějícím údajem nebo s neúplným příspěvkem podle
+  `economics.job_contribution`.
+
+Ukázková data: 26 údajů (vysoká 1, střední 17, nízká 8), 8 strojů, 12 z 12 zakázek, 5 ze 7 oblastí výpočtů.
+Pozn.: chybí-li povinný údaj, aplikace se dnes zastaví už při načtení dat (kontrola `datamodel.validate`);
+stránka proto v běžící aplikaci ukazuje hlavně nepovinné údaje a nastavení, vyhodnocení ale zvládne obojí.
+
 ## Zapamatování filtrů (Ekonomika flotily, Plánování kapacity)
 
 Období, datum prvního dne plánu, metoda fixních nákladů a počet měsíců zůstávají nastavené i po přechodu
