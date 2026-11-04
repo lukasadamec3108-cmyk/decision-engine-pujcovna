@@ -179,6 +179,25 @@ def inject_css() -> None:
         [data-testid="stExpander"] details {{ border-radius: 10px; border-color: {UI_LINE}; background: #fff; }}
         [data-testid="stExpander"] summary p {{ color: {INK}; font-weight: 600; }}
 
+        /* UX: rozbalovací detail v kartách a řádcích (nativní <details> – myš, klávesnice i dotyk) */
+        details.de-more {{ margin: .3rem 0 .05rem 0; }}
+        details.de-more > summary {{ cursor: pointer; list-style: none; display: inline-flex; align-items: baseline;
+            flex-wrap: wrap; gap: .1rem .4rem; font-size: .82rem; font-weight: 600; color: {ACCENT};
+            padding: .1rem 0; line-height: 1.35; }}
+        details.de-more > summary::-webkit-details-marker {{ display: none; }}
+        details.de-more > summary::before {{ content: "›"; display: inline-block; font-weight: 800;
+            transition: transform .15s ease; }}
+        details.de-more[open] > summary::before {{ transform: rotate(90deg); }}
+        details.de-more > summary .meta {{ color: {UI_MUTED}; font-weight: 500; }}
+        details.de-more > summary:focus-visible {{ outline: 2px solid {ACCENT}; outline-offset: 2px; border-radius: 4px; }}
+        details.de-more .de-more-body {{ font-size: .83rem; color: {UI_MUTED}; line-height: 1.5; padding: .3rem 0 .1rem 0; }}
+        details.de-more .de-more-body ul {{ margin: .1rem 0 0 1rem; padding: 0; }}
+        details.de-more .de-more-body li {{ margin: 0 0 .2rem 0; }}
+        details.de-more .de-more-body b {{ color: {INK}; }}
+        /* UX: jednotný nadpis sekce na všech stránkách */
+        .de-section-title {{ font-size: 1.08rem; font-weight: 700; color: {INK}; margin: 1.3rem 0 .5rem 0; line-height: 1.3; }}
+        .de-section-title small {{ font-weight: 500; color: {UI_MUTED}; font-size: .84rem; margin-left: .4rem; }}
+
         /* Horní lišta */
         .de-header {{
             display: flex; align-items: center; gap: .85rem; background: {BAR}; color: #fff;
@@ -523,6 +542,26 @@ def results_cards(cards: list, rec_name: str, tag: str) -> None:
     st.markdown(f'<div class="de-res-grid">{out}</div>', unsafe_allow_html=True)
 
 
+def more_html(summary: str, body_html: str, meta: str = "") -> str:
+    """Rozbalovací detail (nativní <details>): souhrn vždy vidět, podrobnosti po kliknutí.
+
+    summary a meta jsou pevné texty aplikace (escapují se), body_html je hotové HTML. Obsah zůstává
+    v dokumentu – nic se neztrácí, jen není trvale rozbalené."""
+    meta_html = f' <span class="meta">{html.escape(meta)}</span>' if meta else ""
+    return (f'<details class="de-more"><summary>{html.escape(summary)}{meta_html}</summary>'
+            f'<div class="de-more-body">{body_html}</div></details>')
+
+
+def more(summary: str, body_html: str, meta: str = "") -> None:
+    st.markdown(more_html(summary, body_html, meta), unsafe_allow_html=True)
+
+
+def section_title(title: str, small: str = "") -> None:
+    """Jednotný nadpis sekce stránky (stejný vzhled jako nadpisy sekcí Dashboardu)."""
+    st.markdown(f'<div class="de-section-title dd-section-title">{html.escape(title)}'
+                + (f" <small>{html.escape(small)}</small>" if small else "") + "</div>", unsafe_allow_html=True)
+
+
 def hint(text: str) -> None:
     """Nenápadné, ale čitelné vysvětlení pod grafem."""
     st.markdown(f'<div class="de-hint">{text}</div>', unsafe_allow_html=True)
@@ -631,7 +670,9 @@ def dash_kpis(cards: list) -> None:
         f'{dash_icon(c["icon"])}</span><span class="dd-lbl">{html.escape(c["label"])}</span></div>'
         f'<div class="dd-val{" pair" if c.get("pair") else ""}{" " + c["cls"] if c.get("cls") else ""}">'
         f'{c["value"]}</div>{c.get("chip", "")}'
-        f'<div class="dd-sub">{c.get("sub", "")}</div></div>'
+        f'<div class="dd-sub">{c.get("sub", "")}'
+        + (more_html(c.get("more_summary", "Co ukazatel zahrnuje"), c["more"]) if c.get("more") else "")
+        + "</div></div>"
         for c in cards
     )
     st.markdown(f'<div class="dd-kpis">{items}</div>', unsafe_allow_html=True)
@@ -704,7 +745,8 @@ def dash_css(key: str) -> str:
 {_DASH} .de-tab-title {{ font-size: 1.4rem; margin-bottom: .1rem; }}
 {_DASH} .de-tab-intro {{ color: {UI_MUTED}; font-size: .92rem; margin-bottom: .9rem; }}
 /* KPI karty */
-{_DASH} .dd-kpis {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin: .1rem 0 1.4rem 0; }}
+{_DASH} .dd-kpis {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin: .1rem 0 1.4rem 0;
+                  align-items: start; }}
 {_DASH} .dd-kpi {{ background: #fff; border: 1px solid {UI_LINE}; border-radius: 14px; padding: 1rem 1.15rem;
                  box-shadow: 0 1px 3px rgba(16,24,40,.06); display: flex; flex-direction: column; gap: .45rem; min-width: 0; }}
 {_DASH} .dd-kpi-top {{ display: flex; align-items: center; gap: .6rem; }}
@@ -718,8 +760,9 @@ def dash_css(key: str) -> str:
 {_DASH} .dd-val.pair {{ font-size: 1.75rem; display: flex; flex-wrap: wrap; column-gap: .45rem; row-gap: .1rem; }}
 {_DASH} .dd-val.pair > span {{ white-space: nowrap; }}
 {_DASH} .dd-val small {{ font-size: 1rem; font-weight: 600; color: {UI_MUTED}; margin-left: .2rem; letter-spacing: 0; }}
-{_DASH} .dd-sub {{ font-size: .8rem; color: {UI_MUTED}; line-height: 1.45; margin-top: auto; padding-top: .55rem;
+{_DASH} .dd-sub {{ font-size: .8rem; color: {UI_MUTED}; line-height: 1.45; margin-top: .15rem; padding-top: .5rem;
                  border-top: 1px solid {UI_LINE}; }}
+{_DASH} .dd-sub details.de-more {{ margin-top: .25rem; }}
 {_DASH} .dd-chip {{ align-self: flex-start; font-size: .74rem; font-weight: 700; padding: .16rem .6rem; border-radius: 999px;
                   white-space: nowrap; }}
 {_DASH} .dd-chip.good {{ color: #166534; background: #E8F5EC; }}
@@ -808,7 +851,9 @@ _RENT = f".st-key-{RENT_KEY}"
 
 
 def dash_variants(items: list) -> None:
-    """Karty porovnávaných variant: items = [dict(title, sub, tag, rows=[(popisek, hodnota HTML)], why)]."""
+    """Karty porovnávaných variant: items = [dict(title, sub, tag, rows=[(popisek, hodnota HTML)], why)].
+
+    Volitelně more (HTML), more_summary a more_meta – podrobnosti sbalené pod kartou (ui.more_html)."""
     cards = "".join(
         f'<div class="dd-var"><div class="dd-var-head"><span class="t">{html.escape(it["title"])}</span>'
         + (f'<span class="tag">{html.escape(it["tag"])}</span>' if it.get("tag") else "")
@@ -816,6 +861,8 @@ def dash_variants(items: list) -> None:
         + "".join(f'<div class="dd-var-row"><span>{html.escape(lbl)}</span><span>{val}</span></div>'
                   for lbl, val in it["rows"])
         + (f'<div class="dd-var-why">{it["why"]}</div>' if it.get("why") else "")
+        + (f'<div class="dd-var-why">{more_html(it.get("more_summary", "Podrobnosti"), it["more"], it.get("more_meta", ""))}'
+           "</div>" if it.get("more") else "")
         + "</div>"
         for it in items
     )
