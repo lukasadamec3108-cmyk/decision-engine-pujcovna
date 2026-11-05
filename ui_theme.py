@@ -137,6 +137,17 @@ def inject_css() -> None:
         /* Postranní panel (V2: tmavý antracit podle návrhu MALOSTROJE; barvy i v [theme.sidebar]) */
         [data-testid="stSidebar"] {{ background: linear-gradient(180deg, {SIDE_BG_TOP} 0, {SIDE_BG} 14rem);
             border-right: none; }}
+        /* Charakteristické šikmé rozšíření panelu nahoře (podle návrhu): pravá hrana je svislá, v horní části
+           přechází šikmou hranou do širší horní plochy. Jen desktop (na mobilu je panel výsuvné menu); při sbaleném
+           panelu se nezobrazuje. Plocha nepřijímá kliknutí – nic pod ní neblokuje. */
+        @media (min-width: 769px) {{
+            section[data-testid="stSidebar"] {{ overflow: visible !important; }}
+            section[data-testid="stSidebar"][data-collapsed="false"]::after {{
+                content: ""; position: absolute; top: 0; right: -5rem; width: 5rem; height: 16rem;
+                background: linear-gradient(180deg, {SIDE_BG_TOP} 0, {SIDE_BG} 14rem);
+                clip-path: polygon(0 0, 100% 0, 0 100%); pointer-events: none; z-index: 2;
+            }}
+        }}
         [data-testid="stSidebarHeader"] {{ padding: 1.4rem 1.2rem .6rem 1.2rem; height: auto; }}
         [data-testid="stSidebarLogo"] {{ height: 2.9rem !important; max-width: 100%; width: auto; }}
         [data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"] {{ color: {SIDE_MUTED} !important; }}
