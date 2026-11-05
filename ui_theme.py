@@ -75,12 +75,6 @@ WARN_TEXT, WARN_BG = "#92400E", "#FEF3C7"
 BAD_TEXT, BAD_BG = "#B42318", "#FDECEA"
 
 
-def mark_src() -> str:
-    """Vlastní neutrální symbol aplikace Decision Engine (graf + symbol rozhodnutí) jako data URI."""
-    svg = (ASSETS / "decision_engine_mark.svg").read_bytes()
-    return "data:image/svg+xml;base64," + base64.b64encode(svg).decode()
-
-
 # ==================================================
 # CSS
 # ==================================================
@@ -250,19 +244,30 @@ def inject_css() -> None:
         .de-section-title {{ font-size: 1.08rem; font-weight: 700; color: {INK}; margin: 1.3rem 0 .5rem 0; line-height: 1.3; }}
         .de-section-title small {{ font-weight: 500; color: {UI_MUTED}; font-size: .84rem; margin-left: .4rem; }}
 
-        /* Horní lišta */
-        .de-header {{
-            display: flex; align-items: center; gap: .85rem; background: {BAR}; color: #fff;
-            border-radius: 12px; padding: .65rem 1.1rem; margin-bottom: 1rem;
+        /* Záhlaví stránky (V3): vlevo název, podtitulek, rozsah dat a ukázková data; vpravo vlastní ilustrace stroje.
+           Text je omezený na levou část, ilustrace na pravou – nikdy se nepřekrývají. */
+        .de-ph {{ position: relative; overflow: hidden; min-height: 11.5rem; padding: 1.6rem 1.7rem 1.4rem 1.7rem;
+            margin: 0 0 1.2rem 0; border-radius: 16px; background: linear-gradient(90deg, #F1F2F4 0%, #EEF0F2 100%); }}
+        .de-ph-art {{ position: absolute; top: 0; right: 0; bottom: 0; width: 56%; background-repeat: no-repeat;
+            background-position: right bottom; background-size: auto 100%; pointer-events: none;
+            -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 28%);
+            mask-image: linear-gradient(90deg, transparent 0%, #000 28%); }}
+        .de-ph-text {{ position: relative; max-width: 48%; }}
+        .de-ph-title {{ font-size: 2.55rem; font-weight: 800; line-height: 1.1; color: {INK}; letter-spacing: -.01em; }}
+        .de-ph-sub {{ font-size: 1.02rem; color: #374151; line-height: 1.4; margin-top: .35rem; }}
+        .de-ph-chips {{ display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; margin-top: .9rem; }}
+        .de-ph-chip {{ display: inline-flex; align-items: center; gap: .45rem; background: #fff; color: {INK};
+            border: 1px solid {UI_LINE}; border-radius: 10px; padding: .42rem .75rem; font-size: .88rem;
+            font-weight: 600; box-shadow: 0 1px 3px rgba(16,24,40,.08); white-space: nowrap; }}
+        .de-ph-chip.demo {{ background: {WARN_BG}; color: {WARN_TEXT}; border-color: transparent; font-size: .8rem;
+            box-shadow: none; }}
+        .de-ph-ico {{ width: 1.1rem; height: 1.1rem; color: {INK}; }}
+        @media (max-width: 1100px) {{
+            .de-ph-text {{ max-width: none; }}
+            .de-ph-art {{ display: none; }}   /* užší obrazovky: čitelnost textu má přednost před ilustrací */
         }}
-        .de-header img {{ width: 40px; height: 40px; flex: 0 0 auto; }}
-        .de-header .de-names {{ min-width: 0; flex: 1 1 auto; }}
-        .de-title {{ font-size: 1.25rem; font-weight: 700; line-height: 1.2; color: #fff; }}
-        .de-sub {{ font-size: .86rem; color: #D1D5DB; line-height: 1.3; }}
-        .de-badge {{
-            flex: 0 0 auto; border: 1px solid #6B7280; color: #F3F4F6; font-weight: 600; font-size: .72rem;
-            letter-spacing: .04em; padding: .22rem .6rem; border-radius: 999px; white-space: nowrap;
-        }}
+        .de-tab-title.de-dup {{ display: none; }}
+        [data-testid="stElementContainer"]:has(> [data-testid="stMarkdown"] .de-dup) {{ display: none; }}
 
         /* Přihlášení */
         .de-login {{ text-align: center; margin: 3rem 0 1.2rem 0; }}
@@ -388,16 +393,13 @@ def inject_css() -> None:
         }}
         @media (max-width: 640px) {{
             .block-container {{ padding-left: 1rem; padding-right: 1rem; }}
-            .de-header {{ padding: .55rem .8rem; gap: .6rem; }}
-            .de-header img {{ width: 32px; height: 32px; }}
-            .de-title {{ font-size: 1.08rem; }}
-            .de-sub {{ font-size: .78rem; }}
-            .de-badge {{ font-size: .64rem; padding: .18rem .45rem; }}
+            .de-ph {{ min-height: 0; padding: 1rem 1rem .9rem 1rem; border-radius: 12px; }}
+            .de-ph-title {{ font-size: 1.7rem; }}
+            .de-ph-sub {{ font-size: .9rem; }}
+            .de-ph-chip {{ font-size: .8rem; padding: .35rem .6rem; white-space: normal; }}
             [data-testid="stMetricValue"] {{ font-size: 1.25rem; }}
         }}
-        @media (max-width: 420px) {{
-            .de-sub {{ display: none; }}
-        }}
+
         {TAB_STANDARD_CSS}
         </style>
         """,
@@ -410,26 +412,47 @@ def inject_css() -> None:
 # ==================================================
 
 
-def header(title: str, subtitle: str, badge: str) -> None:
-    """Výškově úsporná horní lišta: symbol, název, podtitul, štítek. Text se zalamuje, neořezává."""
-    st.markdown(
-        f"""
-        <div class="de-header">
-            <img src="{mark_src()}" alt="">
-            <div class="de-names">
-                <div class="de-title">{html.escape(title)}</div>
-                <div class="de-sub">{html.escape(subtitle)}</div>
-            </div>
-            <div class="de-badge">{html.escape(badge)}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+def brand_icon_src() -> str:
+    """Vlastní neutrální ikona MALOSTROJE (není firemní logo) jako data URI."""
+    svg = (ASSETS / "malostroje_icon.svg").read_bytes()
+    return "data:image/svg+xml;base64," + base64.b64encode(svg).decode()
+
+
+def header_art_src() -> str:
+    """Vlastní vektorová ilustrace stavebního stroje pro záhlaví (kreslená od nuly, bez cizí grafiky)."""
+    svg = (ASSETS / "zahlavi_stroj.svg").read_bytes()
+    return "data:image/svg+xml;base64," + base64.b64encode(svg).decode()
+
+
+_CALENDAR_ICON = ('<svg class="de-ph-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" '
+                  'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" '
+                  'height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>')
+
+
+def header_html(title: str, subtitle: str, badge: str, period: str = "") -> str:
+    """Záhlaví stránky (redesign MALOSTROJE V3): velký název stránky, podtitulek, skutečný rozsah dat
+    a štítek ukázkových dat; vpravo vlastní ilustrace stroje (na mobilu skrytá). Třída de-header zůstává –
+    podle ní regresní nástroje záhlaví poznají a nepočítají do obsahu stránky."""
+    chips = (f'<span class="de-ph-chip">{_CALENDAR_ICON}{html.escape(period)}</span>' if period else "")
+    chips += f'<span class="de-ph-chip demo">{html.escape(badge)}</span>'
+    return (f'<div class="de-header de-ph"><div class="de-ph-art" style="background-image:url({header_art_src()})">'
+            f'</div><div class="de-ph-text"><div class="de-ph-title" role="heading" aria-level="1">'
+            f'{html.escape(title)}</div><div class="de-ph-sub">{html.escape(subtitle)}</div>'
+            f'<div class="de-ph-chips">{chips}</div></div></div>')
+
+
+_PAGE_TITLE = {"title": ""}   # název stránky v záhlaví – stejný nadpis obsahu se pak nezobrazuje dvakrát
+
+
+def header(slot, title: str, subtitle: str, badge: str, period: str = "") -> None:
+    """Vykreslí (nebo přepíše) záhlaví do připraveného místa nahoře na stránce."""
+    _PAGE_TITLE["title"] = title
+    slot.markdown(header_html(title, subtitle, badge, period), unsafe_allow_html=True)
 
 
 def login_intro(title: str, subtitle: str, prompt: str) -> None:
     st.markdown(
-        f'<div class="de-login"><img src="{mark_src()}" alt=""><div class="t">{html.escape(title)}</div>'
+        f'<div class="de-login"><img src="{brand_icon_src()}" alt=""><div class="t">{html.escape(title)}</div>'
         f'<div class="s">{html.escape(subtitle)}</div><div class="p">{html.escape(prompt)}</div></div>',
         unsafe_allow_html=True,
     )
@@ -496,10 +519,14 @@ def tab_container(slug: str):
     return st.container(key=TAB_KEY_PREFIX + slug)
 
 
-def tab_header(title: str, intro_html: str = "") -> None:
-    """Nadpis záložky a krátký úvod (nejvýš 1–2 věty). intro_html je pevný text aplikace (smí obsahovat <b>)."""
-    st.markdown(f'<div class="de-tab-title" role="heading" aria-level="2">{html.escape(title)}</div>',
-                unsafe_allow_html=True)
+def tab_header(title: str, intro_html: str = "", show_title: bool = True) -> None:
+    """Nadpis záložky a krátký úvod (nejvýš 1–2 věty). intro_html je pevný text aplikace (smí obsahovat <b>).
+
+    Je-li nadpis stejný jako název stránky v záhlaví (nebo show_title=False), nezobrazuje se podruhé
+    (zůstává v dokumentu jako skrytý prvek – úvodní text pod ním se zobrazí normálně)."""
+    dup = (not show_title) or title == _PAGE_TITLE["title"]
+    st.markdown(f'<div class="de-tab-title{" de-dup" if dup else ""}" role="heading" aria-level="2">'
+                f'{html.escape(title)}</div>', unsafe_allow_html=True)
     if intro_html:
         st.markdown(f'<div class="de-tab-intro">{intro_html}</div>', unsafe_allow_html=True)
 

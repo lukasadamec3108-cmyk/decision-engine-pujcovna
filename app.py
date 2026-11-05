@@ -125,13 +125,13 @@ def load_data() -> pd.DataFrame:
 # ==================================================
 
 st.set_page_config(
-    page_title="Decision Engine – Investice a provoz půjčovny",
+    page_title="MALOSTROJE – Investice a provoz půjčovny",
     page_icon="📊",
     layout="wide",
 )
 ui.inject_css()
 
-APP_TITLE = "Decision Engine"
+APP_TITLE = "MALOSTROJE"            # viditelný název (interně projekt Decision Engine)
 APP_SUBTITLE = "Investice a provoz půjčovny"
 DEMO_BADGE = "Ukázková data"
 
@@ -224,10 +224,11 @@ if not st.session_state.get("authenticated", False):
 
 
 # ==================================================
-# HLAVIČKA APLIKACE
+# ZÁHLAVÍ STRÁNKY (redesign MALOSTROJE V3)
 # ==================================================
-
-ui.header(APP_TITLE, APP_SUBTITLE, DEMO_BADGE)
+# Místo nahoře na stránce: název a podtitulek se vypíšou hned po určení stránky (záhlaví je vidět i při
+# předčasném ukončení běhu), skutečný rozsah dat se doplní na konci běhu (potřebuje plán zakázek).
+HEADER_SLOT = st.empty()
 
 
 # ==================================================
@@ -245,6 +246,8 @@ _PAGE_OBJ = {
 nav = st.navigation({group: [_PAGE_OBJ[k] for k in keys] for group, keys in navreg.groups().items()},
                     position="sidebar")
 PAGE = next(k for k, page in _PAGE_OBJ.items() if page is nav)
+PAGE_TITLE = next(p[2] for p in navreg.PAGES if p[0] == PAGE)
+ui.header(HEADER_SLOT, PAGE_TITLE, navreg.HEADER_SUBTITLES[PAGE], DEMO_BADGE)
 SHOW_INV_INPUTS = PAGE == "investice"          # investiční vstupy jen v sekci Investice
 
 
@@ -2798,6 +2801,7 @@ if PAGE == "dashboard":
             "Přehled půjčovny",
             "Souhrn výsledků sekcí na <b>ukázkových datech</b> – Dashboard nic nepřepočítává, čísla odpovídají "
             "sekcím, kam vedou odkazy.",
+            show_title=False,          # V3: název stránky je v záhlaví (Dashboard)
         )
         # Plán zakázek a kapacita: stejné funkce a výchozí nastavení jako při otevření sekcí
         _, dash_plan, _ = plan_jobs(jobs_df, machine_capacity, code_version)
@@ -3523,6 +3527,17 @@ if PAGE == "chybejici_udaje":
             else:
                 ui.dash_text("V datech nechybí žádný údaj, který výpočty používají.", muted=True)
 
+
+# Záhlaví: doplnit skutečný rozsah používaných dat (pronájmy, plán zakázek, servis) – stejný kalendář jako
+# Dashboard a Plánování kapacity. Jen zobrazení, nic se nepřepočítává jinak.
+def header_period() -> str:
+    _, hp_plan, _ = plan_jobs(jobs_df, machine_capacity, code_version)
+    hp_cal = cv.build(data_model, cv.job_starts_from_plan(jobs_df, hp_plan))
+    ends = [a.end for a in hp_cal.assignments] + [j.latest for j in hp_cal.open_jobs if j.latest is not None]
+    return f"Rozsah dat: dny plánu 1–{max(ends)}" if ends else ""
+
+
+ui.header(HEADER_SLOT, PAGE_TITLE, navreg.HEADER_SUBTITLES[PAGE], DEMO_BADGE, header_period())
 
 # Spuštění aktivní stránky (soubor stránky je jen značka – obsah vykreslil kód výše)
 nav.run()

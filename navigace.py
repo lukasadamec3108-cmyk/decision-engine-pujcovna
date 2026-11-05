@@ -30,6 +30,20 @@ PAGES = [
      "chybejici-udaje"),
 ]
 DEFAULT_PAGE = "dashboard"
+
+# Podtitulek v záhlaví stránky (redesign MALOSTROJE V3) – jedna krátká věta, co stránka ukazuje.
+HEADER_SUBTITLES = {
+    "dashboard": "Manažerský přehled – půjčovna, zakázky, kapacity a ekonomika",
+    "ekonomika": "Výsledek flotily za období – příspěvky, fixní náklady a konflikty",
+    "pronajem": "Ověření nového pronájmu – kapacita a ekonomika",
+    "zakazky": "Plán vlastních zakázek, termíny a vytížení strojů",
+    "strojovy_park": "Typy strojů, počty kusů a ekonomika jednoho kusu",
+    "kapacita": "Dostupnost strojů po dnech, konflikty a využití",
+    "rozhodovaci_centrum": "Porovnání požadavků – dopad na kapacitu a ekonomiku",
+    "investice": "Investiční model – doporučení, riziko a nákup strojů",
+    "nastaveni": "Uživatel, správa účtů a informace o datech",
+    "chybejici_udaje": "Co v datech chybí a co doplnit jako první",
+}
 KEYS = [p[0] for p in PAGES]
 
 # Sekce Investice: původní záložky 1–5 (stejné popisky)
