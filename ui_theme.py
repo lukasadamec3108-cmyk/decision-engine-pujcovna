@@ -60,6 +60,13 @@ PAGE_BG = "#FAFAFB"      # světlé pozadí hlavní plochy (= backgroundColor v 
 ACCENT = BRAND_RED       # akcent rozhraní (dříve tlumená oranžová #B45309)
 ACCENT_SOFT = BRAND_RED_SOFT  # podbarvení doporučené varianty
 CHART_HIGHLIGHT = "#B45309"   # zvýraznění v grafech zůstává oranžové (popisky grafů to tak uvádějí)
+# Tmavý levý panel (V2) – stejné hodnoty jako [theme.sidebar] v .streamlit/config.toml
+SIDE_BG = "#1D2025"          # pozadí panelu
+SIDE_BG_TOP = "#26292E"      # horní část panelu (jemný přechod)
+SIDE_SURFACE = "#26292E"     # plochy v panelu (ukázková data)
+SIDE_TEXT = "#E6E8EB"        # text panelu (kontrast 14:1 na pozadí)
+SIDE_MUTED = "#AEB3BA"       # méně výrazný text a ikony (kontrast 8:1)
+SIDE_LINE = "rgba(255,255,255,.09)"  # oddělovače v panelu
 UI_MUTED = "#4B5563"     # popisky a vysvětlivky (kontrast 7,6:1)
 UI_LINE = "#E3E6EA"      # rámečky a oddělovače
 UI_BG = "#F6F7F9"        # světlé plochy (sidebar, záhlaví tabulek)
@@ -127,26 +134,54 @@ def inject_css() -> None:
         [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p {{ color: {UI_MUTED} !important; }}
         [data-testid="stWidgetLabel"] p {{ color: {INK}; font-weight: 500; }}
 
-        /* Postranní panel */
-        [data-testid="stSidebar"] {{ background: {UI_BG}; border-right: 1px solid {UI_LINE}; }}
+        /* Postranní panel (V2: tmavý antracit podle návrhu MALOSTROJE; barvy i v [theme.sidebar]) */
+        [data-testid="stSidebar"] {{ background: linear-gradient(180deg, {SIDE_BG_TOP} 0, {SIDE_BG} 14rem);
+            border-right: none; }}
+        [data-testid="stSidebarHeader"] {{ padding: 1.4rem 1.2rem .6rem 1.2rem; height: auto; }}
+        [data-testid="stSidebarLogo"] {{ height: 2.9rem !important; max-width: 100%; width: auto; }}
+        [data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"] {{ color: {SIDE_MUTED} !important; }}
+        [data-testid="stSidebarNav"] {{ padding: 0 .9rem; }}
+        [data-testid="stNavSectionHeader"] {{ margin: .7rem 0 .2rem 0; padding: .65rem .55rem 0 .55rem;
+            border-top: 1px solid {SIDE_LINE}; }}
+        [data-testid="stSidebarNavItems"] > div:first-child [data-testid="stNavSectionHeader"] {{
+            border-top: none; margin-top: .2rem; padding-top: 0; }}
+        [data-testid="stNavSectionHeader"] p {{ color: {SIDE_TEXT} !important; font-weight: 700; font-size: .95rem;
+            letter-spacing: .01em; }}
+        [data-testid="stNavSectionHeader"] [data-testid="stIconMaterial"] {{ color: {SIDE_MUTED} !important; }}
+        [data-testid="stSidebarNavItems"] li {{ margin: 0 !important; }}
+        [data-testid="stSidebarNavLink"] {{ border-radius: 10px; padding: .42rem .8rem; margin: .06rem 0;
+            min-height: 0; line-height: 1.35; transition: background-color .15s ease; }}
+        [data-testid="stSidebarNavLink"] [data-testid="stIconMaterial"] {{ font-size: 1.2rem; }}
+        [data-testid="stSidebarNavLink"] p {{ color: {SIDE_MUTED} !important; font-size: .98rem; }}
+        [data-testid="stSidebarNavLink"] [data-testid="stIconMaterial"] {{ color: {SIDE_MUTED} !important; }}
+        [data-testid="stSidebarNavLink"]:hover {{ background: rgba(255,255,255,.06) !important; }}
+        [data-testid="stSidebarNavLink"]:hover p, [data-testid="stSidebarNavLink"]:hover [data-testid="stIconMaterial"] {{
+            color: {SIDE_TEXT} !important; }}
+        [data-testid="stSidebarNavLink"][aria-current="page"] {{ background: {BRAND_RED} !important;
+            box-shadow: 0 6px 16px rgba(196,47,45,.32); }}
+        [data-testid="stSidebarNavLink"][aria-current="page"] p {{ color: #FFFFFF !important; font-weight: 700; }}
+        [data-testid="stSidebarNavLink"][aria-current="page"] [data-testid="stIconMaterial"] {{ color: #FFFFFF !important; }}
+        [data-testid="stSidebarNavLink"]:focus-visible {{ outline: 2px solid #FFFFFF; outline-offset: 2px; }}
+        [data-testid="stSidebarNavSeparator"] {{ border-color: {SIDE_LINE} !important; margin: .8rem 1.2rem; }}
+        [data-testid="stSidebarUserContent"] {{ padding: .4rem 1.2rem 1.5rem 2.6rem; }}
         [data-testid="stSidebar"] h3 {{
             font-size: .74rem !important; text-transform: uppercase; letter-spacing: .06em;
-            color: {UI_MUTED} !important; border-top: 1px solid {UI_LINE};
+            color: {SIDE_MUTED} !important; border-top: 1px solid {SIDE_LINE};
             padding-top: .9rem !important; margin-top: .55rem !important;
         }}
-        .de-side-brand {{ display: flex; align-items: center; gap: .55rem; margin: -.4rem 0 .7rem 0; }}
-        .de-side-brand img {{ width: 30px; height: 30px; }}
-        .de-side-brand b {{ color: {INK}; font-size: .98rem; }}
-        .de-side-brand span {{ display: block; color: {UI_MUTED}; font-size: .74rem; }}
         .de-demo {{
-            background: #fff; border: 1px solid {UI_LINE}; border-left: 3px solid {ACCENT};
-            border-radius: 8px; padding: .35rem .6rem; font-size: .74rem; color: {UI_MUTED}; margin-bottom: .2rem;
+            background: {SIDE_SURFACE}; border: 1px solid {SIDE_LINE}; border-left: 3px solid {BRAND_RED};
+            border-radius: 8px; padding: .4rem .65rem; font-size: .76rem; color: {SIDE_MUTED}; margin-bottom: .2rem;
         }}
-        .de-demo b {{ color: {INK}; }}
+        .de-demo b {{ color: {SIDE_TEXT}; }}
+        [data-testid="stSidebar"] [data-testid="stBaseButton-secondary"] {{ background: transparent;
+            border-color: rgba(255,255,255,.22); color: {SIDE_TEXT}; }}
+        [data-testid="stSidebar"] [data-testid="stBaseButton-secondary"]:hover {{ border-color: {BRAND_RED};
+            color: #FFFFFF; }}
         /* Čitelnost: Streamlit dává popiskům průhlednost 0,6 a krajním hodnotám posuvníku světlou barvu */
-        [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ opacity: 1; color: {UI_MUTED}; }}
+        [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ opacity: 1; color: {SIDE_MUTED}; }}
         [data-testid="stSidebar"] [data-testid="stSliderTickBar"],
-        [data-testid="stSidebar"] [data-testid="stSliderTickBar"] p {{ color: {UI_MUTED} !important; }}
+        [data-testid="stSidebar"] [data-testid="stSliderTickBar"] p {{ color: {SIDE_MUTED} !important; }}
         /* Panel „Nastavení investičního scénáře“ na stránce Investice (stejné nadpisy skupin jako dřív v panelu) */
         .st-key-de_inv_inputs h3 {{
             font-size: .74rem !important; text-transform: uppercase; letter-spacing: .06em;
@@ -166,10 +201,10 @@ def inject_css() -> None:
             padding-top: .8rem; margin-top: .5rem; margin-bottom: .8rem;
         }}
         .de-user {{
-            font-size: .85rem; color: {UI_MUTED}; border-top: 1px solid {UI_LINE};
+            font-size: .85rem; color: {SIDE_MUTED}; border-top: 1px solid {SIDE_LINE};
             padding-top: .8rem; margin-top: .6rem; margin-bottom: .4rem;
         }}
-        .de-user b {{ color: {INK}; }}
+        .de-user b {{ color: {SIDE_TEXT}; }}
 
         /* Záložky */
         .stTabs [data-baseweb="tab-list"] {{ gap: .15rem; border-bottom: 1px solid {UI_LINE}; overflow-x: auto; }}
@@ -396,14 +431,6 @@ def sidebar_amount(container, amount: str, note: str) -> None:
     """
     container.markdown(
         f'<div class="de-amount"><b>{html.escape(amount)}</b> {html.escape(note)}</div>',
-        unsafe_allow_html=True,
-    )
-
-
-def sidebar_brand(title: str, subtitle: str) -> None:
-    st.sidebar.markdown(
-        f'<div class="de-side-brand"><img src="{mark_src()}" alt=""><div><b>{html.escape(title)}</b>'
-        f"<span>{html.escape(subtitle)}</span></div></div>",
         unsafe_allow_html=True,
     )
 

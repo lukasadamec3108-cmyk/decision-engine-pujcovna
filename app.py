@@ -133,7 +133,6 @@ ui.inject_css()
 
 APP_TITLE = "Decision Engine"
 APP_SUBTITLE = "Investice a provoz půjčovny"
-APP_FOCUS = "Půjčovna malostrojů"
 DEMO_BADGE = "Ukázková data"
 
 # Přihlášení (modul auth.py). Údaje jsou jen ve Streamlit secrets:
@@ -286,7 +285,10 @@ def _inv_input(container, widget: str, key: str, label: str, default_value, defa
 # Investiční vstupy jsou na stránce Investice v panelu „Nastavení investičního scénáře“ nad výsledky.
 # Jeho části se vytvoří dopředu, aby šly plnit na místech, kde je kód potřebuje – pořadí výpočtů
 # tak zůstává beze změny. Každý vstup existuje jen jednou (stejné klíče jako dosud).
-ui.sidebar_brand(APP_TITLE, APP_FOCUS)
+# Redesign MALOSTROJE (V2): značka nad navigací – vlastní neutrální ikona a nápis MALOSTROJE (ne firemní logo).
+# Při sbaleném panelu (např. na mobilu) se v horní liště zobrazí jen ikona.
+st.logo(str(ui.ASSETS / "malostroje_wordmark.svg"), size="large",
+        icon_image=str(ui.ASSETS / "malostroje_icon.svg"))
 st.sidebar.markdown(
     '<div class="de-demo"><b>Ukázková data</b> · všechny hodnoty jsou fiktivní</div>',
     unsafe_allow_html=True,
