@@ -49,11 +49,17 @@ RISK_CZ = {"High": "Vysoké", "Medium": "Střední", "Low": "Nízké"}
 # VIZUÁLNÍ IDENTITA APLIKACE
 # ==================================================
 # Barvy rozhraní (lišta, nadpisy, akcent, popisky). Barvy grafů výše zůstávají beze změny.
+# Redesign MALOSTROJE (V1): barvy podle schváleného referenčního návrhu (změřené z obrázku).
+# Kontrast (WCAG): červená na bílé 5,5:1, bílé písmo na červené 5,5:1, na podbarvení 4,9:1.
 
 INK = "#1F2933"          # hlavní text a nadpisy
-BAR = "#1F2329"          # antracitová horní lišta
-ACCENT = "#B45309"       # tlumená oranžová – akcent (kontrast 5,0:1 na bílé i s bílým textem)
-ACCENT_SOFT = "#FDF4EA"  # jemné podbarvení doporučené varianty
+BAR = "#1D2025"          # antracit – horní lišta (stejný tón jako tmavý panel návrhu)
+BRAND_RED = "#C42F2D"    # MALOSTROJE – červená (aktivní prvky, odkazy, tlačítka)
+BRAND_RED_SOFT = "#FBEDED"  # jemné červené podbarvení
+PAGE_BG = "#FAFAFB"      # světlé pozadí hlavní plochy (= backgroundColor v .streamlit/config.toml)
+ACCENT = BRAND_RED       # akcent rozhraní (dříve tlumená oranžová #B45309)
+ACCENT_SOFT = BRAND_RED_SOFT  # podbarvení doporučené varianty
+CHART_HIGHLIGHT = "#B45309"   # zvýraznění v grafech zůstává oranžové (popisky grafů to tak uvádějí)
 UI_MUTED = "#4B5563"     # popisky a vysvětlivky (kontrast 7,6:1)
 UI_LINE = "#E3E6EA"      # rámečky a oddělovače
 UI_BG = "#F6F7F9"        # světlé plochy (sidebar, záhlaví tabulek)
@@ -310,7 +316,7 @@ def inject_css() -> None:
         .de-intro {{ color: {INK}; font-size: 1rem; margin: -.2rem 0 .2rem 0; }}
         .de-hint {{ color: #374151; font-size: .94rem; line-height: 1.5; margin: -.3rem 0 1rem 0; }}
         .de-insight {{
-            border-left: 3px solid {ACCENT}; padding: .15rem 0 .15rem .85rem;
+            border-left: 3px solid {BAR}; padding: .15rem 0 .15rem .85rem;   /* neutrální; varování = .bad (červená) */
             color: {INK}; font-size: 1rem; margin: 0 0 1.4rem 0;
         }}
         .de-insight b {{ color: {INK}; }}
@@ -727,11 +733,16 @@ def dash_text(text_html: str, muted: bool = False) -> None:
 
 
 _TONES = {"accent": (ACCENT, ACCENT_SOFT), "good": ("#166534", "#E8F5EC"), "bad": (BAD_TEXT, BAD_BG),
-          "neutral": ("#334155", "#EEF2F7")}
+          "neutral": ("#334155", "#EEF2F7"), "warn": (WARN_TEXT, WARN_BG)}
+# Barva proužku karty: červená jen u problémů („bad“). Akcent (červená značky) má proužek antracitový,
+# aby se doporučení nepletlo s problémem; „warn“ = jantarová (např. střední priorita).
+_STRIPES = {"accent": BAR}
+
+
 def _tone_css(scope: str) -> str:
     return "\n".join(
         f"{scope} .dd-ico-box.{name} {{ color: {fg}; background: {bg}; }}\n"
-        f'{scope} [class*="st-key-de_dash_"][class*="_{name}"] {{ border-left: 4px solid {fg} !important; }}'
+        f'{scope} [class*="st-key-de_dash_"][class*="_{name}"] {{ border-left: 4px solid {_STRIPES.get(name, fg)} !important; }}'
         for name, (fg, bg) in _TONES.items()
     )
 

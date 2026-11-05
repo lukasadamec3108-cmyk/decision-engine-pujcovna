@@ -1961,7 +1961,7 @@ if PAGE == "zakazky":                                     # sekce Vlastní zaká
                 x=machine_usage_df["utilization"],
                 y=usage_labels,
                 orientation="h",
-                marker=dict(color=[ui.ACCENT if i == 0 else ui.BLUE for i in range(len(machine_usage_df))],
+                marker=dict(color=[ui.CHART_HIGHLIGHT if i == 0 else ui.BLUE for i in range(len(machine_usage_df))],
                             line=dict(color="#fff", width=2)),
                 text=[fmt_pct(v) for v in machine_usage_df["utilization"]], textposition="outside",
                 cliponaxis=False, customdata=machine_usage_df["used_days"],
@@ -3488,7 +3488,7 @@ if PAGE == "chybejici_udaje":
             if not prio["groups"]:
                 ui.dash_text("Žádné údaje s touto prioritou.", muted=True)
             for i, grp in enumerate(prio["groups"]):
-                with ui.dash_section(f"dg_{prio['priority'][:3]}_{i}_" + {"bad": "bad", "warn": "accent"}.get(
+                with ui.dash_section(f"dg_{prio['priority'][:3]}_{i}_" + {"bad": "bad", "warn": "warn"}.get(
                         prio["tone"], "neutral")):
                     ui.dash_section_head("alert" if prio["tone"] == "bad" else "spark", grp["label"],
                                          html.escape(f"{grp['count_text']} · {grp['status_text']}"),
