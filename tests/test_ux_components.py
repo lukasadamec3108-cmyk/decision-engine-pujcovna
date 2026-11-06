@@ -154,3 +154,34 @@ def test_login_screen_shows_malostroje():
     at.run()
     raw = " ".join(m.value for m in at.main.markdown)
     assert "MALOSTROJE" in raw and "Decision Engine" not in raw and 'class="de-header' not in raw
+
+
+# ---------------------------------------------------------------------------
+# Redesign MALOSTROJE V4 – Dashboard podle předlohy (jen vzhled)
+# ---------------------------------------------------------------------------
+
+def test_dash_bar_has_no_digits_and_clamps_share():
+    bar = ui.dash_bar(0.49, "accent")
+    assert bar.count("<i></i>") == 49 and 'class="dd-bar accent"' in bar
+    assert not re.findall(r"\d", bar)                                       # regrese čísel se nemění
+    assert ui.dash_bar(None, "dark") == "" and ui.dash_bar(1.7, "dark").count("<i></i>") == 100
+
+
+def test_header_uses_original_art_when_present(tmp_path, monkeypatch):
+    assert ui.header_art_src().startswith("data:image/svg+xml")             # bez původního souboru zástupná
+    monkeypatch.setattr(ui, "ASSETS", tmp_path)
+    (tmp_path / "zahlavi_stroj.svg").write_text("<svg/>", encoding="utf-8")
+    (tmp_path / "zahlavi_original.png").write_bytes(b"\x89PNG")
+    assert ui.header_art_src().startswith("data:image/png;base64,")
+
+
+def test_dashboard_v4_layout_keeps_values_rows_and_links():
+    at = open_page(app(), "dashboard")
+    raw = markdown(at)
+    assert 'class="dd-kpi alert"' in raw                                     # existující konflikt → růžová karta
+    assert raw.count('class="dd-bar ') == 4                                  # pruhy: pronájmy, zakázky, servis, volná
+    for text in ("Nejvytíženější stroj", "Zakázky po termínu", "Zisk zakázek po penále", "Doporučená sestava",
+                 "předběžné rezervace", "stav k dnešku nelze určit", "nejde o čistý zisk", "Souhrn výsledků sekcí",
+                 "Doporučení a upozornění"):
+        assert text in raw, text
+    assert ".dd-kpi.alert" in " ".join(m.value for m in at.main.markdown)

@@ -418,8 +418,17 @@ def brand_icon_src() -> str:
     return "data:image/svg+xml;base64," + base64.b64encode(svg).decode()
 
 
+# Původní grafika záhlaví od majitele (bagr a krajina z předlohy). Dokud v assets není, použije se vlastní
+# zástupná vektorová ilustrace. Stačí soubor nahrát pod jedním z těchto názvů – kód se nemění.
+HEADER_ART_ORIGINAL = {"zahlavi_original.webp": "image/webp", "zahlavi_original.jpg": "image/jpeg",
+                       "zahlavi_original.png": "image/png"}
+
+
 def header_art_src() -> str:
-    """Vlastní vektorová ilustrace stavebního stroje pro záhlaví (kreslená od nuly, bez cizí grafiky)."""
+    """Grafika záhlaví jako data URI: původní soubor z assets, jinak vlastní zástupná ilustrace stroje."""
+    for name, mime in HEADER_ART_ORIGINAL.items():
+        if (ASSETS / name).is_file():
+            return f"data:{mime};base64," + base64.b64encode((ASSETS / name).read_bytes()).decode()
     svg = (ASSETS / "zahlavi_stroj.svg").read_bytes()
     return "data:image/svg+xml;base64," + base64.b64encode(svg).decode()
 
@@ -718,6 +727,9 @@ DASH_ICONS = {
     "alert": '<path d="M12 4l9 16H3z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.2" r=".6"/>',
     "spark": '<path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><circle cx="12" cy="12" r="3"/>',
     "route": '<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h6a4 4 0 0 0 0-8H10a4 4 0 0 1 0-8h6"/>',
+    "trend": '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+    "sliders": '<path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/>'
+               '<circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/>',
 }
 
 
@@ -735,9 +747,11 @@ def dash_kpis(cards: list) -> None:
     """Hlavní KPI karty. cards = [dict(icon, label, value, sub, chip, tone)] – value/sub/chip jsou hotové HTML.
 
     tone (barva ikony): "accent" (výchozí), "neutral", "good", "bad" – barva jen tam, kde nese význam.
+    card: volitelná třída karty – "alert" = růžová karta s červenou hodnotou (např. existující konflikt).
     """
     items = "".join(
-        f'<div class="dd-kpi"><div class="dd-kpi-top"><span class="dd-ico-box {c.get("tone", "accent")}">'
+        f'<div class="dd-kpi{" " + c["card"] if c.get("card") else ""}"><div class="dd-kpi-top">'
+        f'<span class="dd-ico-box {c.get("tone", "accent")}">'
         f'{dash_icon(c["icon"])}</span><span class="dd-lbl">{html.escape(c["label"])}</span></div>'
         f'<div class="dd-val{" pair" if c.get("pair") else ""}{" " + c["cls"] if c.get("cls") else ""}">'
         f'{c["value"]}</div>{c.get("chip", "")}'
@@ -773,12 +787,29 @@ def dash_section_head(icon: str, title: str, caption: str = "", tone: str = "acc
     )
 
 
+def dash_bar(share, tone: str) -> str:
+    """Vodorovný ukazatel podílu 0–1 (jen zobrazení již spočteného podílu).
+
+    Výplň tvoří prázdné prvky po jednom procentu – v HTML tak nepřibude žádná číslice (regresní kontrola
+    porovnává všechny číslice na stránce). Bez podílu (např. nulová kapacita) se ukazatel nevykreslí."""
+    if share is None:
+        return ""
+    n = max(0, min(100, round(100 * share)))
+    return f'<span class="dd-bar {tone}" aria-hidden="true">{"<i></i>" * n}</span>'
+
+
 def dash_rows(rows: list) -> None:
-    """Řádky „popisek – hodnota“: rows = [(popisek, hodnota HTML, poznámka HTML nebo ""[, zvýraznit])]."""
+    """Řádky „popisek – hodnota“: rows = [(popisek, hodnota HTML, poznámka HTML nebo ""[, zvýraznit[, ukazatel]])].
+
+    ukazatel = (podíl 0–1 nebo None, tón: "dark" / "accent" / "mid" / "light") – vodorovný pruh mezi popiskem
+    a hodnotou (Dashboard: rozdělení kapacity)."""
     body = "".join(
-        f'<div class="dd-row{" key" if len(r) > 3 and r[3] else ""}"><span class="l">{html.escape(r[0])}'
+        f'<div class="dd-row{" key" if len(r) > 3 and r[3] else ""}{" has-bar" if len(r) > 4 else ""}">'
+        f'<span class="l">{html.escape(r[0])}'
         + (f'<small>{r[2]}</small>' if r[2] else "")
-        + f'</span><span class="v">{r[1]}</span></div>'
+        + "</span>"
+        + (dash_bar(*r[4]) if len(r) > 4 else "")
+        + f'<span class="v">{r[1]}</span></div>'
         for r in rows
     )
     st.markdown(f'<div class="dd-rows">{body}</div>', unsafe_allow_html=True)
@@ -913,7 +944,138 @@ def dash_css(key: str) -> str:
 """
 
 
-DASHBOARD_CSS = dash_css(DASH_KEY)
+def dashboard_layout_css(key: str = DASH_KEY) -> str:
+    """Redesign MALOSTROJE V4 – rozvržení Dashboardu podle předlohy (jen vzhled, platí jen na Dashboardu).
+
+    Širší obsah, záhlaví bez rámečku s grafikou přes horní část, větší KPI karty (růžová karta při konfliktu),
+    pruhy kapacity v Provozu, zvýrazněný zisk v Ekonomice a karty doporučení. Pronájem strojů používá jen
+    dash_css (beze změny)."""
+    D = f".st-key-{key}"
+    PAGE = f'.block-container:has({D})'
+    PINK_LINE = "#F3D3D3"
+    SHADOW = "0 2px 10px rgba(16,24,40,.07), 0 1px 2px rgba(16,24,40,.05)"
+    return f"""
+<style>
+/* Plocha stránky: obsah od panelu skoro k pravému okraji jako v předloze */
+{PAGE} {{ max-width: none; padding-top: 1.4rem; padding-left: 3.6rem; padding-right: .75rem; }}
+.stApp:has({D}) [data-testid="stHeader"] {{ background: transparent; }}
+/* Záhlaví: bez rámečku, velký název, grafika přes celou horní pravou část, rozsah dat vpravo */
+@media (min-width: 1101px) {{
+  {PAGE} .de-ph {{ background: transparent; border-radius: 0; overflow: visible; min-height: 9.6rem;
+      padding: 3.3rem 0 0 3.45rem; margin: 0 0 .75rem 0; }}
+  {PAGE} .de-ph::before {{ content: ""; position: absolute; top: -4.5rem; bottom: -1.4rem; right: -.75rem; width: 70%;
+      pointer-events: none; background: radial-gradient(120% 90% at 70% 35%, #E4E6E9 0%, #EDEEF0 45%, rgba(250,250,251,0) 80%);
+      -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 35%); mask-image: linear-gradient(90deg, transparent 0%, #000 35%); }}
+  {PAGE} .de-ph-art {{ top: -4.5rem; bottom: -1.2rem; right: -.75rem; width: 66%; background-size: auto 92%;
+      background-position: right 33% bottom 6%; z-index: 0;
+      -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 30%), linear-gradient(180deg, #000 62%, transparent 100%);
+      -webkit-mask-composite: source-in; mask-image: linear-gradient(90deg, transparent 0%, #000 30%),
+      linear-gradient(180deg, #000 62%, transparent 100%); mask-composite: intersect; opacity: .9; }}
+  {PAGE} .de-ph-text {{ position: static; max-width: 46%; }}
+  {PAGE} .de-ph-title {{ position: relative; font-size: 3.45rem; line-height: 1.02; letter-spacing: -.015em; color: #16181C; }}
+  {PAGE} .de-ph-sub {{ position: relative; font-size: 1.22rem; color: #2B2F36; margin-top: .35rem; white-space: nowrap; }}
+  {PAGE} .de-ph-chips {{ position: absolute; right: 1.1rem; top: 5.35rem; margin: 0; z-index: 1; flex-wrap: nowrap; }}
+  {PAGE} .de-ph-chip {{ font-size: 1.12rem; padding: .62rem 1.1rem; border-radius: 12px; border-color: transparent;
+      box-shadow: {SHADOW}; gap: .7rem; }}
+  {PAGE} .de-ph-chip.demo {{ font-size: .86rem; padding: .45rem .8rem; }}
+  {PAGE} .de-ph-ico {{ width: 1.35rem; height: 1.35rem; }}
+}}
+/* KPI karty */
+{D} .dd-kpis {{ gap: 1.05rem; margin: 0 0 1.95rem 0; align-items: stretch; }}
+{D} .dd-kpi {{ border: 1px solid #EDEEF0; border-radius: 16px; padding: 1.25rem 1.5rem 1rem 1.5rem; box-shadow: {SHADOW};
+             gap: .2rem; min-height: 10.3rem; }}
+{D} .dd-kpi-top {{ gap: .95rem; min-height: 2.6rem; }}
+{D} .dd-kpi .dd-ico-box {{ background: transparent; width: 2.4rem; height: 2.4rem; }}
+{D} .dd-kpi .dd-ico {{ width: 2.25rem; height: 2.25rem; stroke-width: 1.7; }}
+{D} .dd-kpi .dd-ico-box.neutral {{ color: #2B2F36; }}
+{D} .dd-kpi .dd-ico-box.accent, {D} .dd-kpi .dd-ico-box.bad {{ color: {BRAND_RED}; }}
+{D} .dd-lbl {{ font-size: .98rem; font-weight: 700; letter-spacing: .02em; color: #1D2025; line-height: 1.3; }}
+{D} .dd-val {{ font-size: 2.55rem; font-weight: 800; color: #16181C; margin-top: .4rem; line-height: 1.05; }}
+{D} .dd-val.pair {{ font-size: 2.1rem; column-gap: .35rem; }}
+{D} .dd-val small {{ font-size: 1.25rem; font-weight: 700; color: #2B2F36; margin-left: .2rem; }}
+{D} .dd-kpi > .dd-chip {{ background: transparent; padding: 0; font-size: .98rem; font-weight: 500; color: {UI_MUTED};
+                       border-radius: 0; white-space: normal; margin-top: .2rem; }}
+{D} .dd-sub {{ font-size: .98rem; color: {UI_MUTED}; border-top: none; padding-top: 0; margin-top: .2rem; line-height: 1.4; }}
+{D} .dd-sub details.de-more {{ margin-top: .15rem; font-size: .84rem; }}
+{D} .dd-kpi.alert {{ background: {BRAND_RED_SOFT}; border-color: {PINK_LINE}; }}
+{D} .dd-kpi.alert .dd-val, {D} .dd-kpi.alert .dd-val small {{ color: {BRAND_RED}; }}
+{D} .dd-kpi.alert > .dd-chip {{ color: {BRAND_RED}; font-weight: 600; }}
+/* Sekce Provoz a Ekonomika */
+{D} [class*="st-key-de_dash_"] {{ border-radius: 16px !important; border-color: #EDEEF0 !important; box-shadow: {SHADOW};
+                                padding: 1.45rem 1.55rem 1.1rem 1.55rem !important; }}
+{D} .dd-head {{ border-bottom: none; padding-bottom: .55rem; gap: 1.1rem; align-items: center; }}
+{D} .dd-head .dd-ico-box {{ background: transparent; width: 2.6rem; height: 2.6rem; }}
+{D} .dd-head .dd-ico {{ width: 2.3rem; height: 2.3rem; stroke-width: 1.6; }}
+{D} .dd-head .dd-ico-box.neutral, {D} .dd-head .dd-ico-box.good {{ color: #2B2F36; }}
+{D} .dd-head .dd-ico-box.accent, {D} .dd-head .dd-ico-box.bad {{ color: {BRAND_RED}; }}
+{D} .dd-title {{ font-size: 1.36rem; font-weight: 700; color: #16181C; line-height: 1.25; }}
+{D} .dd-cap {{ font-size: .98rem; color: #2B2F36; }}
+{D} .dd-row {{ padding: .55rem .45rem; font-size: 1.06rem; border-top-color: #E6E8EB; align-items: center; }}
+{D} .dd-row .l {{ font-weight: 500; color: #16181C; }}
+{D} .dd-row .v {{ font-weight: 700; color: #16181C; }}
+{D} .dd-row .l {{ line-height: 1.25; }}
+{D} .dd-row .l small {{ font-size: .8rem; color: #374151; margin-top: .1rem; }}
+{D} .dd-row.has-bar {{ display: grid; grid-template-columns: minmax(10rem, 1fr) minmax(6rem, 1.15fr) minmax(6.5rem, auto);
+                     column-gap: 1.6rem; padding: .42rem .45rem; }}
+{D} .dd-row.has-bar .l {{ font-weight: 700; }}
+{D} .dd-bar {{ display: flex; height: .6rem; border-radius: 999px; background: #E5E7EA; overflow: hidden; align-self: end;
+             margin-bottom: .32rem; }}
+{D} .dd-bar i {{ flex: 0 0 1%; height: 100%; }}
+{D} .dd-bar.dark i {{ background: #3A3E44; }}
+{D} .dd-bar.accent i {{ background: {BRAND_RED}; }}
+{D} .dd-bar.mid i {{ background: #5D6168; }}
+{D} .dd-bar.light i {{ background: #B5B9BF; }}
+{D} .dd-row.key {{ background: transparent; border-radius: 0; padding: .62rem .45rem; margin: 0; border-top-color: #E6E8EB; }}
+{D} .dd-row.key .l, {D} .dd-row.key .v {{ font-size: 1.06rem; font-weight: 700; }}
+{D} .dd-row.key.has-bar .l {{ font-weight: 700; }}
+{D} .st-key-de_dash_ekonomika .dd-row.key {{ background: {BRAND_RED_SOFT}; border-radius: 8px; border-top-color: transparent;
+                                           padding: .72rem .6rem; margin: .25rem 0; }}
+{D} .st-key-de_dash_ekonomika .dd-row.key .l {{ font-size: 1.12rem; font-weight: 800; }}
+{D} .st-key-de_dash_ekonomika .dd-row.key .v {{ font-size: 1.12rem; font-weight: 800; color: {BRAND_RED}; }}
+/* Doporučení a upozornění */
+{D} .dd-group {{ font-size: 1.72rem; font-weight: 700; letter-spacing: -.005em; text-transform: none; color: #16181C;
+               margin: 1.7rem 0 .55rem 0; }}
+{D} .st-key-dd_alerts [class*="st-key-de_dash_"] {{ border-left: 1px solid #EDEEF0 !important; padding: 1.25rem 1.4rem 1rem 1.4rem !important; }}
+{D} .st-key-dd_alerts .dd-title {{ font-size: 1.36rem; }}
+{D} .st-key-de_dash_konflikty_bad {{ background: {BRAND_RED_SOFT} !important; border-color: {PINK_LINE} !important;
+                                    border-left-color: {PINK_LINE} !important; }}
+{D} .st-key-de_dash_konflikty_bad .dd-title {{ color: {BRAND_RED}; }}
+{D} .st-key-de_dash_konflikty_bad [class*="st-key-dd_links_"],
+{D} .st-key-de_dash_konflikty_bad ul.dd-list li {{ border-top-color: {PINK_LINE}; }}
+{D} .st-key-de_dash_konflikty_bad .dd-chip.bad {{ background: #fff; }}
+{D} .dd-kv .val {{ font-size: 1.08rem; }}
+{D} .dd-kv .s, {D} ul.dd-list li {{ font-size: .95rem; }}
+/* Úvodní poznámka Dashboardu je až pod obsahem (předloha nad kartami nic nemá) */
+{D} .de-tab-intro {{ margin: 1rem 0 .2rem 0; font-size: .9rem; }}
+@media (max-width: 1100px) {{
+  {PAGE} {{ padding-left: 2rem; padding-right: 1rem; }}
+  {D} .dd-kpi {{ min-height: 0; }}
+}}
+@media (max-width: 900px) {{
+  {D} .dd-row.has-bar {{ grid-template-columns: minmax(0, 1fr) auto; row-gap: .3rem; }}
+  {D} .dd-row.has-bar .dd-bar {{ grid-column: 1 / -1; grid-row: 2; margin-bottom: .1rem; }}
+}}
+@media (max-width: 640px) {{
+  {PAGE} {{ padding-left: 1rem; padding-right: 1rem; }}
+  {D} .dd-kpi {{ padding: .9rem .9rem; border-radius: 12px; }}
+  {D} .dd-kpi .dd-ico-box {{ width: 1.7rem; height: 1.7rem; }}
+  {D} .dd-kpi .dd-ico {{ width: 1.55rem; height: 1.55rem; }}
+  {D} .dd-lbl {{ font-size: .72rem; }}
+  {D} .dd-val, {D} .dd-val.pair {{ font-size: 1.5rem; margin-top: .3rem; }}
+  {D} .dd-val small {{ font-size: .85rem; }}
+  {D} .dd-kpi > .dd-chip, {D} .dd-sub {{ font-size: .8rem; }}
+  {D} .dd-title, {D} .st-key-dd_alerts .dd-title {{ font-size: 1.12rem; }}
+  {D} .dd-head .dd-ico-box {{ width: 2rem; height: 2rem; }}
+  {D} .dd-head .dd-ico {{ width: 1.8rem; height: 1.8rem; }}
+  {D} .dd-row, {D} .dd-row.key .l, {D} .dd-row.key .v {{ font-size: .95rem; }}
+  {D} .dd-group {{ font-size: 1.3rem; }}
+  {D} [class*="st-key-de_dash_"] {{ padding: 1rem 1rem .8rem 1rem !important; }}
+}}
+</style>
+"""
+
+
+DASHBOARD_CSS = dash_css(DASH_KEY) + dashboard_layout_css(DASH_KEY)
 
 
 

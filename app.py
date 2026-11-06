@@ -2797,12 +2797,6 @@ if PAGE == "zakazky":
 if PAGE == "dashboard":
     st.markdown(ui.DASHBOARD_CSS, unsafe_allow_html=True)
     with ui.tab_container("dashboard"):
-        ui.tab_header(
-            "Přehled půjčovny",
-            "Souhrn výsledků sekcí na <b>ukázkových datech</b> – Dashboard nic nepřepočítává, čísla odpovídají "
-            "sekcím, kam vedou odkazy.",
-            show_title=False,          # V3: název stránky je v záhlaví (Dashboard)
-        )
         # Plán zakázek a kapacita: stejné funkce a výchozí nastavení jako při otevření sekcí
         _, dash_plan, _ = plan_jobs(jobs_df, machine_capacity, code_version)
         dash_sum = sch.summary(dash_plan)
@@ -2838,38 +2832,45 @@ if PAGE == "dashboard":
             dict(icon="coins", label="Ekonomický výsledek", tone="accent",
                  value=fmt_czk(dash_sum["profit_after_penalty"]),
                  chip=ui.dash_chip("dílčí údaj – jen vlastní zakázky", "info"),
-                 sub="zisk vlastních zakázek po penále, včetně zakázek v kapacitním konfliktu · nejde o čistý zisk "
-                     "půjčovny",
                  more_summary="Kde je celý výsledek",
-                 more="Částka vychází z plánu vlastních zakázek; jisté a konfliktní zakázky rozlišuje stránka "
-                      "Ekonomika flotily."),
+                 more="zisk vlastních zakázek po penále, včetně zakázek v kapacitním konfliktu · nejde o čistý zisk "
+                      "půjčovny. Částka vychází z plánu vlastních zakázek; jisté a konfliktní zakázky rozlišuje "
+                      "stránka Ekonomika flotily."),
             dict(icon="truck", label="Pronájmy a zakázky", tone="neutral",
                  pair=True,
                  value=(f"<span>{dash_confirmed}<small>{dash_word(dash_confirmed, 'pronájem', 'pronájmy', 'pronájmů')}</small></span> "
                         f"<span>· {dash_sum['scheduled']}<small>{dash_word(dash_sum['scheduled'], 'zakázka', 'zakázky', 'zakázek')}</small></span>"),
-                 sub=f"potvrzené pronájmy a zakázky v plánu · +{cv.plural(dash_tentative, 'předběžná rezervace', 'předběžné rezervace', 'předběžných rezervací')} · "
-                     "stav k dnešku nelze určit"),
+                 sub="potvrzené pronájmy a zakázky v plánu",
+                 more_summary="Podrobnosti",
+                 more=f"+{cv.plural(dash_tentative, 'předběžná rezervace', 'předběžné rezervace', 'předběžných rezervací')} · "
+                      "stav k dnešku nelze určit"),
             dict(icon="alert", label="Kapacitní konflikty", tone="bad" if n_dash_conf else "good",
+                 card="alert" if n_dash_conf else "",
                  value=f"{n_dash_conf}<small>{dash_word(n_dash_conf, 'den', 'dny', 'dní')}</small>",
                  chip=ui.dash_chip("vyžaduje řešení", "bad") if n_dash_conf else ui.dash_chip("bez konfliktu", "good"),
-                 sub=("bez konfliktu" if not n_dash_conf else "dny " + cv.days_text(dash_cap["conflict_days"]))
-                     + f" · všechny stroje, {dash_period}"),
+                 more_summary="Které dny",
+                 more=("bez konfliktu" if not n_dash_conf else "dny " + cv.days_text(dash_cap["conflict_days"]))
+                      + f" · všechny stroje, {dash_period}"),
         ])
 
         # ---- 2. Provoz a ekonomika ----------------------------------------------------------------
-        col_op, col_ec = st.columns(2, gap="medium")
+        col_op, col_ec = st.columns([1.13, 1], gap="small")
         with col_op, ui.dash_section("provoz"):
-            ui.dash_section_head("route", "Provoz půjčovny a vlastních zakázek",
+            ui.dash_section_head("truck", "Provoz půjčovny a vlastních zakázek",
                                  f"Obsazenost strojů a plán zakázek · {dash_period}", tone="neutral")
+            dash_share = lambda v: v / dash_capacity if dash_capacity else None   # jen šířka pruhu (= dash_pct)
             ui.dash_rows([
                 ("Pronájmy", f"{fmt_num(dash_use['rental'])} strojodnů",
-                 f"{dash_pct(dash_use['rental'])} kapacity · potvrzené rezervace"),
+                 f"{dash_pct(dash_use['rental'])} kapacity · potvrzené rezervace", False,
+                 (dash_share(dash_use["rental"]), "dark")),
                 ("Vlastní zakázky", f"{fmt_num(dash_use['job'])} strojodnů",
-                 f"{dash_pct(dash_use['job'])} kapacity · podle plánu zakázek"),
+                 f"{dash_pct(dash_use['job'])} kapacity · podle plánu zakázek", False,
+                 (dash_share(dash_use["job"]), "accent")),
                 ("Servis", f"{fmt_num(dash_use['maintenance'])} strojodnů",
-                 f"{dash_pct(dash_use['maintenance'])} kapacity · stroj nedostupný"),
+                 f"{dash_pct(dash_use['maintenance'])} kapacity · stroj nedostupný", False,
+                 (dash_share(dash_use["maintenance"]), "mid")),
                 ("Volná kapacita", f"{fmt_num(dash_use['free'])} strojodnů", f"{dash_pct(dash_use['free'])} kapacity",
-                 True),
+                 True, (dash_share(dash_use["free"]), "light")),
                 ("Nejvytíženější stroj", html.escape(dash_cap["busiest"] or "–"),
                  (fmt_pct(dash_cap["busiest_share"], 0) + " obsazenost vč. servisu")
                  if dash_cap["busiest_share"] is not None else ""),
@@ -2915,7 +2916,7 @@ if PAGE == "dashboard":
         with st.container(key="dd_alerts"):        # na užších obrazovkách karty pod sebou (CSS)
             col_inv, col_cap, col_dc = st.columns(3, gap="medium")
         with col_inv, ui.dash_section("investice_accent"):
-            ui.dash_section_head("spark", "Investiční doporučení", tone="accent")
+            ui.dash_section_head("trend", "Investiční doporučení", tone="accent")
             if purchase_best["units"] > 0:
                 dash_set = " · ".join(f"{k}× {name}" if k > 1 else name for name, k in purchase_best["counts"].items())
                 dash_set_sub = (f"{fmt_czk(purchase_best['profit'])} měsíčně · investice "
@@ -2949,7 +2950,7 @@ if PAGE == "dashboard":
             with ui.dash_links("konflikty"):
                 page_link("kapacita", "Otevřít kalendář kapacity")
         with col_dc, ui.dash_section("rozhodovaci_centrum_neutral"):
-            ui.dash_section_head("route", "Rozhodovací centrum", tone="neutral")
+            ui.dash_section_head("sliders", "Rozhodovací centrum", tone="neutral")
             if dash_requests:
                 dash_res = planner_result(data_version, code_version, tuple(sorted(dash_starts.items())),
                                           pv.freeze(dash_requests))
@@ -2971,6 +2972,13 @@ if PAGE == "dashboard":
             with ui.dash_links("rozhodovaci_centrum"):
                 page_link("rozhodovaci_centrum")
                 page_link("pronajem", "Nový pronájem")
+        # V4: úvodní poznámka je pod obsahem – předloha nad kartami nic nemá; text se nemění
+        ui.tab_header(
+            "Přehled půjčovny",
+            "Souhrn výsledků sekcí na <b>ukázkových datech</b> – Dashboard nic nepřepočítává, čísla odpovídají "
+            "sekcím, kam vedou odkazy.",
+            show_title=False,          # V3: název stránky je v záhlaví (Dashboard)
+        )
         ui.hint(cv.data_info(data_model, data_version))
 
 
