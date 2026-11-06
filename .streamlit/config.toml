@@ -16,3 +16,8 @@ borderColor = "#3A3F46"
 
 [client]
 toolbarMode = "minimal"
+
+# Redesign MALOSTROJE (V4): ilustrace záhlaví Dashboardu se posílá jako samostatný soubor ze složky static/
+# (adresa app/static/…). Vložená do HTML by byla příliš velká. Ve složce jsou jen veřejné obrázky.
+[server]
+enableStaticServing = true

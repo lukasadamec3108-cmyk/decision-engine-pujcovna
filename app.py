@@ -247,7 +247,8 @@ nav = st.navigation({group: [_PAGE_OBJ[k] for k in keys] for group, keys in navr
                     position="sidebar")
 PAGE = next(k for k, page in _PAGE_OBJ.items() if page is nav)
 PAGE_TITLE = next(p[2] for p in navreg.PAGES if p[0] == PAGE)
-ui.header(HEADER_SLOT, PAGE_TITLE, navreg.HEADER_SUBTITLES[PAGE], DEMO_BADGE)
+ui.header(HEADER_SLOT, PAGE_TITLE, navreg.HEADER_SUBTITLES[PAGE], DEMO_BADGE,
+          art_src=ui.header_art_src(original=True) if PAGE == "dashboard" else None)   # V4: původní ilustrace jen na Dashboardu
 SHOW_INV_INPUTS = PAGE == "investice"          # investiční vstupy jen v sekci Investice
 
 
@@ -3545,7 +3546,8 @@ def header_period() -> str:
     return f"Rozsah dat: dny plánu 1–{max(ends)}" if ends else ""
 
 
-ui.header(HEADER_SLOT, PAGE_TITLE, navreg.HEADER_SUBTITLES[PAGE], DEMO_BADGE, header_period())
+ui.header(HEADER_SLOT, PAGE_TITLE, navreg.HEADER_SUBTITLES[PAGE], DEMO_BADGE, header_period(),
+          ui.header_art_src(original=True) if PAGE == "dashboard" else None)
 
 # Spuštění aktivní stránky (soubor stránky je jen značka – obsah vykreslil kód výše)
 nav.run()

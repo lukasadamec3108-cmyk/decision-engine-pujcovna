@@ -418,17 +418,20 @@ def brand_icon_src() -> str:
     return "data:image/svg+xml;base64," + base64.b64encode(svg).decode()
 
 
-# Původní grafika záhlaví od majitele (bagr a krajina z předlohy). Dokud v assets není, použije se vlastní
-# zástupná vektorová ilustrace. Stačí soubor nahrát pod jedním z těchto názvů – kód se nemění.
-HEADER_ART_ORIGINAL = {"zahlavi_original.webp": "image/webp", "zahlavi_original.jpg": "image/jpeg",
-                       "zahlavi_original.png": "image/png"}
+# Původní grafika záhlaví Dashboardu od majitele (bagr s krajinou podle předlohy, průhledné pozadí).
+# Originál v plném rozlišení je assets/zahlavi_original.png. Prohlížeč dostane zmenšenou kopii WebP ze složky
+# static/ jako samostatný soubor (statické soubory Streamlitu – v .streamlit/config.toml enableStaticServing):
+# vložit obrázek přímo do HTML (stovky kB) prohlížeč nezvládne a stránka se přestane vykreslovat.
+HEADER_ART_ORIGINAL = ASSETS / "zahlavi_original.png"
+HEADER_ART_STATIC = ASSETS.parent / "static" / "zahlavi_dashboard.webp"
+HEADER_ART_URL = "app/static/zahlavi_dashboard.webp"
 
 
-def header_art_src() -> str:
-    """Grafika záhlaví jako data URI: původní soubor z assets, jinak vlastní zástupná ilustrace stroje."""
-    for name, mime in HEADER_ART_ORIGINAL.items():
-        if (ASSETS / name).is_file():
-            return f"data:{mime};base64," + base64.b64encode((ASSETS / name).read_bytes()).decode()
+def header_art_src(original: bool = False) -> str:
+    """Grafika záhlaví. original=True (Dashboard): adresa původní ilustrace, pokud je k dispozici;
+    jinak (a na ostatních stránkách) vlastní zástupná vektorová ilustrace stroje jako data URI."""
+    if original and HEADER_ART_STATIC.is_file():
+        return HEADER_ART_URL
     svg = (ASSETS / "zahlavi_stroj.svg").read_bytes()
     return "data:image/svg+xml;base64," + base64.b64encode(svg).decode()
 
@@ -438,13 +441,14 @@ _CALENDAR_ICON = ('<svg class="de-ph-ico" viewBox="0 0 24 24" aria-hidden="true"
                   'height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>')
 
 
-def header_html(title: str, subtitle: str, badge: str, period: str = "") -> str:
+def header_html(title: str, subtitle: str, badge: str, period: str = "", art_src: str = None) -> str:
     """Záhlaví stránky (redesign MALOSTROJE V3): velký název stránky, podtitulek, skutečný rozsah dat
     a štítek ukázkových dat; vpravo vlastní ilustrace stroje (na mobilu skrytá). Třída de-header zůstává –
     podle ní regresní nástroje záhlaví poznají a nepočítají do obsahu stránky."""
     chips = (f'<span class="de-ph-chip">{_CALENDAR_ICON}{html.escape(period)}</span>' if period else "")
     chips += f'<span class="de-ph-chip demo">{html.escape(badge)}</span>'
-    return (f'<div class="de-header de-ph"><div class="de-ph-art" style="background-image:url({header_art_src()})">'
+    art = f'<div class="de-ph-art" style="background-image:url({art_src or header_art_src()})">'
+    return (f'<div class="de-header de-ph">{art}'
             f'</div><div class="de-ph-text"><div class="de-ph-title" role="heading" aria-level="1">'
             f'{html.escape(title)}</div><div class="de-ph-sub">{html.escape(subtitle)}</div>'
             f'<div class="de-ph-chips">{chips}</div></div></div>')
@@ -453,10 +457,10 @@ def header_html(title: str, subtitle: str, badge: str, period: str = "") -> str:
 _PAGE_TITLE = {"title": ""}   # název stránky v záhlaví – stejný nadpis obsahu se pak nezobrazuje dvakrát
 
 
-def header(slot, title: str, subtitle: str, badge: str, period: str = "") -> None:
-    """Vykreslí (nebo přepíše) záhlaví do připraveného místa nahoře na stránce."""
+def header(slot, title: str, subtitle: str, badge: str, period: str = "", art_src: str = None) -> None:
+    """Vykreslí (nebo přepíše) záhlaví do připraveného místa nahoře na stránce (art_src = jiná grafika)."""
     _PAGE_TITLE["title"] = title
-    slot.markdown(header_html(title, subtitle, badge, period), unsafe_allow_html=True)
+    slot.markdown(header_html(title, subtitle, badge, period, art_src), unsafe_allow_html=True)
 
 
 def login_intro(title: str, subtitle: str, prompt: str) -> None:
@@ -960,39 +964,45 @@ def dashboard_layout_css(key: str = DASH_KEY) -> str:
 {PAGE} {{ max-width: none; padding-top: 1.4rem; padding-left: 3.6rem; padding-right: .75rem; }}
 .stApp:has({D}) [data-testid="stHeader"] {{ background: transparent; }}
 /* Záhlaví: bez rámečku, velký název, grafika přes celou horní pravou část, rozsah dat vpravo */
-@media (min-width: 1101px) {{
-  {PAGE} .de-ph {{ background: transparent; border-radius: 0; overflow: visible; min-height: 9.6rem;
-      padding: 3.3rem 0 0 3.45rem; margin: 0 0 .75rem 0; }}
-  {PAGE} .de-ph::before {{ content: ""; position: absolute; top: -4.5rem; bottom: -1.4rem; right: -.75rem; width: 70%;
-      pointer-events: none; background: radial-gradient(120% 90% at 70% 35%, #E4E6E9 0%, #EDEEF0 45%, rgba(250,250,251,0) 80%);
-      -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 35%); mask-image: linear-gradient(90deg, transparent 0%, #000 35%); }}
-  {PAGE} .de-ph-art {{ top: -4.5rem; bottom: -1.2rem; right: -.75rem; width: 66%; background-size: auto 92%;
-      background-position: right 33% bottom 6%; z-index: 0;
-      -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 30%), linear-gradient(180deg, #000 62%, transparent 100%);
-      -webkit-mask-composite: source-in; mask-image: linear-gradient(90deg, transparent 0%, #000 30%),
-      linear-gradient(180deg, #000 62%, transparent 100%); mask-composite: intersect; opacity: .9; }}
-  {PAGE} .de-ph-text {{ position: static; max-width: 46%; }}
-  {PAGE} .de-ph-title {{ position: relative; font-size: 3.45rem; line-height: 1.02; letter-spacing: -.015em; color: #16181C; }}
-  {PAGE} .de-ph-sub {{ position: relative; font-size: 1.22rem; color: #2B2F36; margin-top: .35rem; white-space: nowrap; }}
-  {PAGE} .de-ph-chips {{ position: absolute; right: 1.1rem; top: 5.35rem; margin: 0; z-index: 1; flex-wrap: nowrap; }}
-  {PAGE} .de-ph-chip {{ font-size: 1.12rem; padding: .62rem 1.1rem; border-radius: 12px; border-color: transparent;
+@media (max-width: 1279px) {{ {PAGE} .de-ph-art {{ display: none; }} }}
+@media (min-width: 1280px) {{
+  /* Rozměry v jednotkách šířky záhlaví (cqw) podle předlohy 1672 × 941: ilustrace ≈ 60 % šířky obsahu.
+     Pásy bagru (80 % šířky obrázku) končí 15 px před štítkem rozsahu dat (≈ 283 px od pravého okraje);
+     text vlevo končí 12 px před lžící bagru (31,5 % šířky obrázku) – při užší šířce se podtitulek zalomí. */
+  {PAGE} .de-ph {{ container-type: inline-size; background: transparent; border-radius: 0; overflow: visible;
+      min-height: 0; padding: 0; margin: 0 0 1.05rem 0; }}
+  {PAGE} .de-ph::before {{ content: ""; position: absolute; top: -4.3rem; height: 15rem; right: -.75rem; width: 64cqw;
+      pointer-events: none; background: radial-gradient(90% 85% at 62% 30%, #E9EAEC 0%, #F1F2F3 50%, rgba(250,250,251,0) 85%);
+      -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 30%); mask-image: linear-gradient(90deg, transparent 0%, #000 30%); }}
+  {PAGE} .de-ph-art {{ top: -3.7rem; bottom: auto; right: calc(298px - 11.98cqw); width: 59.9cqw; height: 19.98cqw;
+      background-size: 100% 100%; background-position: center; z-index: 0; opacity: 1;
+      -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
+      mask-image: linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%); }}
+  {PAGE} .de-ph-text {{ position: static; box-sizing: border-box; max-width: calc(70.95cqw - 310px);
+      padding: 3.15rem 0 0 3.45rem; }}
+  {PAGE} .de-ph-title, {PAGE} .de-ph-sub {{ position: relative; z-index: 1; }}
+  {PAGE} .de-ph-title {{ font-size: 3.45rem; line-height: 1.02; letter-spacing: -.015em; color: #16181C; }}
+  {PAGE} .de-ph-sub {{ font-size: 1.18rem; color: #2B2F36; margin-top: .3rem; }}
+  {PAGE} .de-ph-chips {{ position: absolute; right: 1.1cqw; bottom: auto; top: 3.55rem; margin: 0; z-index: 2; flex-wrap: nowrap;
+      flex-direction: column-reverse; align-items: flex-end; gap: .5rem; }}
+  {PAGE} .de-ph-chip {{ font-size: 1.06rem; padding: .62rem 1rem; border-radius: 12px; border-color: transparent;
       box-shadow: {SHADOW}; gap: .7rem; }}
   {PAGE} .de-ph-chip.demo {{ font-size: .86rem; padding: .45rem .8rem; }}
   {PAGE} .de-ph-ico {{ width: 1.35rem; height: 1.35rem; }}
 }}
 /* KPI karty */
-{D} .dd-kpis {{ gap: 1.05rem; margin: 0 0 1.95rem 0; align-items: stretch; }}
-{D} .dd-kpi {{ border: 1px solid #EDEEF0; border-radius: 16px; padding: 1.25rem 1.5rem 1rem 1.5rem; box-shadow: {SHADOW};
-             gap: .2rem; min-height: 10.3rem; }}
+{D} .dd-kpis {{ gap: 1.05rem; margin: 0 0 1.95rem 0; align-items: stretch; position: relative; z-index: 3; }}
+{D} .dd-kpi {{ border: 1px solid #EDEEF0; border-radius: 16px; padding: 1.15rem 1.45rem .9rem 1.45rem; box-shadow: {SHADOW};
+             gap: .15rem; min-height: 10.3rem; container-type: inline-size; }}
 {D} .dd-kpi-top {{ gap: .95rem; min-height: 2.6rem; }}
 {D} .dd-kpi .dd-ico-box {{ background: transparent; width: 2.4rem; height: 2.4rem; }}
 {D} .dd-kpi .dd-ico {{ width: 2.25rem; height: 2.25rem; stroke-width: 1.7; }}
 {D} .dd-kpi .dd-ico-box.neutral {{ color: #2B2F36; }}
 {D} .dd-kpi .dd-ico-box.accent, {D} .dd-kpi .dd-ico-box.bad {{ color: {BRAND_RED}; }}
 {D} .dd-lbl {{ font-size: .98rem; font-weight: 700; letter-spacing: .02em; color: #1D2025; line-height: 1.3; }}
-{D} .dd-val {{ font-size: 2.55rem; font-weight: 800; color: #16181C; margin-top: .4rem; line-height: 1.05; }}
-{D} .dd-val.pair {{ font-size: 2.1rem; column-gap: .35rem; }}
-{D} .dd-val small {{ font-size: 1.25rem; font-weight: 700; color: #2B2F36; margin-left: .2rem; }}
+{D} .dd-val {{ font-size: clamp(1.5rem, 18cqw, 2.55rem); font-weight: 800; color: #16181C; margin-top: .4rem; line-height: 1.05; }}
+{D} .dd-val.pair {{ font-size: clamp(1.3rem, 13cqw, 2.1rem); column-gap: .35rem; }}
+{D} .dd-val small {{ font-size: clamp(.85rem, 8cqw, 1.25rem); font-weight: 700; color: #2B2F36; margin-left: .2rem; }}
 {D} .dd-kpi > .dd-chip {{ background: transparent; padding: 0; font-size: .98rem; font-weight: 500; color: {UI_MUTED};
                        border-radius: 0; white-space: normal; margin-top: .2rem; }}
 {D} .dd-sub {{ font-size: .98rem; color: {UI_MUTED}; border-top: none; padding-top: 0; margin-top: .2rem; line-height: 1.4; }}

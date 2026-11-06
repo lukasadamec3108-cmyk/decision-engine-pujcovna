@@ -167,12 +167,24 @@ def test_dash_bar_has_no_digits_and_clamps_share():
     assert ui.dash_bar(None, "dark") == "" and ui.dash_bar(1.7, "dark").count("<i></i>") == 100
 
 
-def test_header_uses_original_art_when_present(tmp_path, monkeypatch):
-    assert ui.header_art_src().startswith("data:image/svg+xml")             # bez původního souboru zástupná
-    monkeypatch.setattr(ui, "ASSETS", tmp_path)
-    (tmp_path / "zahlavi_stroj.svg").write_text("<svg/>", encoding="utf-8")
-    (tmp_path / "zahlavi_original.png").write_bytes(b"\x89PNG")
-    assert ui.header_art_src().startswith("data:image/png;base64,")
+def test_original_header_art_is_served_as_static_file_only_on_dashboard():
+    from PIL import Image
+    assert ui.header_art_src().startswith("data:image/svg+xml")             # ostatní stránky: zástupná ilustrace
+    assert ui.header_art_src(original=True) == "app/static/zahlavi_dashboard.webp"
+    orig, web = Image.open(ROOT / "assets" / "zahlavi_original.png"), Image.open(ui.HEADER_ART_STATIC)
+    assert web.format == "WEBP" and web.mode == "RGBA" and orig.mode == "LA"           # průhledné pozadí
+    assert abs(web.width / web.height - orig.width / orig.height) < 0.01                # stejné proporce
+    assert sorted(p.suffix for p in (ROOT / "static").iterdir()) == [".webp"]           # ve static/ jen obrázek
+    assert "enableStaticServing = true" in (ROOT / ".streamlit" / "config.toml").read_text(encoding="utf-8")
+
+
+def test_dashboard_header_uses_original_art_other_pages_do_not():
+    at = open_page(app(), "dashboard")
+    [hdr] = [m.value for m in at.main.markdown if 'class="de-header' in m.value]
+    assert "app/static/zahlavi_dashboard.webp" in hdr and len(hdr) < 5000            # obrázek není vložený do HTML
+    at = open_page(at, "kapacita")
+    [hdr] = [m.value for m in at.main.markdown if 'class="de-header' in m.value]
+    assert "zahlavi_dashboard" not in hdr and "data:image/svg+xml" in hdr
 
 
 def test_dashboard_v4_layout_keeps_values_rows_and_links():
