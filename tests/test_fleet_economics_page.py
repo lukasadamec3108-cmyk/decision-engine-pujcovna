@@ -713,7 +713,10 @@ def test_v5_back_to_dashboard_link():
     assert navigace.DEFAULT_PAGE == "dashboard" and back.proto.page == ""             # výchozí stránka = kořen adresy
     assert back.proto.icon == next(pg[3] for pg in navigace.PAGES if pg[0] == "dashboard")
     raw = " ".join(body(at))
-    assert raw.index("Ukázková data / neúplné") < raw.index('class="dd-kpis"')        # období a zdroj nad KPI
+    assert raw.index("Ukázková data / neúplné") < raw.index('class="dd-kpis"')        # označení dat nad KPI
+    assert raw.index('class="dd-kpis"') < raw.index('class="fe-st"')                   # stav hned pod KPI
+    assert plain(body(at)).count(fv.FICTITIOUS) == 1                                   # celá věta jen jednou (dole)
+    assert plain(body(at)).count("Ukázková data / neúplné") == 1
 
 
 def test_v5_details_sections_are_collapsed_and_in_approved_order():

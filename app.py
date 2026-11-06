@@ -3138,9 +3138,12 @@ if PAGE == "ekonomika":
     st.markdown(ui.ECON_CSS, unsafe_allow_html=True)
     st.markdown(ui.ECON_LAYOUT_CSS, unsafe_allow_html=True)               # V5: vzhled podle Dashboardu
     with ui.tab_container("ekonomika"):
-        page_link("dashboard", "Zpět na Dashboard")                       # V5: návrat na přehled
-        ui.tab_header(FLEET_ECON_TITLE, FLEET_ECON_INTRO)
-        fe_info = st.empty()                                               # období, metoda, zdroj dat – po filtrech
+        # V5: jeden řádek nad ukazateli – návrat na Dashboard, označení ukázkových / neúplných dat, období, metoda
+        with st.container(horizontal=True, key="fe_topbar", vertical_alignment="center", gap="medium"):
+            page_link("dashboard", "Zpět na Dashboard")
+            fe_info = st.empty()                                           # vyplní se po filtrech
+        fe_kpi_slot = st.container()                                       # hlavní ukazatele (pod řádkem nahoře)
+        fe_status_slot = st.container()                                    # stručný stav výsledku
         _, fe_plan, _ = plan_jobs(jobs_df, machine_capacity, code_version)
         fe_starts = cv.job_starts_from_plan(jobs_df, fe_plan)
         fe_default_end, fe_max_day = cv.period_bounds(cv.build(data_model, fe_starts))
@@ -3176,26 +3179,29 @@ if PAGE == "ekonomika":
             + ui.status_chip("Ukázková data" + (" / neúplné" if fe_view["status"] != fv.COMPLETE else ""), "warn")
             + (f'<span><b>Období:</b> {html.escape(fe_view["period"])}</span>' if fe_view["period"] else "")
             + f'<span><b>Fixní náklady a režie:</b> {html.escape(fe_label.split(" – ")[0].split(" (")[0])}</span>'
-            + f'<span class="fe-src">{html.escape(fv.FICTITIOUS)}</span></div>', unsafe_allow_html=True)
+            + "</div>", unsafe_allow_html=True)
 
         if not fe_view["computable"]:
-            fe_status(fe_view)
+            with fe_status_slot:
+                fe_status(fe_view)
         if fe_view["computable"]:
             # 2. Hlavní ukazatele: celkový výsledek → pronájmy → zakázky → kapacitní konflikty
             fe_head = {h["key"]: h for h in fe_view["headline"]}
             fe_conf = next(k for k in fe_view["kpis"] if k["key"] == "konflikty")
             fe_n_cases = len(fe_view["conflicts"])
-            ui.dash_kpis([dict(
-                icon=FE_KPI_ICONS[h["key"]], label=h["label"], value=html.escape(h["text"]), cls="word",
-                chip=fe_chip(h["status"], h["tone"]), more=html.escape(h["meaning"]),
-                tone="accent" if h["key"] == "celkem" else "neutral")
-                for h in (fe_head[k] for k in FE_TOTAL_FIRST)]
-                + [dict(icon="alert", label="Kapacitní konflikty", value=html.escape(fe_conf["text"]), cls="word",
-                        chip=fe_chip(fe_conf["status"], fe_conf["tone"]), sub=html.escape(fe_conf["explanation"]),
-                        tone="bad" if fe_n_cases else "good", card="alert" if fe_n_cases else "")])
+            with fe_kpi_slot:
+                ui.dash_kpis([dict(
+                    icon=FE_KPI_ICONS[h["key"]], label=h["label"], value=html.escape(h["text"]), cls="word",
+                    chip=fe_chip(h["status"], h["tone"]), more=html.escape(h["meaning"]),
+                    tone="accent" if h["key"] == "celkem" else "neutral")
+                    for h in (fe_head[k] for k in FE_TOTAL_FIRST)]
+                    + [dict(icon="alert", label="Kapacitní konflikty", value=html.escape(fe_conf["text"]), cls="word",
+                            chip=fe_chip(fe_conf["status"], fe_conf["tone"]), sub=html.escape(fe_conf["explanation"]),
+                            tone="bad" if fe_n_cases else "good", card="alert" if fe_n_cases else "")])
 
             # 3. Chybějící data a rizika – stručně, podrobnosti po rozbalení
-            fe_status(fe_view)
+            with fe_status_slot:
+                fe_status(fe_view)
 
             # 4. Rozpad výsledku
             st.markdown('<div class="dd-section-title">Rozpad výsledku <small>jen podložené částky – neznámé '
@@ -3334,6 +3340,9 @@ if PAGE == "ekonomika":
         with st.expander(FE_SECTIONS[4], icon=":material/functions:"):
             ui.explain([(title, '<ul class="fe-points">' + "".join(f"<li>{html.escape(x)}</li>" for x in points)
                          + "</ul>") for title, points in fe_view["methodology"]])
+        # V5: úvod stránky a plné označení fiktivních dat pod obsahem (jako na Dashboardu) – texty beze změny
+        ui.tab_header(FLEET_ECON_TITLE, FLEET_ECON_INTRO)
+        st.markdown(f'<div class="fe-src">{html.escape(fv.FICTITIOUS)}</div>', unsafe_allow_html=True)
 
 
 # ==================================================

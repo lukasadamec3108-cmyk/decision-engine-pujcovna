@@ -1313,11 +1313,15 @@ def econ_layout_css() -> str:
 {E} .dd-kpi > .dd-chip.info {{ color: #334155; background: #EEF2F7; }}
 {E} .dd-kpi.alert > .dd-chip {{ background: #fff; }}
 {E} .dd-kpi .dd-sub {{ color: #374151; }}
-/* Období, metoda a zdroj dat */
-{E} .fe-info {{ display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1.3rem; font-size: .98rem;
-              color: #2B2F36; margin: .1rem 0 .6rem 0; }}
+/* Jeden řádek nad ukazateli: návrat, označení dat, období, metoda (na mobilu se zalomí) */
+{E} .st-key-fe_topbar {{ flex-wrap: wrap; row-gap: .35rem; margin: -.35rem 0 .45rem 0; }}
+{E} .st-key-fe_topbar > [data-testid="stElementContainer"] {{ width: auto !important; flex: 0 1 auto; }}
+{E} .st-key-fe_topbar [data-testid="stPageLink"] a {{ padding: .2rem .55rem .2rem .3rem; border-radius: 8px;
+                                                    background: #fff; border: 1px solid #EDEEF0; }}
+{E} .fe-info {{ display: flex; flex-wrap: wrap; align-items: center; gap: .3rem 1.3rem; font-size: .98rem;
+              color: #2B2F36; margin: 0; }}
 {E} .fe-info b {{ color: #16181C; font-weight: 600; }}
-{E} .fe-info .fe-src {{ color: {UI_MUTED}; font-size: .9rem; }}
+{E} .fe-src {{ color: {UI_MUTED}; font-size: .9rem; margin: .2rem 0 .4rem 0; }}
 /* Stav výsledku – stručně */
 {E} .fe-st {{ display: flex; gap: .9rem; align-items: flex-start; }}
 {E} .fe-st .dd-ico {{ width: 1.7rem; height: 1.7rem; flex: 0 0 auto; color: {BRAND_RED}; margin-top: .05rem; }}
@@ -1345,6 +1349,8 @@ def econ_layout_css() -> str:
   {E} .dd-row .v {{ text-align: left; }}
   {E} .dd-section-title {{ font-size: 1.2rem; }}
   {E} .fe-st + details.de-more {{ margin-left: 0; }}
+  {E} .fe-info {{ gap: .2rem .9rem; font-size: .9rem; }}
+  {E} .st-key-fe_topbar {{ margin-top: 0; }}
   {E} [data-testid="stExpander"] summary p {{ font-size: 1rem; }}
 }}
 </style>""")
