@@ -1286,6 +1286,73 @@ ECON_CSS = RENTAL_CSS.replace(_RENT, _ECON).replace("</style>", f"""
 </style>""")
 
 
+def econ_layout_css() -> str:
+    """Redesign MALOSTROJE V5 – Ekonomika flotily ve stylu Dashboardu V4 (jen vzhled, jen tato stránka).
+
+    Převezme rozvržení Dashboardu (šířka, záhlaví s ilustrací, KPI karty, sekce) a místo svislých barevných
+    proužků podbarví karty: problém jemně červeně, kladný úplný výsledek jemně zeleně, ostatní bíle / světle
+    šedě. ECON_CSS zůstává beze změny (vychází z něj i stránka Chybějící údaje)."""
+    E = _ECON
+    SHADOW = "0 2px 10px rgba(16,24,40,.07), 0 1px 2px rgba(16,24,40,.05)"
+    tints = {"bad": (BRAND_RED_SOFT, "#F3D3D3"), "good": ("#EEF7F0", "#CFE7D6"), "neutral": ("#FFFFFF", "#EDEEF0"),
+             "accent": ("#FFFFFF", "#EDEEF0"), "warn": (UI_BG, "#E6E8EB")}
+    tint_css = "\n".join(
+        f'{E} [class*="st-key-de_dash_"][class*="_{name}"] {{ border-left: 1px solid {line} !important; '
+        f"border-color: {line} !important; background: {bg} !important; }}"
+        for name, (bg, line) in tints.items())
+    return dashboard_layout_css(ECON_KEY).replace("</style>", f"""
+/* Karty bez svislých proužků – barva plochy nese význam */
+{tint_css}
+/* Hlavní ukazatele: stav (horní mez, chybí údaje…) zůstává výrazný štítek */
+{E} .dd-kpis .dd-val.word {{ font-size: clamp(1.25rem, 10.5cqw, 2.05rem); }}
+{E} .dd-kpi > .dd-chip {{ align-self: flex-start; padding: .16rem .6rem; border-radius: 999px; font-size: .8rem;
+                        font-weight: 700; margin-top: .35rem; }}
+{E} .dd-kpi > .dd-chip.good {{ color: #166534; background: #E8F5EC; }}
+{E} .dd-kpi > .dd-chip.warn {{ color: {WARN_TEXT}; background: {WARN_BG}; }}
+{E} .dd-kpi > .dd-chip.bad {{ color: {BAD_TEXT}; background: {BAD_BG}; }}
+{E} .dd-kpi > .dd-chip.info {{ color: #334155; background: #EEF2F7; }}
+{E} .dd-kpi.alert > .dd-chip {{ background: #fff; }}
+{E} .dd-kpi .dd-sub {{ color: #374151; }}
+/* Období, metoda a zdroj dat */
+{E} .fe-info {{ display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1.3rem; font-size: .98rem;
+              color: #2B2F36; margin: .1rem 0 .6rem 0; }}
+{E} .fe-info b {{ color: #16181C; font-weight: 600; }}
+{E} .fe-info .fe-src {{ color: {UI_MUTED}; font-size: .9rem; }}
+/* Stav výsledku – stručně */
+{E} .fe-st {{ display: flex; gap: .9rem; align-items: flex-start; }}
+{E} .fe-st .dd-ico {{ width: 1.7rem; height: 1.7rem; flex: 0 0 auto; color: {BRAND_RED}; margin-top: .05rem; }}
+{E} .st-key-de_dash_ekon_stav_good .fe-st .dd-ico {{ color: #166534; }}
+{E} .fe-st-line {{ font-size: 1.04rem; line-height: 1.45; color: #16181C; }}
+{E} .fe-st-line b {{ font-weight: 800; }}
+{E} .fe-st + details.de-more {{ margin: .45rem 0 0 2.6rem; }}
+/* Nadpisy a rozbalovací sekce */
+{E} .dd-section-title {{ font-size: 1.45rem; font-weight: 700; color: #16181C; margin: 1.4rem 0 .5rem 0; }}
+{E} .dd-section-title small {{ font-size: .92rem; font-weight: 500; color: {UI_MUTED}; margin-left: .4rem; }}
+{E} [data-testid="stExpander"] > details {{ border: 1px solid #EDEEF0; border-radius: 14px; background: #fff;
+                                         box-shadow: {SHADOW}; }}
+{E} [data-testid="stExpander"] summary {{ padding-top: .85rem; padding-bottom: .85rem; }}
+{E} [data-testid="stExpander"] summary p {{ font-size: 1.1rem; font-weight: 700; color: #16181C; }}
+{E} [data-testid="stExpander"] summary [data-testid="stIconMaterial"] {{ color: #2B2F36; }}
+{E} [data-testid="stExpander"] .dd-section-title {{ font-size: 1.06rem; margin: .3rem 0 .45rem 0; }}
+{E} .fe-in-exp .t {{ display: none; }}   /* název je v popisku rozbalovací sekce */
+{E} .dd-group {{ font-size: .8rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+               color: {UI_MUTED}; margin: .8rem 0 .2rem 0; }}
+{E} .dd-text, {E} .dd-row .l small, {E} ul.dd-list li small {{ color: #374151; }}
+@media (max-width: 640px) {{
+  {E} .dd-kpis .dd-val.word {{ font-size: 1.1rem; }}
+  {E} .dd-row {{ flex-direction: column; align-items: flex-start; gap: .2rem; }}
+  {E} .dd-row .l {{ width: 100%; }}
+  {E} .dd-row .v {{ text-align: left; }}
+  {E} .dd-section-title {{ font-size: 1.2rem; }}
+  {E} .fe-st + details.de-more {{ margin-left: 0; }}
+  {E} [data-testid="stExpander"] summary p {{ font-size: 1rem; }}
+}}
+</style>""")
+
+
+ECON_LAYOUT_CSS = econ_layout_css()
+
+
 # ---------------------------------------------------------------------------
 # Chybějící údaje (E3.2): stejné karty a řádky jako Ekonomika flotily, omezené na vlastní kontejner.
 # ---------------------------------------------------------------------------
