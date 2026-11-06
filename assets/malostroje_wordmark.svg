@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="64" viewBox="0 0 300 64" role="img" aria-label="MALOSTROJE">
+  <!-- Vlastní neutrální ikona + nápis MALOSTROJE pro tmavý levý panel (redesign V2). Nejde o firemní logo. -->
+  <rect width="64" height="64" rx="14" fill="#C42F2D"/>
+  <rect x="10" y="42" width="30" height="9" rx="4.5" fill="#FFFFFF"/>
+  <circle cx="15" cy="46.5" r="2" fill="#C42F2D"/>
+  <circle cx="35" cy="46.5" r="2" fill="#C42F2D"/>
+  <path d="M14 40 V28 h13 l4 7 v5 Z" fill="#FFFFFF"/>
+  <rect x="17" y="30.5" width="7" height="5" rx="1" fill="#C42F2D"/>
+  <path d="M30 33 L42 18 L52 27" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M50 26 L56 34 L48 37 Z" fill="#FFFFFF"/>
+  <text x="80" y="42" fill="#FFFFFF" font-family="'Source Sans Pro', 'Source Sans 3', 'Segoe UI', Arial, Helvetica, sans-serif"
+        font-size="27" font-weight="700" letter-spacing="3.2">MALOSTROJE</text>
+</svg>

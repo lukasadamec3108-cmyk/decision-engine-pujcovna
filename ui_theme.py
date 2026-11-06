@@ -49,23 +49,30 @@ RISK_CZ = {"High": "Vysoké", "Medium": "Střední", "Low": "Nízké"}
 # VIZUÁLNÍ IDENTITA APLIKACE
 # ==================================================
 # Barvy rozhraní (lišta, nadpisy, akcent, popisky). Barvy grafů výše zůstávají beze změny.
+# Redesign MALOSTROJE (V1): barvy podle schváleného referenčního návrhu (změřené z obrázku).
+# Kontrast (WCAG): červená na bílé 5,5:1, bílé písmo na červené 5,5:1, na podbarvení 4,9:1.
 
 INK = "#1F2933"          # hlavní text a nadpisy
-BAR = "#1F2329"          # antracitová horní lišta
-ACCENT = "#B45309"       # tlumená oranžová – akcent (kontrast 5,0:1 na bílé i s bílým textem)
-ACCENT_SOFT = "#FDF4EA"  # jemné podbarvení doporučené varianty
+BAR = "#1D2025"          # antracit – horní lišta (stejný tón jako tmavý panel návrhu)
+BRAND_RED = "#C42F2D"    # MALOSTROJE – červená (aktivní prvky, odkazy, tlačítka)
+BRAND_RED_SOFT = "#FBEDED"  # jemné červené podbarvení
+PAGE_BG = "#FAFAFB"      # světlé pozadí hlavní plochy (= backgroundColor v .streamlit/config.toml)
+ACCENT = BRAND_RED       # akcent rozhraní (dříve tlumená oranžová #B45309)
+ACCENT_SOFT = BRAND_RED_SOFT  # podbarvení doporučené varianty
+CHART_HIGHLIGHT = "#B45309"   # zvýraznění v grafech zůstává oranžové (popisky grafů to tak uvádějí)
+# Tmavý levý panel (V2) – stejné hodnoty jako [theme.sidebar] v .streamlit/config.toml
+SIDE_BG = "#1D2025"          # pozadí panelu
+SIDE_BG_TOP = "#26292E"      # horní část panelu (jemný přechod)
+SIDE_SURFACE = "#26292E"     # plochy v panelu (ukázková data)
+SIDE_TEXT = "#E6E8EB"        # text panelu (kontrast 14:1 na pozadí)
+SIDE_MUTED = "#AEB3BA"       # méně výrazný text a ikony (kontrast 8:1)
+SIDE_LINE = "rgba(255,255,255,.09)"  # oddělovače v panelu
 UI_MUTED = "#4B5563"     # popisky a vysvětlivky (kontrast 7,6:1)
 UI_LINE = "#E3E6EA"      # rámečky a oddělovače
 UI_BG = "#F6F7F9"        # světlé plochy (sidebar, záhlaví tabulek)
 OK_TEXT, OK_BG = "#166534", "#E8F5EC"
 WARN_TEXT, WARN_BG = "#92400E", "#FEF3C7"
 BAD_TEXT, BAD_BG = "#B42318", "#FDECEA"
-
-
-def mark_src() -> str:
-    """Vlastní neutrální symbol aplikace Decision Engine (graf + symbol rozhodnutí) jako data URI."""
-    svg = (ASSETS / "decision_engine_mark.svg").read_bytes()
-    return "data:image/svg+xml;base64," + base64.b64encode(svg).decode()
 
 
 # ==================================================
@@ -121,26 +128,65 @@ def inject_css() -> None:
         [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p {{ color: {UI_MUTED} !important; }}
         [data-testid="stWidgetLabel"] p {{ color: {INK}; font-weight: 500; }}
 
-        /* Postranní panel */
-        [data-testid="stSidebar"] {{ background: {UI_BG}; border-right: 1px solid {UI_LINE}; }}
+        /* Postranní panel (V2: tmavý antracit podle návrhu MALOSTROJE; barvy i v [theme.sidebar]) */
+        [data-testid="stSidebar"] {{ background: linear-gradient(180deg, {SIDE_BG_TOP} 0, {SIDE_BG} 14rem);
+            border-right: none; }}
+        /* Charakteristické šikmé rozšíření panelu nahoře (podle návrhu): pravá hrana je svislá, v horní části
+           přechází šikmou hranou do širší horní plochy. Jen desktop (na mobilu je panel výsuvné menu); při sbaleném
+           panelu se nezobrazuje. Plocha nepřijímá kliknutí – nic pod ní neblokuje. */
+        @media (min-width: 769px) {{
+            section[data-testid="stSidebar"] {{ overflow: visible !important; }}
+            section[data-testid="stSidebar"][data-collapsed="false"]::after {{
+                content: ""; position: absolute; top: 0; right: -5rem; width: 5rem; height: 16rem;
+                background: linear-gradient(180deg, {SIDE_BG_TOP} 0, {SIDE_BG} 14rem);
+                clip-path: polygon(0 0, 100% 0, 0 100%); pointer-events: none; z-index: 2;
+            }}
+        }}
+        [data-testid="stSidebarHeader"] {{ padding: 1.4rem 1.2rem .6rem 1.2rem; height: auto; }}
+        [data-testid="stSidebarLogo"] {{ height: 2.9rem !important; max-width: 100%; width: auto; }}
+        [data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"] {{ color: {SIDE_MUTED} !important; }}
+        [data-testid="stSidebarNav"] {{ padding: 0 .9rem; }}
+        [data-testid="stNavSectionHeader"] {{ margin: .7rem 0 .2rem 0; padding: .65rem .55rem 0 .55rem;
+            border-top: 1px solid {SIDE_LINE}; }}
+        [data-testid="stSidebarNavItems"] > div:first-child [data-testid="stNavSectionHeader"] {{
+            border-top: none; margin-top: .2rem; padding-top: 0; }}
+        [data-testid="stNavSectionHeader"] p {{ color: {SIDE_TEXT} !important; font-weight: 700; font-size: .95rem;
+            letter-spacing: .01em; }}
+        [data-testid="stNavSectionHeader"] [data-testid="stIconMaterial"] {{ color: {SIDE_MUTED} !important; }}
+        [data-testid="stSidebarNavItems"] li {{ margin: 0 !important; }}
+        [data-testid="stSidebarNavLink"] {{ border-radius: 10px; padding: .42rem .8rem; margin: .06rem 0;
+            min-height: 0; line-height: 1.35; transition: background-color .15s ease; }}
+        [data-testid="stSidebarNavLink"] [data-testid="stIconMaterial"] {{ font-size: 1.2rem; }}
+        [data-testid="stSidebarNavLink"] p {{ color: {SIDE_MUTED} !important; font-size: .98rem; }}
+        [data-testid="stSidebarNavLink"] [data-testid="stIconMaterial"] {{ color: {SIDE_MUTED} !important; }}
+        [data-testid="stSidebarNavLink"]:hover {{ background: rgba(255,255,255,.06) !important; }}
+        [data-testid="stSidebarNavLink"]:hover p, [data-testid="stSidebarNavLink"]:hover [data-testid="stIconMaterial"] {{
+            color: {SIDE_TEXT} !important; }}
+        [data-testid="stSidebarNavLink"][aria-current="page"] {{ background: {BRAND_RED} !important;
+            box-shadow: 0 6px 16px rgba(196,47,45,.32); }}
+        [data-testid="stSidebarNavLink"][aria-current="page"] p {{ color: #FFFFFF !important; font-weight: 700; }}
+        [data-testid="stSidebarNavLink"][aria-current="page"] [data-testid="stIconMaterial"] {{ color: #FFFFFF !important; }}
+        [data-testid="stSidebarNavLink"]:focus-visible {{ outline: 2px solid #FFFFFF; outline-offset: 2px; }}
+        [data-testid="stSidebarNavSeparator"] {{ border-color: {SIDE_LINE} !important; margin: .8rem 1.2rem; }}
+        [data-testid="stSidebarUserContent"] {{ padding: .4rem 1.2rem 1.5rem 2.6rem; }}
         [data-testid="stSidebar"] h3 {{
             font-size: .74rem !important; text-transform: uppercase; letter-spacing: .06em;
-            color: {UI_MUTED} !important; border-top: 1px solid {UI_LINE};
+            color: {SIDE_MUTED} !important; border-top: 1px solid {SIDE_LINE};
             padding-top: .9rem !important; margin-top: .55rem !important;
         }}
-        .de-side-brand {{ display: flex; align-items: center; gap: .55rem; margin: -.4rem 0 .7rem 0; }}
-        .de-side-brand img {{ width: 30px; height: 30px; }}
-        .de-side-brand b {{ color: {INK}; font-size: .98rem; }}
-        .de-side-brand span {{ display: block; color: {UI_MUTED}; font-size: .74rem; }}
         .de-demo {{
-            background: #fff; border: 1px solid {UI_LINE}; border-left: 3px solid {ACCENT};
-            border-radius: 8px; padding: .35rem .6rem; font-size: .74rem; color: {UI_MUTED}; margin-bottom: .2rem;
+            background: {SIDE_SURFACE}; border: 1px solid {SIDE_LINE}; border-left: 3px solid {BRAND_RED};
+            border-radius: 8px; padding: .4rem .65rem; font-size: .76rem; color: {SIDE_MUTED}; margin-bottom: .2rem;
         }}
-        .de-demo b {{ color: {INK}; }}
+        .de-demo b {{ color: {SIDE_TEXT}; }}
+        [data-testid="stSidebar"] [data-testid="stBaseButton-secondary"] {{ background: transparent;
+            border-color: rgba(255,255,255,.22); color: {SIDE_TEXT}; }}
+        [data-testid="stSidebar"] [data-testid="stBaseButton-secondary"]:hover {{ border-color: {BRAND_RED};
+            color: #FFFFFF; }}
         /* Čitelnost: Streamlit dává popiskům průhlednost 0,6 a krajním hodnotám posuvníku světlou barvu */
-        [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ opacity: 1; color: {UI_MUTED}; }}
+        [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ opacity: 1; color: {SIDE_MUTED}; }}
         [data-testid="stSidebar"] [data-testid="stSliderTickBar"],
-        [data-testid="stSidebar"] [data-testid="stSliderTickBar"] p {{ color: {UI_MUTED} !important; }}
+        [data-testid="stSidebar"] [data-testid="stSliderTickBar"] p {{ color: {SIDE_MUTED} !important; }}
         /* Panel „Nastavení investičního scénáře“ na stránce Investice (stejné nadpisy skupin jako dřív v panelu) */
         .st-key-de_inv_inputs h3 {{
             font-size: .74rem !important; text-transform: uppercase; letter-spacing: .06em;
@@ -160,10 +206,10 @@ def inject_css() -> None:
             padding-top: .8rem; margin-top: .5rem; margin-bottom: .8rem;
         }}
         .de-user {{
-            font-size: .85rem; color: {UI_MUTED}; border-top: 1px solid {UI_LINE};
+            font-size: .85rem; color: {SIDE_MUTED}; border-top: 1px solid {SIDE_LINE};
             padding-top: .8rem; margin-top: .6rem; margin-bottom: .4rem;
         }}
-        .de-user b {{ color: {INK}; }}
+        .de-user b {{ color: {SIDE_TEXT}; }}
 
         /* Záložky */
         .stTabs [data-baseweb="tab-list"] {{ gap: .15rem; border-bottom: 1px solid {UI_LINE}; overflow-x: auto; }}
@@ -198,19 +244,30 @@ def inject_css() -> None:
         .de-section-title {{ font-size: 1.08rem; font-weight: 700; color: {INK}; margin: 1.3rem 0 .5rem 0; line-height: 1.3; }}
         .de-section-title small {{ font-weight: 500; color: {UI_MUTED}; font-size: .84rem; margin-left: .4rem; }}
 
-        /* Horní lišta */
-        .de-header {{
-            display: flex; align-items: center; gap: .85rem; background: {BAR}; color: #fff;
-            border-radius: 12px; padding: .65rem 1.1rem; margin-bottom: 1rem;
+        /* Záhlaví stránky (V3): vlevo název, podtitulek, rozsah dat a ukázková data; vpravo vlastní ilustrace stroje.
+           Text je omezený na levou část, ilustrace na pravou – nikdy se nepřekrývají. */
+        .de-ph {{ position: relative; overflow: hidden; min-height: 11.5rem; padding: 1.6rem 1.7rem 1.4rem 1.7rem;
+            margin: 0 0 1.2rem 0; border-radius: 16px; background: linear-gradient(90deg, #F1F2F4 0%, #EEF0F2 100%); }}
+        .de-ph-art {{ position: absolute; top: 0; right: 0; bottom: 0; width: 56%; background-repeat: no-repeat;
+            background-position: right bottom; background-size: auto 100%; pointer-events: none;
+            -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 28%);
+            mask-image: linear-gradient(90deg, transparent 0%, #000 28%); }}
+        .de-ph-text {{ position: relative; max-width: 48%; }}
+        .de-ph-title {{ font-size: 2.55rem; font-weight: 800; line-height: 1.1; color: {INK}; letter-spacing: -.01em; }}
+        .de-ph-sub {{ font-size: 1.02rem; color: #374151; line-height: 1.4; margin-top: .35rem; }}
+        .de-ph-chips {{ display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; margin-top: .9rem; }}
+        .de-ph-chip {{ display: inline-flex; align-items: center; gap: .45rem; background: #fff; color: {INK};
+            border: 1px solid {UI_LINE}; border-radius: 10px; padding: .42rem .75rem; font-size: .88rem;
+            font-weight: 600; box-shadow: 0 1px 3px rgba(16,24,40,.08); white-space: nowrap; }}
+        .de-ph-chip.demo {{ background: {WARN_BG}; color: {WARN_TEXT}; border-color: transparent; font-size: .8rem;
+            box-shadow: none; }}
+        .de-ph-ico {{ width: 1.1rem; height: 1.1rem; color: {INK}; }}
+        @media (max-width: 1100px) {{
+            .de-ph-text {{ max-width: none; }}
+            .de-ph-art {{ display: none; }}   /* užší obrazovky: čitelnost textu má přednost před ilustrací */
         }}
-        .de-header img {{ width: 40px; height: 40px; flex: 0 0 auto; }}
-        .de-header .de-names {{ min-width: 0; flex: 1 1 auto; }}
-        .de-title {{ font-size: 1.25rem; font-weight: 700; line-height: 1.2; color: #fff; }}
-        .de-sub {{ font-size: .86rem; color: #D1D5DB; line-height: 1.3; }}
-        .de-badge {{
-            flex: 0 0 auto; border: 1px solid #6B7280; color: #F3F4F6; font-weight: 600; font-size: .72rem;
-            letter-spacing: .04em; padding: .22rem .6rem; border-radius: 999px; white-space: nowrap;
-        }}
+        .de-tab-title.de-dup {{ display: none; }}
+        [data-testid="stElementContainer"]:has(> [data-testid="stMarkdown"] .de-dup) {{ display: none; }}
 
         /* Přihlášení */
         .de-login {{ text-align: center; margin: 3rem 0 1.2rem 0; }}
@@ -310,7 +367,7 @@ def inject_css() -> None:
         .de-intro {{ color: {INK}; font-size: 1rem; margin: -.2rem 0 .2rem 0; }}
         .de-hint {{ color: #374151; font-size: .94rem; line-height: 1.5; margin: -.3rem 0 1rem 0; }}
         .de-insight {{
-            border-left: 3px solid {ACCENT}; padding: .15rem 0 .15rem .85rem;
+            border-left: 3px solid {BAR}; padding: .15rem 0 .15rem .85rem;   /* neutrální; varování = .bad (červená) */
             color: {INK}; font-size: 1rem; margin: 0 0 1.4rem 0;
         }}
         .de-insight b {{ color: {INK}; }}
@@ -336,16 +393,13 @@ def inject_css() -> None:
         }}
         @media (max-width: 640px) {{
             .block-container {{ padding-left: 1rem; padding-right: 1rem; }}
-            .de-header {{ padding: .55rem .8rem; gap: .6rem; }}
-            .de-header img {{ width: 32px; height: 32px; }}
-            .de-title {{ font-size: 1.08rem; }}
-            .de-sub {{ font-size: .78rem; }}
-            .de-badge {{ font-size: .64rem; padding: .18rem .45rem; }}
+            .de-ph {{ min-height: 0; padding: 1rem 1rem .9rem 1rem; border-radius: 12px; }}
+            .de-ph-title {{ font-size: 1.7rem; }}
+            .de-ph-sub {{ font-size: .9rem; }}
+            .de-ph-chip {{ font-size: .8rem; padding: .35rem .6rem; white-space: normal; }}
             [data-testid="stMetricValue"] {{ font-size: 1.25rem; }}
         }}
-        @media (max-width: 420px) {{
-            .de-sub {{ display: none; }}
-        }}
+
         {TAB_STANDARD_CSS}
         </style>
         """,
@@ -358,26 +412,60 @@ def inject_css() -> None:
 # ==================================================
 
 
-def header(title: str, subtitle: str, badge: str) -> None:
-    """Výškově úsporná horní lišta: symbol, název, podtitul, štítek. Text se zalamuje, neořezává."""
-    st.markdown(
-        f"""
-        <div class="de-header">
-            <img src="{mark_src()}" alt="">
-            <div class="de-names">
-                <div class="de-title">{html.escape(title)}</div>
-                <div class="de-sub">{html.escape(subtitle)}</div>
-            </div>
-            <div class="de-badge">{html.escape(badge)}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+def brand_icon_src() -> str:
+    """Vlastní neutrální ikona MALOSTROJE (není firemní logo) jako data URI."""
+    svg = (ASSETS / "malostroje_icon.svg").read_bytes()
+    return "data:image/svg+xml;base64," + base64.b64encode(svg).decode()
+
+
+# Původní grafika záhlaví Dashboardu od majitele (bagr s krajinou podle předlohy, průhledné pozadí).
+# Originál v plném rozlišení je assets/zahlavi_original.png. Prohlížeč dostane zmenšenou kopii WebP ze složky
+# static/ jako samostatný soubor (statické soubory Streamlitu – v .streamlit/config.toml enableStaticServing):
+# vložit obrázek přímo do HTML (stovky kB) prohlížeč nezvládne a stránka se přestane vykreslovat.
+HEADER_ART_ORIGINAL = ASSETS / "zahlavi_original.png"
+HEADER_ART_STATIC = ASSETS.parent / "static" / "zahlavi_dashboard.webp"
+HEADER_ART_URL = "app/static/zahlavi_dashboard.webp"
+
+
+def header_art_src(original: bool = False) -> str:
+    """Grafika záhlaví. original=True (Dashboard): adresa původní ilustrace, pokud je k dispozici;
+    jinak (a na ostatních stránkách) vlastní zástupná vektorová ilustrace stroje jako data URI."""
+    if original and HEADER_ART_STATIC.is_file():
+        return HEADER_ART_URL
+    svg = (ASSETS / "zahlavi_stroj.svg").read_bytes()
+    return "data:image/svg+xml;base64," + base64.b64encode(svg).decode()
+
+
+_CALENDAR_ICON = ('<svg class="de-ph-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" '
+                  'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" '
+                  'height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>')
+
+
+def header_html(title: str, subtitle: str, badge: str, period: str = "", art_src: str = None) -> str:
+    """Záhlaví stránky (redesign MALOSTROJE V3): velký název stránky, podtitulek, skutečný rozsah dat
+    a štítek ukázkových dat; vpravo vlastní ilustrace stroje (na mobilu skrytá). Třída de-header zůstává –
+    podle ní regresní nástroje záhlaví poznají a nepočítají do obsahu stránky."""
+    chips = (f'<span class="de-ph-chip">{_CALENDAR_ICON}{html.escape(period)}</span>' if period else "")
+    chips += f'<span class="de-ph-chip demo">{html.escape(badge)}</span>'
+    art = f'<div class="de-ph-art" style="background-image:url({art_src or header_art_src()})">'
+    return (f'<div class="de-header de-ph">{art}'
+            f'</div><div class="de-ph-text"><div class="de-ph-title" role="heading" aria-level="1">'
+            f'{html.escape(title)}</div><div class="de-ph-sub">{html.escape(subtitle)}</div>'
+            f'<div class="de-ph-chips">{chips}</div></div></div>')
+
+
+_PAGE_TITLE = {"title": ""}   # název stránky v záhlaví – stejný nadpis obsahu se pak nezobrazuje dvakrát
+
+
+def header(slot, title: str, subtitle: str, badge: str, period: str = "", art_src: str = None) -> None:
+    """Vykreslí (nebo přepíše) záhlaví do připraveného místa nahoře na stránce (art_src = jiná grafika)."""
+    _PAGE_TITLE["title"] = title
+    slot.markdown(header_html(title, subtitle, badge, period, art_src), unsafe_allow_html=True)
 
 
 def login_intro(title: str, subtitle: str, prompt: str) -> None:
     st.markdown(
-        f'<div class="de-login"><img src="{mark_src()}" alt=""><div class="t">{html.escape(title)}</div>'
+        f'<div class="de-login"><img src="{brand_icon_src()}" alt=""><div class="t">{html.escape(title)}</div>'
         f'<div class="s">{html.escape(subtitle)}</div><div class="p">{html.escape(prompt)}</div></div>',
         unsafe_allow_html=True,
     )
@@ -390,14 +478,6 @@ def sidebar_amount(container, amount: str, note: str) -> None:
     """
     container.markdown(
         f'<div class="de-amount"><b>{html.escape(amount)}</b> {html.escape(note)}</div>',
-        unsafe_allow_html=True,
-    )
-
-
-def sidebar_brand(title: str, subtitle: str) -> None:
-    st.sidebar.markdown(
-        f'<div class="de-side-brand"><img src="{mark_src()}" alt=""><div><b>{html.escape(title)}</b>'
-        f"<span>{html.escape(subtitle)}</span></div></div>",
         unsafe_allow_html=True,
     )
 
@@ -452,10 +532,14 @@ def tab_container(slug: str):
     return st.container(key=TAB_KEY_PREFIX + slug)
 
 
-def tab_header(title: str, intro_html: str = "") -> None:
-    """Nadpis záložky a krátký úvod (nejvýš 1–2 věty). intro_html je pevný text aplikace (smí obsahovat <b>)."""
-    st.markdown(f'<div class="de-tab-title" role="heading" aria-level="2">{html.escape(title)}</div>',
-                unsafe_allow_html=True)
+def tab_header(title: str, intro_html: str = "", show_title: bool = True) -> None:
+    """Nadpis záložky a krátký úvod (nejvýš 1–2 věty). intro_html je pevný text aplikace (smí obsahovat <b>).
+
+    Je-li nadpis stejný jako název stránky v záhlaví (nebo show_title=False), nezobrazuje se podruhé
+    (zůstává v dokumentu jako skrytý prvek – úvodní text pod ním se zobrazí normálně)."""
+    dup = (not show_title) or title == _PAGE_TITLE["title"]
+    st.markdown(f'<div class="de-tab-title{" de-dup" if dup else ""}" role="heading" aria-level="2">'
+                f'{html.escape(title)}</div>', unsafe_allow_html=True)
     if intro_html:
         st.markdown(f'<div class="de-tab-intro">{intro_html}</div>', unsafe_allow_html=True)
 
@@ -647,6 +731,9 @@ DASH_ICONS = {
     "alert": '<path d="M12 4l9 16H3z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.2" r=".6"/>',
     "spark": '<path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><circle cx="12" cy="12" r="3"/>',
     "route": '<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h6a4 4 0 0 0 0-8H10a4 4 0 0 1 0-8h6"/>',
+    "trend": '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+    "sliders": '<path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/>'
+               '<circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/>',
 }
 
 
@@ -664,9 +751,11 @@ def dash_kpis(cards: list) -> None:
     """Hlavní KPI karty. cards = [dict(icon, label, value, sub, chip, tone)] – value/sub/chip jsou hotové HTML.
 
     tone (barva ikony): "accent" (výchozí), "neutral", "good", "bad" – barva jen tam, kde nese význam.
+    card: volitelná třída karty – "alert" = růžová karta s červenou hodnotou (např. existující konflikt).
     """
     items = "".join(
-        f'<div class="dd-kpi"><div class="dd-kpi-top"><span class="dd-ico-box {c.get("tone", "accent")}">'
+        f'<div class="dd-kpi{" " + c["card"] if c.get("card") else ""}"><div class="dd-kpi-top">'
+        f'<span class="dd-ico-box {c.get("tone", "accent")}">'
         f'{dash_icon(c["icon"])}</span><span class="dd-lbl">{html.escape(c["label"])}</span></div>'
         f'<div class="dd-val{" pair" if c.get("pair") else ""}{" " + c["cls"] if c.get("cls") else ""}">'
         f'{c["value"]}</div>{c.get("chip", "")}'
@@ -702,12 +791,29 @@ def dash_section_head(icon: str, title: str, caption: str = "", tone: str = "acc
     )
 
 
+def dash_bar(share, tone: str) -> str:
+    """Vodorovný ukazatel podílu 0–1 (jen zobrazení již spočteného podílu).
+
+    Výplň tvoří prázdné prvky po jednom procentu – v HTML tak nepřibude žádná číslice (regresní kontrola
+    porovnává všechny číslice na stránce). Bez podílu (např. nulová kapacita) se ukazatel nevykreslí."""
+    if share is None:
+        return ""
+    n = max(0, min(100, round(100 * share)))
+    return f'<span class="dd-bar {tone}" aria-hidden="true">{"<i></i>" * n}</span>'
+
+
 def dash_rows(rows: list) -> None:
-    """Řádky „popisek – hodnota“: rows = [(popisek, hodnota HTML, poznámka HTML nebo ""[, zvýraznit])]."""
+    """Řádky „popisek – hodnota“: rows = [(popisek, hodnota HTML, poznámka HTML nebo ""[, zvýraznit[, ukazatel]])].
+
+    ukazatel = (podíl 0–1 nebo None, tón: "dark" / "accent" / "mid" / "light") – vodorovný pruh mezi popiskem
+    a hodnotou (Dashboard: rozdělení kapacity)."""
     body = "".join(
-        f'<div class="dd-row{" key" if len(r) > 3 and r[3] else ""}"><span class="l">{html.escape(r[0])}'
+        f'<div class="dd-row{" key" if len(r) > 3 and r[3] else ""}{" has-bar" if len(r) > 4 else ""}">'
+        f'<span class="l">{html.escape(r[0])}'
         + (f'<small>{r[2]}</small>' if r[2] else "")
-        + f'</span><span class="v">{r[1]}</span></div>'
+        + "</span>"
+        + (dash_bar(*r[4]) if len(r) > 4 else "")
+        + f'<span class="v">{r[1]}</span></div>'
         for r in rows
     )
     st.markdown(f'<div class="dd-rows">{body}</div>', unsafe_allow_html=True)
@@ -727,11 +833,16 @@ def dash_text(text_html: str, muted: bool = False) -> None:
 
 
 _TONES = {"accent": (ACCENT, ACCENT_SOFT), "good": ("#166534", "#E8F5EC"), "bad": (BAD_TEXT, BAD_BG),
-          "neutral": ("#334155", "#EEF2F7")}
+          "neutral": ("#334155", "#EEF2F7"), "warn": (WARN_TEXT, WARN_BG)}
+# Barva proužku karty: červená jen u problémů („bad“). Akcent (červená značky) má proužek antracitový,
+# aby se doporučení nepletlo s problémem; „warn“ = jantarová (např. střední priorita).
+_STRIPES = {"accent": BAR}
+
+
 def _tone_css(scope: str) -> str:
     return "\n".join(
         f"{scope} .dd-ico-box.{name} {{ color: {fg}; background: {bg}; }}\n"
-        f'{scope} [class*="st-key-de_dash_"][class*="_{name}"] {{ border-left: 4px solid {fg} !important; }}'
+        f'{scope} [class*="st-key-de_dash_"][class*="_{name}"] {{ border-left: 4px solid {_STRIPES.get(name, fg)} !important; }}'
         for name, (fg, bg) in _TONES.items()
     )
 
@@ -837,7 +948,144 @@ def dash_css(key: str) -> str:
 """
 
 
-DASHBOARD_CSS = dash_css(DASH_KEY)
+def dashboard_layout_css(key: str = DASH_KEY) -> str:
+    """Redesign MALOSTROJE V4 – rozvržení Dashboardu podle předlohy (jen vzhled, platí jen na Dashboardu).
+
+    Širší obsah, záhlaví bez rámečku s grafikou přes horní část, větší KPI karty (růžová karta při konfliktu),
+    pruhy kapacity v Provozu, zvýrazněný zisk v Ekonomice a karty doporučení. Pronájem strojů používá jen
+    dash_css (beze změny)."""
+    D = f".st-key-{key}"
+    PAGE = f'.block-container:has({D})'
+    PINK_LINE = "#F3D3D3"
+    SHADOW = "0 2px 10px rgba(16,24,40,.07), 0 1px 2px rgba(16,24,40,.05)"
+    return f"""
+<style>
+/* Plocha stránky: obsah od panelu skoro k pravému okraji jako v předloze */
+{PAGE} {{ max-width: none; padding-top: 1.4rem; padding-left: 3.6rem; padding-right: .75rem; }}
+.stApp:has({D}) [data-testid="stHeader"] {{ background: transparent; }}
+/* Záhlaví: bez rámečku, velký název, grafika přes celou horní pravou část, rozsah dat vpravo */
+@media (max-width: 1279px) {{ {PAGE} .de-ph-art {{ display: none; }} }}
+@media (min-width: 1280px) {{
+  /* Rozměry v jednotkách šířky záhlaví (cqw) podle předlohy 1672 × 941: ilustrace ≈ 60 % šířky obsahu.
+     Pásy bagru (80 % šířky obrázku) končí 15 px před štítkem rozsahu dat (≈ 283 px od pravého okraje);
+     text vlevo končí 12 px před lžící bagru (31,5 % šířky obrázku) – při užší šířce se podtitulek zalomí. */
+  {PAGE} .de-ph {{ container-type: inline-size; background: transparent; border-radius: 0; overflow: visible;
+      min-height: 0; padding: 0; margin: 0 0 1.05rem 0; }}
+  {PAGE} .de-ph::before {{ content: ""; position: absolute; top: -4.3rem; height: 15rem; right: -.75rem; width: 64cqw;
+      pointer-events: none; background: radial-gradient(90% 85% at 62% 30%, #E9EAEC 0%, #F1F2F3 50%, rgba(250,250,251,0) 85%);
+      -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 30%); mask-image: linear-gradient(90deg, transparent 0%, #000 30%); }}
+  {PAGE} .de-ph-art {{ top: -3.7rem; bottom: auto; right: calc(298px - 11.98cqw); width: 59.9cqw; height: 19.98cqw;
+      background-size: 100% 100%; background-position: center; z-index: 0; opacity: 1;
+      -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
+      mask-image: linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%); }}
+  {PAGE} .de-ph-text {{ position: static; box-sizing: border-box; max-width: calc(70.95cqw - 310px);
+      padding: 3.15rem 0 0 3.45rem; }}
+  {PAGE} .de-ph-title, {PAGE} .de-ph-sub {{ position: relative; z-index: 1; }}
+  {PAGE} .de-ph-title {{ font-size: 3.45rem; line-height: 1.02; letter-spacing: -.015em; color: #16181C; }}
+  {PAGE} .de-ph-sub {{ font-size: 1.18rem; color: #2B2F36; margin-top: .3rem; }}
+  {PAGE} .de-ph-chips {{ position: absolute; right: 1.1cqw; bottom: auto; top: 3.55rem; margin: 0; z-index: 2; flex-wrap: nowrap;
+      flex-direction: column-reverse; align-items: flex-end; gap: .5rem; }}
+  {PAGE} .de-ph-chip {{ font-size: 1.06rem; padding: .62rem 1rem; border-radius: 12px; border-color: transparent;
+      box-shadow: {SHADOW}; gap: .7rem; }}
+  {PAGE} .de-ph-chip.demo {{ font-size: .86rem; padding: .45rem .8rem; }}
+  {PAGE} .de-ph-ico {{ width: 1.35rem; height: 1.35rem; }}
+}}
+/* KPI karty */
+{D} .dd-kpis {{ gap: 1.05rem; margin: 0 0 1.95rem 0; align-items: stretch; position: relative; z-index: 3; }}
+{D} .dd-kpi {{ border: 1px solid #EDEEF0; border-radius: 16px; padding: 1.15rem 1.45rem .9rem 1.45rem; box-shadow: {SHADOW};
+             gap: .15rem; min-height: 10.3rem; container-type: inline-size; }}
+{D} .dd-kpi-top {{ gap: .95rem; min-height: 2.6rem; }}
+{D} .dd-kpi .dd-ico-box {{ background: transparent; width: 2.4rem; height: 2.4rem; }}
+{D} .dd-kpi .dd-ico {{ width: 2.25rem; height: 2.25rem; stroke-width: 1.7; }}
+{D} .dd-kpi .dd-ico-box.neutral {{ color: #2B2F36; }}
+{D} .dd-kpi .dd-ico-box.accent, {D} .dd-kpi .dd-ico-box.bad {{ color: {BRAND_RED}; }}
+{D} .dd-lbl {{ font-size: .98rem; font-weight: 700; letter-spacing: .02em; color: #1D2025; line-height: 1.3; }}
+{D} .dd-val {{ font-size: clamp(1.5rem, 18cqw, 2.55rem); font-weight: 800; color: #16181C; margin-top: .4rem; line-height: 1.05; }}
+{D} .dd-val.pair {{ font-size: clamp(1.3rem, 13cqw, 2.1rem); column-gap: .35rem; }}
+{D} .dd-val small {{ font-size: clamp(.85rem, 8cqw, 1.25rem); font-weight: 700; color: #2B2F36; margin-left: .2rem; }}
+{D} .dd-kpi > .dd-chip {{ background: transparent; padding: 0; font-size: .98rem; font-weight: 500; color: {UI_MUTED};
+                       border-radius: 0; white-space: normal; margin-top: .2rem; }}
+{D} .dd-sub {{ font-size: .98rem; color: {UI_MUTED}; border-top: none; padding-top: 0; margin-top: .2rem; line-height: 1.4; }}
+{D} .dd-sub details.de-more {{ margin-top: .15rem; font-size: .84rem; }}
+{D} .dd-kpi.alert {{ background: {BRAND_RED_SOFT}; border-color: {PINK_LINE}; }}
+{D} .dd-kpi.alert .dd-val, {D} .dd-kpi.alert .dd-val small {{ color: {BRAND_RED}; }}
+{D} .dd-kpi.alert > .dd-chip {{ color: {BRAND_RED}; font-weight: 600; }}
+/* Sekce Provoz a Ekonomika */
+{D} [class*="st-key-de_dash_"] {{ border-radius: 16px !important; border-color: #EDEEF0 !important; box-shadow: {SHADOW};
+                                padding: 1.45rem 1.55rem 1.1rem 1.55rem !important; }}
+{D} .dd-head {{ border-bottom: none; padding-bottom: .55rem; gap: 1.1rem; align-items: center; }}
+{D} .dd-head .dd-ico-box {{ background: transparent; width: 2.6rem; height: 2.6rem; }}
+{D} .dd-head .dd-ico {{ width: 2.3rem; height: 2.3rem; stroke-width: 1.6; }}
+{D} .dd-head .dd-ico-box.neutral, {D} .dd-head .dd-ico-box.good {{ color: #2B2F36; }}
+{D} .dd-head .dd-ico-box.accent, {D} .dd-head .dd-ico-box.bad {{ color: {BRAND_RED}; }}
+{D} .dd-title {{ font-size: 1.36rem; font-weight: 700; color: #16181C; line-height: 1.25; }}
+{D} .dd-cap {{ font-size: .98rem; color: #2B2F36; }}
+{D} .dd-row {{ padding: .55rem .45rem; font-size: 1.06rem; border-top-color: #E6E8EB; align-items: center; }}
+{D} .dd-row .l {{ font-weight: 500; color: #16181C; }}
+{D} .dd-row .v {{ font-weight: 700; color: #16181C; }}
+{D} .dd-row .l {{ line-height: 1.25; }}
+{D} .dd-row .l small {{ font-size: .8rem; color: #374151; margin-top: .1rem; }}
+{D} .dd-row.has-bar {{ display: grid; grid-template-columns: minmax(10rem, 1fr) minmax(6rem, 1.15fr) minmax(6.5rem, auto);
+                     column-gap: 1.6rem; padding: .42rem .45rem; }}
+{D} .dd-row.has-bar .l {{ font-weight: 700; }}
+{D} .dd-bar {{ display: flex; height: .6rem; border-radius: 999px; background: #E5E7EA; overflow: hidden; align-self: end;
+             margin-bottom: .32rem; }}
+{D} .dd-bar i {{ flex: 0 0 1%; height: 100%; }}
+{D} .dd-bar.dark i {{ background: #3A3E44; }}
+{D} .dd-bar.accent i {{ background: {BRAND_RED}; }}
+{D} .dd-bar.mid i {{ background: #5D6168; }}
+{D} .dd-bar.light i {{ background: #B5B9BF; }}
+{D} .dd-row.key {{ background: transparent; border-radius: 0; padding: .62rem .45rem; margin: 0; border-top-color: #E6E8EB; }}
+{D} .dd-row.key .l, {D} .dd-row.key .v {{ font-size: 1.06rem; font-weight: 700; }}
+{D} .dd-row.key.has-bar .l {{ font-weight: 700; }}
+{D} .st-key-de_dash_ekonomika .dd-row.key {{ background: {BRAND_RED_SOFT}; border-radius: 8px; border-top-color: transparent;
+                                           padding: .72rem .6rem; margin: .25rem 0; }}
+{D} .st-key-de_dash_ekonomika .dd-row.key .l {{ font-size: 1.12rem; font-weight: 800; }}
+{D} .st-key-de_dash_ekonomika .dd-row.key .v {{ font-size: 1.12rem; font-weight: 800; color: {BRAND_RED}; }}
+/* Doporučení a upozornění */
+{D} .dd-group {{ font-size: 1.72rem; font-weight: 700; letter-spacing: -.005em; text-transform: none; color: #16181C;
+               margin: 1.7rem 0 .55rem 0; }}
+{D} .st-key-dd_alerts [class*="st-key-de_dash_"] {{ border-left: 1px solid #EDEEF0 !important; padding: 1.25rem 1.4rem 1rem 1.4rem !important; }}
+{D} .st-key-dd_alerts .dd-title {{ font-size: 1.36rem; }}
+{D} .st-key-de_dash_konflikty_bad {{ background: {BRAND_RED_SOFT} !important; border-color: {PINK_LINE} !important;
+                                    border-left-color: {PINK_LINE} !important; }}
+{D} .st-key-de_dash_konflikty_bad .dd-title {{ color: {BRAND_RED}; }}
+{D} .st-key-de_dash_konflikty_bad [class*="st-key-dd_links_"],
+{D} .st-key-de_dash_konflikty_bad ul.dd-list li {{ border-top-color: {PINK_LINE}; }}
+{D} .st-key-de_dash_konflikty_bad .dd-chip.bad {{ background: #fff; }}
+{D} .dd-kv .val {{ font-size: 1.08rem; }}
+{D} .dd-kv .s, {D} ul.dd-list li {{ font-size: .95rem; }}
+/* Úvodní poznámka Dashboardu je až pod obsahem (předloha nad kartami nic nemá) */
+{D} .de-tab-intro {{ margin: 1rem 0 .2rem 0; font-size: .9rem; }}
+@media (max-width: 1100px) {{
+  {PAGE} {{ padding-left: 2rem; padding-right: 1rem; }}
+  {D} .dd-kpi {{ min-height: 0; }}
+}}
+@media (max-width: 900px) {{
+  {D} .dd-row.has-bar {{ grid-template-columns: minmax(0, 1fr) auto; row-gap: .3rem; }}
+  {D} .dd-row.has-bar .dd-bar {{ grid-column: 1 / -1; grid-row: 2; margin-bottom: .1rem; }}
+}}
+@media (max-width: 640px) {{
+  {PAGE} {{ padding-left: 1rem; padding-right: 1rem; }}
+  {D} .dd-kpi {{ padding: .9rem .9rem; border-radius: 12px; }}
+  {D} .dd-kpi .dd-ico-box {{ width: 1.7rem; height: 1.7rem; }}
+  {D} .dd-kpi .dd-ico {{ width: 1.55rem; height: 1.55rem; }}
+  {D} .dd-lbl {{ font-size: .72rem; }}
+  {D} .dd-val, {D} .dd-val.pair {{ font-size: 1.5rem; margin-top: .3rem; }}
+  {D} .dd-val small {{ font-size: .85rem; }}
+  {D} .dd-kpi > .dd-chip, {D} .dd-sub {{ font-size: .8rem; }}
+  {D} .dd-title, {D} .st-key-dd_alerts .dd-title {{ font-size: 1.12rem; }}
+  {D} .dd-head .dd-ico-box {{ width: 2rem; height: 2rem; }}
+  {D} .dd-head .dd-ico {{ width: 1.8rem; height: 1.8rem; }}
+  {D} .dd-row, {D} .dd-row.key .l, {D} .dd-row.key .v {{ font-size: .95rem; }}
+  {D} .dd-group {{ font-size: 1.3rem; }}
+  {D} [class*="st-key-de_dash_"] {{ padding: 1rem 1rem .8rem 1rem !important; }}
+}}
+</style>
+"""
+
+
+DASHBOARD_CSS = dash_css(DASH_KEY) + dashboard_layout_css(DASH_KEY)
 
 
 

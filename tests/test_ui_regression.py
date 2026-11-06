@@ -15,7 +15,9 @@ Etapa M2 (vícestránková aplikace): původní záložky 1–8 se hledají tam,
   - správa účtů (admin_pw1, admin_pw2) se přesunula z panelu na stránku Nastavení – beze změny,
   - záložka 7 (Plánování kapacity) má navíc tlačítko „Obnovit výchozí nastavení“ (cap_reset),
   - UX optimalizace: přesně vyjmenované číslice z textů, které nejsou údajem (zastaralý název „záložka 6“,
-    atribut záhlaví stránky) – extract.UX_NUMBER_CHANGES.
+    atribut záhlaví stránky) – extract.UX_NUMBER_CHANGES,
+  - redesign MALOSTROJE V2: značka v panelu je st.logo nad navigací; z panelu mizí jen číslice zakódovaného
+    obrázku původní značky (extract.removed_sidebar_brand_numbers).
 Nové stránky (Dashboard, Pronájem strojů, Strojový park, Nastavení) a panel každé stránky hlídá
 základ tests/fixtures/ui_pages_baseline.json. Po ZÁMĚRNÉ a schválené změně ho obnovte:
     python tests/test_ui_regression.py --update

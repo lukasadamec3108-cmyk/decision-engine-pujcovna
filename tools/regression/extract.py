@@ -236,6 +236,21 @@ M2_MOVED_TO_SETTINGS = ("admin_pw1", "admin_pw2")
 #   – jednotné záhlaví stránky (ui.tab_header) u Vlastních zakázek a Rozhodovacího centra nese atribut
 #     aria-level="2" (1 výskyt, počítaný dvakrát).
 UX_NUMBER_CHANGES = {"6": {"2": +2}, "7": {"6": -8}, "8": {"6": -4, "7": -2, "2": +2}}
+# Redesign MALOSTROJE V2: značka „Decision Engine · Půjčovna malostrojů“ pod navigací (markdown s ikonou jako
+# data URI) nahradila značka MALOSTROJE nad navigací (st.logo – obrázek, není v markdownu). Z panelu tak mizí jen
+# číslice obsažené v odstraněném HTML bloku (zakódovaný obrázek), žádná hodnota výpočtu. Snímek panelu počítá
+# oddíl panelu dvakrát (panel Investic + panel stránky), proto se odečítá dvojnásobek.
+REMOVED_SIDEBAR_BRAND = ('<div class="de-side-brand"><img src="{src}" alt=""><div><b>Decision Engine</b>'
+                         "<span>Půjčovna malostrojů</span></div></div>")
+
+
+def removed_sidebar_brand_numbers() -> dict:
+    import base64
+    svg = (Path(__file__).resolve().parents[2] / "assets" / "decision_engine_mark.svg").read_bytes()
+    html_block = REMOVED_SIDEBAR_BRAND.format(src="data:image/svg+xml;base64," + base64.b64encode(svg).decode())
+    return dict(collections.Counter(numbers(html_block)))
+
+
 CAP_RESET_WIDGET = {"key": "cap_reset", "label": "Obnovit výchozí nastavení", "options": [], "type": "button",
                     "value": "False"}
 
@@ -260,5 +275,10 @@ def m2_expected(state: dict) -> dict:
             nums[number] = nums.get(number, 0) + delta
             if nums[number] == 0:
                 del nums[number]
+    side = out["sidebar"]["numbers"]
+    for number, count in removed_sidebar_brand_numbers().items():
+        side[number] = side.get(number, 0) - 2 * count
+        if side[number] <= 0:
+            del side[number]
     out["tab_labels"] = state["tab_labels"][:5]
     return out

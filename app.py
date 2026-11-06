@@ -125,15 +125,14 @@ def load_data() -> pd.DataFrame:
 # ==================================================
 
 st.set_page_config(
-    page_title="Decision Engine – Investice a provoz půjčovny",
+    page_title="MALOSTROJE – Investice a provoz půjčovny",
     page_icon="📊",
     layout="wide",
 )
 ui.inject_css()
 
-APP_TITLE = "Decision Engine"
+APP_TITLE = "MALOSTROJE"            # viditelný název (interně projekt Decision Engine)
 APP_SUBTITLE = "Investice a provoz půjčovny"
-APP_FOCUS = "Půjčovna malostrojů"
 DEMO_BADGE = "Ukázková data"
 
 # Přihlášení (modul auth.py). Údaje jsou jen ve Streamlit secrets:
@@ -225,10 +224,11 @@ if not st.session_state.get("authenticated", False):
 
 
 # ==================================================
-# HLAVIČKA APLIKACE
+# ZÁHLAVÍ STRÁNKY (redesign MALOSTROJE V3)
 # ==================================================
-
-ui.header(APP_TITLE, APP_SUBTITLE, DEMO_BADGE)
+# Místo nahoře na stránce: název a podtitulek se vypíšou hned po určení stránky (záhlaví je vidět i při
+# předčasném ukončení běhu), skutečný rozsah dat se doplní na konci běhu (potřebuje plán zakázek).
+HEADER_SLOT = st.empty()
 
 
 # ==================================================
@@ -246,6 +246,9 @@ _PAGE_OBJ = {
 nav = st.navigation({group: [_PAGE_OBJ[k] for k in keys] for group, keys in navreg.groups().items()},
                     position="sidebar")
 PAGE = next(k for k, page in _PAGE_OBJ.items() if page is nav)
+PAGE_TITLE = next(p[2] for p in navreg.PAGES if p[0] == PAGE)
+ui.header(HEADER_SLOT, PAGE_TITLE, navreg.HEADER_SUBTITLES[PAGE], DEMO_BADGE,
+          art_src=ui.header_art_src(original=True) if PAGE == "dashboard" else None)   # V4: původní ilustrace jen na Dashboardu
 SHOW_INV_INPUTS = PAGE == "investice"          # investiční vstupy jen v sekci Investice
 
 
@@ -286,7 +289,10 @@ def _inv_input(container, widget: str, key: str, label: str, default_value, defa
 # Investiční vstupy jsou na stránce Investice v panelu „Nastavení investičního scénáře“ nad výsledky.
 # Jeho části se vytvoří dopředu, aby šly plnit na místech, kde je kód potřebuje – pořadí výpočtů
 # tak zůstává beze změny. Každý vstup existuje jen jednou (stejné klíče jako dosud).
-ui.sidebar_brand(APP_TITLE, APP_FOCUS)
+# Redesign MALOSTROJE (V2): značka nad navigací – vlastní neutrální ikona a nápis MALOSTROJE (ne firemní logo).
+# Při sbaleném panelu (např. na mobilu) se v horní liště zobrazí jen ikona.
+st.logo(str(ui.ASSETS / "malostroje_wordmark.svg"), size="large",
+        icon_image=str(ui.ASSETS / "malostroje_icon.svg"))
 st.sidebar.markdown(
     '<div class="de-demo"><b>Ukázková data</b> · všechny hodnoty jsou fiktivní</div>',
     unsafe_allow_html=True,
@@ -1961,7 +1967,7 @@ if PAGE == "zakazky":                                     # sekce Vlastní zaká
                 x=machine_usage_df["utilization"],
                 y=usage_labels,
                 orientation="h",
-                marker=dict(color=[ui.ACCENT if i == 0 else ui.BLUE for i in range(len(machine_usage_df))],
+                marker=dict(color=[ui.CHART_HIGHLIGHT if i == 0 else ui.BLUE for i in range(len(machine_usage_df))],
                             line=dict(color="#fff", width=2)),
                 text=[fmt_pct(v) for v in machine_usage_df["utilization"]], textposition="outside",
                 cliponaxis=False, customdata=machine_usage_df["used_days"],
@@ -2792,11 +2798,6 @@ if PAGE == "zakazky":
 if PAGE == "dashboard":
     st.markdown(ui.DASHBOARD_CSS, unsafe_allow_html=True)
     with ui.tab_container("dashboard"):
-        ui.tab_header(
-            "Přehled půjčovny",
-            "Souhrn výsledků sekcí na <b>ukázkových datech</b> – Dashboard nic nepřepočítává, čísla odpovídají "
-            "sekcím, kam vedou odkazy.",
-        )
         # Plán zakázek a kapacita: stejné funkce a výchozí nastavení jako při otevření sekcí
         _, dash_plan, _ = plan_jobs(jobs_df, machine_capacity, code_version)
         dash_sum = sch.summary(dash_plan)
@@ -2832,38 +2833,45 @@ if PAGE == "dashboard":
             dict(icon="coins", label="Ekonomický výsledek", tone="accent",
                  value=fmt_czk(dash_sum["profit_after_penalty"]),
                  chip=ui.dash_chip("dílčí údaj – jen vlastní zakázky", "info"),
-                 sub="zisk vlastních zakázek po penále, včetně zakázek v kapacitním konfliktu · nejde o čistý zisk "
-                     "půjčovny",
                  more_summary="Kde je celý výsledek",
-                 more="Částka vychází z plánu vlastních zakázek; jisté a konfliktní zakázky rozlišuje stránka "
-                      "Ekonomika flotily."),
+                 more="zisk vlastních zakázek po penále, včetně zakázek v kapacitním konfliktu · nejde o čistý zisk "
+                      "půjčovny. Částka vychází z plánu vlastních zakázek; jisté a konfliktní zakázky rozlišuje "
+                      "stránka Ekonomika flotily."),
             dict(icon="truck", label="Pronájmy a zakázky", tone="neutral",
                  pair=True,
                  value=(f"<span>{dash_confirmed}<small>{dash_word(dash_confirmed, 'pronájem', 'pronájmy', 'pronájmů')}</small></span> "
                         f"<span>· {dash_sum['scheduled']}<small>{dash_word(dash_sum['scheduled'], 'zakázka', 'zakázky', 'zakázek')}</small></span>"),
-                 sub=f"potvrzené pronájmy a zakázky v plánu · +{cv.plural(dash_tentative, 'předběžná rezervace', 'předběžné rezervace', 'předběžných rezervací')} · "
-                     "stav k dnešku nelze určit"),
+                 sub="potvrzené pronájmy a zakázky v plánu",
+                 more_summary="Podrobnosti",
+                 more=f"+{cv.plural(dash_tentative, 'předběžná rezervace', 'předběžné rezervace', 'předběžných rezervací')} · "
+                      "stav k dnešku nelze určit"),
             dict(icon="alert", label="Kapacitní konflikty", tone="bad" if n_dash_conf else "good",
+                 card="alert" if n_dash_conf else "",
                  value=f"{n_dash_conf}<small>{dash_word(n_dash_conf, 'den', 'dny', 'dní')}</small>",
                  chip=ui.dash_chip("vyžaduje řešení", "bad") if n_dash_conf else ui.dash_chip("bez konfliktu", "good"),
-                 sub=("bez konfliktu" if not n_dash_conf else "dny " + cv.days_text(dash_cap["conflict_days"]))
-                     + f" · všechny stroje, {dash_period}"),
+                 more_summary="Které dny",
+                 more=("bez konfliktu" if not n_dash_conf else "dny " + cv.days_text(dash_cap["conflict_days"]))
+                      + f" · všechny stroje, {dash_period}"),
         ])
 
         # ---- 2. Provoz a ekonomika ----------------------------------------------------------------
-        col_op, col_ec = st.columns(2, gap="medium")
+        col_op, col_ec = st.columns([1.13, 1], gap="small")
         with col_op, ui.dash_section("provoz"):
-            ui.dash_section_head("route", "Provoz půjčovny a vlastních zakázek",
+            ui.dash_section_head("truck", "Provoz půjčovny a vlastních zakázek",
                                  f"Obsazenost strojů a plán zakázek · {dash_period}", tone="neutral")
+            dash_share = lambda v: v / dash_capacity if dash_capacity else None   # jen šířka pruhu (= dash_pct)
             ui.dash_rows([
                 ("Pronájmy", f"{fmt_num(dash_use['rental'])} strojodnů",
-                 f"{dash_pct(dash_use['rental'])} kapacity · potvrzené rezervace"),
+                 f"{dash_pct(dash_use['rental'])} kapacity · potvrzené rezervace", False,
+                 (dash_share(dash_use["rental"]), "dark")),
                 ("Vlastní zakázky", f"{fmt_num(dash_use['job'])} strojodnů",
-                 f"{dash_pct(dash_use['job'])} kapacity · podle plánu zakázek"),
+                 f"{dash_pct(dash_use['job'])} kapacity · podle plánu zakázek", False,
+                 (dash_share(dash_use["job"]), "accent")),
                 ("Servis", f"{fmt_num(dash_use['maintenance'])} strojodnů",
-                 f"{dash_pct(dash_use['maintenance'])} kapacity · stroj nedostupný"),
+                 f"{dash_pct(dash_use['maintenance'])} kapacity · stroj nedostupný", False,
+                 (dash_share(dash_use["maintenance"]), "mid")),
                 ("Volná kapacita", f"{fmt_num(dash_use['free'])} strojodnů", f"{dash_pct(dash_use['free'])} kapacity",
-                 True),
+                 True, (dash_share(dash_use["free"]), "light")),
                 ("Nejvytíženější stroj", html.escape(dash_cap["busiest"] or "–"),
                  (fmt_pct(dash_cap["busiest_share"], 0) + " obsazenost vč. servisu")
                  if dash_cap["busiest_share"] is not None else ""),
@@ -2909,7 +2917,7 @@ if PAGE == "dashboard":
         with st.container(key="dd_alerts"):        # na užších obrazovkách karty pod sebou (CSS)
             col_inv, col_cap, col_dc = st.columns(3, gap="medium")
         with col_inv, ui.dash_section("investice_accent"):
-            ui.dash_section_head("spark", "Investiční doporučení", tone="accent")
+            ui.dash_section_head("trend", "Investiční doporučení", tone="accent")
             if purchase_best["units"] > 0:
                 dash_set = " · ".join(f"{k}× {name}" if k > 1 else name for name, k in purchase_best["counts"].items())
                 dash_set_sub = (f"{fmt_czk(purchase_best['profit'])} měsíčně · investice "
@@ -2943,7 +2951,7 @@ if PAGE == "dashboard":
             with ui.dash_links("konflikty"):
                 page_link("kapacita", "Otevřít kalendář kapacity")
         with col_dc, ui.dash_section("rozhodovaci_centrum_neutral"):
-            ui.dash_section_head("route", "Rozhodovací centrum", tone="neutral")
+            ui.dash_section_head("sliders", "Rozhodovací centrum", tone="neutral")
             if dash_requests:
                 dash_res = planner_result(data_version, code_version, tuple(sorted(dash_starts.items())),
                                           pv.freeze(dash_requests))
@@ -2965,6 +2973,13 @@ if PAGE == "dashboard":
             with ui.dash_links("rozhodovaci_centrum"):
                 page_link("rozhodovaci_centrum")
                 page_link("pronajem", "Nový pronájem")
+        # V4: úvodní poznámka je pod obsahem – předloha nad kartami nic nemá; text se nemění
+        ui.tab_header(
+            "Přehled půjčovny",
+            "Souhrn výsledků sekcí na <b>ukázkových datech</b> – Dashboard nic nepřepočítává, čísla odpovídají "
+            "sekcím, kam vedou odkazy.",
+            show_title=False,          # V3: název stránky je v záhlaví (Dashboard)
+        )
         ui.hint(cv.data_info(data_model, data_version))
 
 
@@ -3488,7 +3503,7 @@ if PAGE == "chybejici_udaje":
             if not prio["groups"]:
                 ui.dash_text("Žádné údaje s touto prioritou.", muted=True)
             for i, grp in enumerate(prio["groups"]):
-                with ui.dash_section(f"dg_{prio['priority'][:3]}_{i}_" + {"bad": "bad", "warn": "accent"}.get(
+                with ui.dash_section(f"dg_{prio['priority'][:3]}_{i}_" + {"bad": "bad", "warn": "warn"}.get(
                         prio["tone"], "neutral")):
                     ui.dash_section_head("alert" if prio["tone"] == "bad" else "spark", grp["label"],
                                          html.escape(f"{grp['count_text']} · {grp['status_text']}"),
@@ -3521,6 +3536,18 @@ if PAGE == "chybejici_udaje":
             else:
                 ui.dash_text("V datech nechybí žádný údaj, který výpočty používají.", muted=True)
 
+
+# Záhlaví: doplnit skutečný rozsah používaných dat (pronájmy, plán zakázek, servis) – stejný kalendář jako
+# Dashboard a Plánování kapacity. Jen zobrazení, nic se nepřepočítává jinak.
+def header_period() -> str:
+    _, hp_plan, _ = plan_jobs(jobs_df, machine_capacity, code_version)
+    hp_cal = cv.build(data_model, cv.job_starts_from_plan(jobs_df, hp_plan))
+    ends = [a.end for a in hp_cal.assignments] + [j.latest for j in hp_cal.open_jobs if j.latest is not None]
+    return f"Rozsah dat: dny plánu 1–{max(ends)}" if ends else ""
+
+
+ui.header(HEADER_SLOT, PAGE_TITLE, navreg.HEADER_SUBTITLES[PAGE], DEMO_BADGE, header_period(),
+          ui.header_art_src(original=True) if PAGE == "dashboard" else None)
 
 # Spuštění aktivní stránky (soubor stránky je jen značka – obsah vykreslil kód výše)
 nav.run()

@@ -1,10 +1,23 @@
 [theme]
 base = "light"
-primaryColor = "#B45309"
-backgroundColor = "#FFFFFF"
+primaryColor = "#C42F2D"
+backgroundColor = "#FAFAFB"
 secondaryBackgroundColor = "#F6F7F9"
 textColor = "#1F2933"
 font = "sans serif"
 
+# Redesign MALOSTROJE (V2): tmavý antracitový levý panel podle schváleného návrhu.
+[theme.sidebar]
+backgroundColor = "#1D2025"
+secondaryBackgroundColor = "#26292E"
+textColor = "#E6E8EB"
+primaryColor = "#C42F2D"
+borderColor = "#3A3F46"
+
 [client]
 toolbarMode = "minimal"
+
+# Redesign MALOSTROJE (V4): ilustrace záhlaví Dashboardu se posílá jako samostatný soubor ze složky static/
+# (adresa app/static/…). Vložená do HTML by byla příliš velká. Ve složce jsou jen veřejné obrázky.
+[server]
+enableStaticServing = true
