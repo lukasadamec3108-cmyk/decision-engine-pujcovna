@@ -248,7 +248,7 @@ nav = st.navigation({group: [_PAGE_OBJ[k] for k in keys] for group, keys in navr
 PAGE = next(k for k, page in _PAGE_OBJ.items() if page is nav)
 PAGE_TITLE = next(p[2] for p in navreg.PAGES if p[0] == PAGE)
 ui.header(HEADER_SLOT, PAGE_TITLE, navreg.HEADER_SUBTITLES[PAGE], DEMO_BADGE,
-          art_src=ui.header_art_src(original=True) if PAGE == "dashboard" else None)   # V4: původní ilustrace jen na Dashboardu
+          art_src=ui.header_art_src(original=True) if PAGE in ("dashboard", "ekonomika") else None)   # V4/V5: Dashboard a Ekonomika
 SHOW_INV_INPUTS = PAGE == "investice"          # investiční vstupy jen v sekci Investice
 
 
@@ -3084,35 +3084,71 @@ def fe_valid_months(value) -> bool:
             and FE_MONTHS_RANGE[0] <= value <= FE_MONTHS_RANGE[1])
 
 
-def fe_banners(banners: list) -> None:
-    """Upozornění stránky (K3.4e3a): ukázková data a „nejde o čistý zisk“ samostatně a výrazně, ostatní
-    informační upozornění (metoda přepočtu, konflikty) v jednom kompaktním bloku – texty beze změny."""
-    info = [b for b in banners if b["tone"] == "info" and b["text"] != fv.FICTITIOUS]
-    for b in banners:
-        if b not in info:
-            fe_banner(b)
+FE_SECTIONS = ("Využití strojů a kapacit", "Kapacitní konflikty a varianty řešení", "Zakázka, nebo pronájem?",
+               "Evidence zakázek a pronájmů", "Metodika výpočtů")   # V5: rozbalovací sekce (výchozí stav sbalené)
+FE_TOTAL_FIRST = ("celkem", "pronajem", "zakazky")                  # V5: pořadí hlavních ukazatelů
+
+
+def fe_status(view: dict) -> None:
+    """V5: stav výsledku maximálně stručně – na první pohled jen podstata (neúplný výsledek, horní mez, počet
+    chybějících údajů), všechna upozornění a celý seznam chybějících údajů v rozbalovacím detailu. Texty
+    upozornění i položek jsou beze změny (fleet_view)."""
+    warn = [b for b in view["banners"] if b["tone"] in ("bad", "warn")]
+    info = [b for b in view["banners"] if b["tone"] not in ("bad", "warn") and b["text"] != fv.FICTITIOUS]
+    n_missing = sum(len(g["items"]) for g in view["missing"])
+    head = []
+    for b in warn:
+        text = html.escape(b["text"])
+        if b["text"].startswith(FLEET_ECON_NOT_NET_PROFIT):
+            text = (f"<b>{html.escape(FLEET_ECON_NOT_NET_PROFIT)}</b>"
+                    + html.escape(b["text"][len(FLEET_ECON_NOT_NET_PROFIT):]))
+        head.append(f'<div class="fe-st-line">{text}</div>')
+    detail = ""
     if info:
-        ui.insight("<ul class=\"fe-notes\">" + "".join(f"<li>{html.escape(b['text'])}</li>" for b in info) + "</ul>")
+        detail += '<ul class="fe-notes">' + "".join(f"<li>{html.escape(b['text'])}</li>" for b in info) + "</ul>"
+    for grp in view["missing"]:
+        detail += (f'<div class="dd-group">{html.escape(grp["group"])}</div><ul class="dd-list">'
+                   + "".join(f"<li>{html.escape(item)}</li>" for item in grp["items"]) + "</ul>")
+    if not view["missing"]:
+        detail += '<div class="dd-text">Pro zvolené období a metodu nechybí žádný údaj ani rozhodnutí.</div>'
+    tone = "bad" if warn or view["missing"] else "good"
+    with ui.dash_section(f"ekon_stav_{tone}"):
+        st.markdown(
+            '<div class="fe-st">' + ui.dash_icon("alert" if tone == "bad" else "spark") + "<div>"
+            + ("".join(head) or '<div class="fe-st-line"><b>Výsledek je úplný.</b></div>')
+            + "</div></div>"
+            + ui.more_html("Co chybí k přesnému výsledku", detail,
+                           f"{n_missing} {fv._plural(n_missing, 'položka', 'položky', 'položek')}" if n_missing else ""),
+            unsafe_allow_html=True)
 
 
-def fe_banner(b: dict) -> None:
-    text = html.escape(b["text"])
-    if b["text"].startswith(FLEET_ECON_NOT_NET_PROFIT):
-        text = f"<b>{html.escape(FLEET_ECON_NOT_NET_PROFIT)}</b>" + html.escape(b["text"][len(FLEET_ECON_NOT_NET_PROFIT):])
-    ui.insight(text, "bad" if b["tone"] in ("bad", "warn") else "")
+def fe_comparison_html(case: dict) -> str:
+    """Porovnání variant konfliktu – jen informace (econ_formula). V5: rozbalovací detail HTML (uvnitř
+    rozbalovací sekce nesmí být další st.expander); obsah beze změny."""
+    body = (f'<div class="dd-text">{html.escape(case["comparison_note"])}</div>' if case["comparison_note"] else "")
+    if case["comparisons"]:
+        body += '<ul class="dd-list">' + "".join(
+            f"<li><b>{ui.nowrap_ids(c['a_label'])} × {ui.nowrap_ids(c['b_label'])}</b> · {html.escape(c['kind'])}"
+            f"<small>{ui.nowrap_ids(c['text'])}</small></li>" for c in case["comparisons"]) + "</ul>"
+    body += f'<div class="dd-text muted">{html.escape(fv.COMPARISON_DISCLAIMER)}</div>'
+    return ui.more_html(f"Porovnání variant – jen informace ({len(case['comparisons'])})", body)
 
 
 if PAGE == "ekonomika":
     st.markdown(ui.ECON_CSS, unsafe_allow_html=True)
+    st.markdown(ui.ECON_LAYOUT_CSS, unsafe_allow_html=True)               # V5: vzhled podle Dashboardu
     with ui.tab_container("ekonomika"):
-        ui.tab_header(FLEET_ECON_TITLE, FLEET_ECON_INTRO)
-        fe_badge = st.empty()
+        # V5: jeden řádek nad ukazateli – návrat na Dashboard, označení ukázkových / neúplných dat, období, metoda
+        with st.container(horizontal=True, key="fe_topbar", vertical_alignment="center", gap="medium"):
+            page_link("dashboard", "Zpět na Dashboard")
+            fe_info = st.empty()                                           # vyplní se po filtrech
+        fe_kpi_slot = st.container()                                       # hlavní ukazatele (pod řádkem nahoře)
+        fe_status_slot = st.container()                                    # stručný stav výsledku
         _, fe_plan, _ = plan_jobs(jobs_df, machine_capacity, code_version)
         fe_starts = cv.job_starts_from_plan(jobs_df, fe_plan)
         fe_default_end, fe_max_day = cv.period_bounds(cv.build(data_model, fe_starts))
-        fe_top = ui.summary_slot("ekonomika")                 # upozornění a ukazatele – naplní se po filtrech
 
-        with ui.filter_box("ekonomika", "Období a fixní náklady"):
+        with st.expander("Změnit období a fixní náklady"), ui.filter_box("ekonomika", "Období a fixní náklady"):
             f1, f2 = st.columns([3, 2])
             with f1:
                 fe_from, fe_to = kept_input(
@@ -3137,131 +3173,162 @@ if PAGE == "ekonomika":
 
         fe_view = fleet_economics_view(data_version, code_version, tuple(sorted(fe_starts.items())),
                                        int(fe_from), int(fe_to), fe_method, fe_months, fe_start)
-        fe_badge.markdown(ui.status_chip("Ukázková data" + (" / neúplné" if fe_view["status"] != fv.COMPLETE else ""),
-                                         "warn"), unsafe_allow_html=True)
+        # 1. Období a zdroj dat – vždy vidět (označení ukázkových dat a neúplného výsledku)
+        fe_info.markdown(
+            '<div class="fe-info">'
+            + ui.status_chip("Ukázková data" + (" / neúplné" if fe_view["status"] != fv.COMPLETE else ""), "warn")
+            + (f'<span><b>Období:</b> {html.escape(fe_view["period"])}</span>' if fe_view["period"] else "")
+            + f'<span><b>Fixní náklady a režie:</b> {html.escape(fe_label.split(" – ")[0].split(" (")[0])}</span>'
+            + "</div>", unsafe_allow_html=True)
 
-        with fe_top:
-            fe_banners(fe_view["banners"])
-            if fe_view["computable"]:
-                st.markdown(f'<div class="dd-section-title">Hlavní ukazatele <small>{html.escape(fe_view["period"])}'
-                            "</small></div>", unsafe_allow_html=True)
+        if not fe_view["computable"]:
+            with fe_status_slot:
+                fe_status(fe_view)
+        if fe_view["computable"]:
+            # 2. Hlavní ukazatele: celkový výsledek → pronájmy → zakázky → kapacitní konflikty
+            fe_head = {h["key"]: h for h in fe_view["headline"]}
+            fe_conf = next(k for k in fe_view["kpis"] if k["key"] == "konflikty")
+            fe_n_cases = len(fe_view["conflicts"])
+            with fe_kpi_slot:
                 ui.dash_kpis([dict(
                     icon=FE_KPI_ICONS[h["key"]], label=h["label"], value=html.escape(h["text"]), cls="word",
-                    chip=fe_chip(h["status"], h["tone"]),
-                    sub=f'<span class="dd-period">Období: {html.escape(h["period"])}</span>',
-                    more=html.escape(h["meaning"]), tone="neutral") for h in fe_view["headline"]])
+                    chip=fe_chip(h["status"], h["tone"]), more=html.escape(h["meaning"]),
+                    tone="accent" if h["key"] == "celkem" else "neutral")
+                    for h in (fe_head[k] for k in FE_TOTAL_FIRST)]
+                    + [dict(icon="alert", label="Kapacitní konflikty", value=html.escape(fe_conf["text"]), cls="word",
+                            chip=fe_chip(fe_conf["status"], fe_conf["tone"]), sub=html.escape(fe_conf["explanation"]),
+                            tone="bad" if fe_n_cases else "good", card="alert" if fe_n_cases else "")])
 
-        if fe_view["computable"]:
+            # 3. Chybějící data a rizika – stručně, podrobnosti po rozbalení
+            with fe_status_slot:
+                fe_status(fe_view)
+
+            # 4. Rozpad výsledku
             st.markdown('<div class="dd-section-title">Rozpad výsledku <small>jen podložené částky – neznámé '
                         "položky jsou označené</small></div>", unsafe_allow_html=True)
             fe_cols = st.columns(len(fe_view["components"]))
             for col, g in zip(fe_cols, fe_view["components"]):
+                total = next((r for r in g["rows"] if r.get("total")), None)
+                tint = ("good" if total and total["status"] == fv.COMPLETE and (total.get("value") or 0) > 0
+                        else "bad" if total and total["status"] == fv.COMPLETE and (total.get("value") or 0) < 0
+                        else "neutral")
                 with col, ui.dash_section("ekon_" + {"Pronájem strojů": "pronajem", "Vlastní zakázky": "zakazky"}
-                                          .get(g["group"], "flotila")):
+                                          .get(g["group"], "flotila") + "_" + tint):
                     ui.dash_section_head({"Pronájem strojů": "truck", "Vlastní zakázky": "route"}.get(g["group"], "coins"),
-                                         g["group"], html.escape(g["note"]))
+                                         g["group"], html.escape(g["note"]), tone="neutral")
                     ui.dash_rows([(r["item"], html.escape(r["text"]), fe_chip(r["status"], r["tone"]),
                                    r.get("total", False)) for r in g["rows"]])
-
-            st.markdown('<div class="dd-section-title">Co chybí k přesnému výsledku</div>', unsafe_allow_html=True)
-            with ui.dash_section("ekon_chybi_" + ("bad" if fe_view["missing"] else "good")):
-                if fe_view["missing"]:
-                    for grp in fe_view["missing"]:
-                        st.markdown(f'<div class="dd-group">{html.escape(grp["group"])}</div><ul class="dd-list">'
-                                    + "".join(f"<li>{html.escape(item)}</li>" for item in grp["items"]) + "</ul>",
+                    if g["group"] not in ("Pronájem strojů", "Vlastní zakázky"):     # fixní náklady (dřív KPI karta)
+                        st.markdown(ui.more_html("Co ukazatel zahrnuje", html.escape(fe_head["fixni"]["meaning"])),
                                     unsafe_allow_html=True)
-                else:
-                    ui.dash_text("Pro zvolené období a metodu nechybí žádný údaj ani rozhodnutí.")
 
-            # K3.4e2: stručný souhrn využití strojů (Usage.fleet – stejná čísla jako Plánování kapacity)
+        # 5. Podrobnosti – rozbalovací sekce (ve výchozím stavu sbalené)
+        if fe_view["computable"]:
             fe_use = fe_view["usage_summary"]
-            if fe_use:
-                st.markdown('<div class="dd-section-title">Využití strojů za období <small>'
-                            + html.escape(f"{fe_view['period']} · kapacita flotily {fe_use['capacity_text']}")
-                            + "</small></div>", unsafe_allow_html=True)
-                with ui.dash_section("ekon_vyuziti_neutral"):
-                    ui.dash_rows([(r["label"], html.escape(r["text"]), html.escape(r["meaning"]))
-                                  for r in fe_use["rows"]])
-                    ui.more("Jak číst využití", "<ul>" + "".join(
-                        f"<li>{html.escape(x)}</li>" for x in [fe_use["composition"], *fe_use["notes"]]) + "</ul>")
-                    with ui.dash_links("ekon_vyuziti"):
-                        if st.button("Podrobné využití v Plánování kapacity", key="fe_usage_detail",
-                                     icon=":material/bar_chart:", type="tertiary"):
-                            fe_open_usage(fe_from, fe_to, fe_start)
+            with st.expander(FE_SECTIONS[0], icon=":material/bar_chart:"):
+                if fe_use:
+                    st.markdown('<div class="dd-section-title">Využití strojů za období <small>'
+                                + html.escape(f"{fe_view['period']} · kapacita flotily {fe_use['capacity_text']}")
+                                + "</small></div>", unsafe_allow_html=True)
+                    with ui.dash_section("ekon_vyuziti_neutral"):
+                        ui.dash_rows([(r["label"], html.escape(r["text"]), html.escape(r["meaning"]))
+                                      for r in fe_use["rows"]])
+                        ui.more("Jak číst využití", "<ul>" + "".join(
+                            f"<li>{html.escape(x)}</li>" for x in [fe_use["composition"], *fe_use["notes"]]) + "</ul>")
+                        with ui.dash_links("ekon_vyuziti"):
+                            if st.button("Podrobné využití v Plánování kapacity", key="fe_usage_detail",
+                                         icon=":material/bar_chart:", type="tertiary"):
+                                fe_open_usage(fe_from, fe_to, fe_start)
+                else:
+                    ui.dash_text("Využití strojů za období nelze shrnout.", muted=True)
 
             fe_cases = fe_view["conflicts"]
-            st.markdown('<div class="dd-section-title">Kapacitní konflikty a možné varianty <small>'
-                        + html.escape(f"{len(fe_cases)} {fv._plural(len(fe_cases), 'případ', 'případy', 'případů')}")
-                        + "</small></div>", unsafe_allow_html=True)
-            if not fe_cases:
-                ui.dash_text("V období nejsou konflikty potvrzených pronájmů, zakázek a servisu.", muted=True)
-            for case in fe_cases:
-                with ui.dash_section(f"ekon_konflikt_{case['id']}_bad"):
-                    ui.dash_section_head("alert", case["title"], html.escape(case["note"]), tone="bad",
-                                         title_html=ui.nowrap_ids(case["title"]))
-                    ui.dash_rows([(f"{c['ref']} – {c['kind']}", html.escape(c["text"]),
-                                   html.escape(c["period"]) + " · " + fe_chip(c["status"], c["tone"]))
-                                  for c in case["commitments"]]
-                                 + ([("Servis", "", ui.nowrap_ids(", ".join(case["services_text"])))]
-                                    if case["services"] else []))
-                    ui.dash_variants([dict(
-                        title=v["title"],
-                        sub=(f"{v['feasibility']} · vyřešení konfliktu nelze posoudit"
-                             if v["resolves"] == fv.RESOLVES_UNKNOWN
-                             else f"{v['feasibility']} · vyřeší konflikt: {v['resolves']}"),
-                        tag=v["amount"]["status"],
-                        rows=[("Příspěvek dotčených závazků", html.escape(v["amount"]["text"]))],
-                        more="<ul>" + "".join(f"<li>{ui.nowrap_ids(x)}</li>" for x in
-                                              ([v["change"]] if v["change"] else [])
-                                              + ([f"Bližší termíny blokují: {', '.join(v['blockers'])}"]
-                                                 if v["blockers"] else [])
-                                              + [f"Varování: {w}" for w in v["warnings"]]
-                                              + ([v["amount"]["explanation"]] if v["amount"]["explanation"] else []))
-                        + "</ul>", more_summary="Podrobnosti varianty",
-                        more_meta=" · ".join(x for x in (
-                            f"varování: {len(v['warnings'])}" if v["warnings"] else "",
-                            "chybí údaje" if "chybí" in (v["amount"]["explanation"] or "") else "") if x))
-                        for v in case["variants"]])
-                    # K3.4d: porovnání variant – jen informace (econ_formula), nic se nevybírá ani nedoporučuje
-                    with st.expander(f"Porovnání variant – jen informace ({len(case['comparisons'])})"):
-                        if case["comparison_note"]:
-                            ui.dash_text(html.escape(case["comparison_note"]))
-                        if case["comparisons"]:
-                            st.markdown('<ul class="dd-list">' + "".join(
-                                f"<li><b>{ui.nowrap_ids(c['a_label'])} × {ui.nowrap_ids(c['b_label'])}</b> · "
-                                f"{html.escape(c['kind'])}"
-                                f"<small>{ui.nowrap_ids(c['text'])}</small></li>" for c in case["comparisons"])
-                                + "</ul>", unsafe_allow_html=True)
-                        ui.dash_text(html.escape(fv.COMPARISON_DISCLAIMER), muted=True)
-                    with ui.dash_links(f"ekon_{case['id']}"):
-                        if st.button(f"Zobrazit v kalendáři – {', '.join(case['machines'])}", key=f"fe_cal_{case['id']}",
-                                     icon=":material/calendar_month:", type="tertiary"):
-                            fe_open_calendar(case["types"])
-                        if case["jobs"]:
-                            page_link("zakazky", "Vlastní zakázky")
-            if fe_cases:
-                sc = fe_view["scenarios"]
-                with ui.dash_section("ekon_rozpeti_neutral"):
-                    ui.dash_kv("Rozpětí celkového výsledku přes ověřené varianty", html.escape(sc["cell"]["text"]),
-                               fe_chip(sc["cell"]["status"], sc["cell"]["tone"]) + " "
-                               + html.escape(sc["cell"]["explanation"] or sc.get("text", "")))
-                    ui.dash_text(html.escape(sc.get("text", "")) + " Rozhodnutí je na majiteli půjčovny.", muted=True)
-
-            # K3.4e1: předběžné, přesahující a nejisté závazky – nezapočítané částky (jen informace)
             fe_pending = fe_view["pending"]
-            st.markdown('<div class="dd-section-title">Předběžné a nejisté závazky <small>'
-                        + html.escape(f"nezapočítáno – {len(fe_pending)} "
-                                      + fv._plural(len(fe_pending), "závazek", "závazky", "závazků"))
-                        + "</small></div>", unsafe_allow_html=True)
-            with ui.dash_section("ekon_nezapocitano_neutral"):
-                ui.dash_text(html.escape(fv.PENDING_NOTE), muted=True)
-                if fe_pending:
-                    ui.dash_rows([fe_entry_row(r) for r in fe_pending])
-                else:
-                    ui.dash_text("V období nejsou předběžné, přesahující ani nejisté závazky.", muted=True)
+            with st.expander(f"{FE_SECTIONS[1]} ({len(fe_cases)})", icon=":material/warning:"):
+                st.markdown('<div class="dd-section-title">Kapacitní konflikty a možné varianty <small>'
+                            + html.escape(f"{len(fe_cases)} {fv._plural(len(fe_cases), 'případ', 'případy', 'případů')}")
+                            + "</small></div>", unsafe_allow_html=True)
+                if not fe_cases:
+                    ui.dash_text("V období nejsou konflikty potvrzených pronájmů, zakázek a servisu.", muted=True)
+                for case in fe_cases:
+                    with ui.dash_section(f"ekon_konflikt_{case['id']}_bad"):
+                        ui.dash_section_head("alert", case["title"], html.escape(case["note"]), tone="bad",
+                                             title_html=ui.nowrap_ids(case["title"]))
+                        ui.dash_rows([(f"{c['ref']} – {c['kind']}", html.escape(c["text"]),
+                                       html.escape(c["period"]) + " · " + fe_chip(c["status"], c["tone"]))
+                                      for c in case["commitments"]]
+                                     + ([("Servis", "", ui.nowrap_ids(", ".join(case["services_text"])))]
+                                        if case["services"] else []))
+                        ui.dash_variants([dict(
+                            title=v["title"],
+                            sub=(f"{v['feasibility']} · vyřešení konfliktu nelze posoudit"
+                                 if v["resolves"] == fv.RESOLVES_UNKNOWN
+                                 else f"{v['feasibility']} · vyřeší konflikt: {v['resolves']}"),
+                            tag=v["amount"]["status"],
+                            rows=[("Příspěvek dotčených závazků", html.escape(v["amount"]["text"]))],
+                            more="<ul>" + "".join(f"<li>{ui.nowrap_ids(x)}</li>" for x in
+                                                  ([v["change"]] if v["change"] else [])
+                                                  + ([f"Bližší termíny blokují: {', '.join(v['blockers'])}"]
+                                                     if v["blockers"] else [])
+                                                  + [f"Varování: {w}" for w in v["warnings"]]
+                                                  + ([v["amount"]["explanation"]] if v["amount"]["explanation"] else []))
+                            + "</ul>", more_summary="Podrobnosti varianty",
+                            more_meta=" · ".join(x for x in (
+                                f"varování: {len(v['warnings'])}" if v["warnings"] else "",
+                                "chybí údaje" if "chybí" in (v["amount"]["explanation"] or "") else "") if x))
+                            for v in case["variants"]])
+                        # K3.4d: porovnání variant – jen informace (econ_formula), nic se nevybírá ani nedoporučuje
+                        st.markdown(fe_comparison_html(case), unsafe_allow_html=True)
+                        with ui.dash_links(f"ekon_{case['id']}"):
+                            if st.button(f"Zobrazit v kalendáři – {', '.join(case['machines'])}",
+                                         key=f"fe_cal_{case['id']}", icon=":material/calendar_month:", type="tertiary"):
+                                fe_open_calendar(case["types"])
+                            if case["jobs"]:
+                                page_link("zakazky", "Vlastní zakázky")
+                if fe_cases:
+                    sc = fe_view["scenarios"]
+                    with ui.dash_section("ekon_rozpeti_neutral"):
+                        ui.dash_kv("Rozpětí celkového výsledku přes ověřené varianty", html.escape(sc["cell"]["text"]),
+                                   fe_chip(sc["cell"]["status"], sc["cell"]["tone"]) + " "
+                                   + html.escape(sc["cell"]["explanation"] or sc.get("text", "")))
+                        ui.dash_text(html.escape(sc.get("text", "")) + " Rozhodnutí je na majiteli půjčovny.", muted=True)
 
+                # K3.4e1: předběžné, přesahující a nejisté závazky – nezapočítané částky (jen informace)
+                st.markdown('<div class="dd-section-title">Předběžné a nejisté závazky <small>'
+                            + html.escape(f"nezapočítáno – {len(fe_pending)} "
+                                          + fv._plural(len(fe_pending), "závazek", "závazky", "závazků"))
+                            + "</small></div>", unsafe_allow_html=True)
+                with ui.dash_section("ekon_nezapocitano_neutral"):
+                    ui.dash_text(html.escape(fv.PENDING_NOTE), muted=True)
+                    if fe_pending:
+                        ui.dash_rows([fe_entry_row(r) for r in fe_pending])
+                    else:
+                        ui.dash_text("V období nejsou předběžné, přesahující ani nejisté závazky.", muted=True)
+
+        # E3.1: Zakázka, nebo pronájem? – jen informace (fleet_economics.job_vs_rental), nic nedoporučuje
+        fe_jr = fleet_job_rental_view(data_version, code_version)
+        with st.expander(FE_SECTIONS[2], icon=":material/compare_arrows:"):
+            st.markdown(f'<div class="dd-section-title fe-in-exp"><span class="t">{html.escape(fe_jr["title"])}</span> '
+                        f'<small>{html.escape(fe_jr["subtitle"])}</small></div>', unsafe_allow_html=True)
+            with ui.dash_section("ekon_zakazka_pronajem_neutral"):
+                ui.dash_text("<b>" + html.escape(fe_jr["disclaimer"]) + "</b>")
+                for note in fe_jr["notes"]:
+                    ui.dash_text(html.escape(note), muted=True)
+                st.markdown(ui.more_html("Co srovnání ukazuje", html.escape(fe_jr["intro"]))
+                            + (ui.more_html("Chybí k přesnějšímu srovnání", "<ul>" + "".join(
+                                f"<li>{html.escape(m)}</li>" for m in fe_jr["missing"]) + "</ul>",
+                                f"{len(fe_jr['missing'])} {fv._plural(len(fe_jr['missing']), 'položka', 'položky', 'položek')}")
+                               if fe_jr["missing"] else ""), unsafe_allow_html=True)
+            ui.dash_variants([dict(title=c["title"], sub=c["sub"], tag=c["tag"],
+                                   rows=[(lbl, html.escape(val)) for lbl, val in c["rows"]],
+                                   why="<ul>" + "".join(f"<li>{ui.nowrap_ids(x)}</li>" for x in c["why"]) + "</ul>")
+                              for c in fe_jr["cards"]])
+            st.markdown(ui.more_html("Jak se srovnání zakázky a pronájmu počítá", '<ul class="fe-points">' + "".join(
+                f"<li>{html.escape(x)}</li>" for x in fe_jr["method"]) + "</ul>"), unsafe_allow_html=True)
+
+        if fe_view["computable"]:
             # K3.4e1: evidence všech závazků z dat (každý právě jednou, ve skupinách podle stavu)
-            with st.expander(f"Evidence závazků ({len(fe_view['ledger'])})"):
+            with st.expander(f"{FE_SECTIONS[3]} ({len(fe_view['ledger'])})", icon=":material/list_alt:"):
                 ui.dash_text("Každý pronájem a každá vlastní zakázka z dat právě jednou. Do výsledku se započítává "
                              "jen skupina „Jisté využití“; částky jsou příspěvky celých závazků.", muted=True)
                 for grp in fe_view["ledger_groups"]:
@@ -3269,31 +3336,13 @@ if PAGE == "ekonomika":
                                 unsafe_allow_html=True)
                     ui.dash_rows([fe_entry_row(r, detail=True) for r in grp["rows"]])
 
-        # E3.1: Zakázka, nebo pronájem? – jen informace (fleet_economics.job_vs_rental), nic nedoporučuje
-        fe_jr = fleet_job_rental_view(data_version, code_version)
-        st.markdown(f'<div class="dd-section-title">{html.escape(fe_jr["title"])} <small>'
-                    f'{html.escape(fe_jr["subtitle"])}</small></div>', unsafe_allow_html=True)
-        with ui.dash_section("ekon_zakazka_pronajem_neutral"):
-            ui.dash_text("<b>" + html.escape(fe_jr["disclaimer"]) + "</b>")
-            for note in fe_jr["notes"]:
-                ui.dash_text(html.escape(note), muted=True)
-            st.markdown(ui.more_html("Co srovnání ukazuje", html.escape(fe_jr["intro"]))
-                        + (ui.more_html("Chybí k přesnějšímu srovnání", "<ul>" + "".join(
-                            f"<li>{html.escape(m)}</li>" for m in fe_jr["missing"]) + "</ul>",
-                            f"{len(fe_jr['missing'])} {fv._plural(len(fe_jr['missing']), 'položka', 'položky', 'položek')}")
-                           if fe_jr["missing"] else ""), unsafe_allow_html=True)
-        ui.dash_variants([dict(title=c["title"], sub=c["sub"], tag=c["tag"],
-                               rows=[(lbl, html.escape(val)) for lbl, val in c["rows"]],
-                               why="<ul>" + "".join(f"<li>{ui.nowrap_ids(x)}</li>" for x in c["why"]) + "</ul>")
-                          for c in fe_jr["cards"]])
-        with st.expander("Jak se srovnání zakázky a pronájmu počítá"):
-            st.markdown('<ul class="fe-points">' + "".join(f"<li>{html.escape(x)}</li>" for x in fe_jr["method"])
-                        + "</ul>", unsafe_allow_html=True)
-
         # K3.4e2: metodika – jen popis skutečné implementace, bez závěrů a rad
-        with st.expander("Jak se počítá"):
+        with st.expander(FE_SECTIONS[4], icon=":material/functions:"):
             ui.explain([(title, '<ul class="fe-points">' + "".join(f"<li>{html.escape(x)}</li>" for x in points)
                          + "</ul>") for title, points in fe_view["methodology"]])
+        # V5: úvod stránky a plné označení fiktivních dat pod obsahem (jako na Dashboardu) – texty beze změny
+        ui.tab_header(FLEET_ECON_TITLE, FLEET_ECON_INTRO)
+        st.markdown(f'<div class="fe-src">{html.escape(fv.FICTITIOUS)}</div>', unsafe_allow_html=True)
 
 
 # ==================================================
@@ -3547,7 +3596,7 @@ def header_period() -> str:
 
 
 ui.header(HEADER_SLOT, PAGE_TITLE, navreg.HEADER_SUBTITLES[PAGE], DEMO_BADGE, header_period(),
-          ui.header_art_src(original=True) if PAGE == "dashboard" else None)
+          ui.header_art_src(original=True) if PAGE in ("dashboard", "ekonomika") else None)
 
 # Spuštění aktivní stránky (soubor stránky je jen značka – obsah vykreslil kód výše)
 nav.run()

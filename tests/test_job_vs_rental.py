@@ -299,7 +299,9 @@ def test_page_shows_block_with_all_jobs():
     order = [text.index(f"J0{n:02d} – ") for n in range(1, 13)]
     assert order == sorted(order)                                         # pořadí podle dat, žádné řazení
     assert "Hranice využití pronájmu orientačně 67 %" in text
-    assert "Jak se srovnání zakázky a pronájmu počítá" in [e.label for e in at.main.expander]
+    raw = " ".join(m.value for m in at.main.markdown)               # V5: detail HTML v rozbalovací sekci
+    assert '<details class="de-more"><summary>Jak se srovnání zakázky a pronájmu počítá' in raw
+    assert "Zakázka, nebo pronájem?" in [e.label for e in at.main.expander]
     assert not at.warning and not at.error
 
 
