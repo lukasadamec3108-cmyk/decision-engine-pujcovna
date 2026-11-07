@@ -463,6 +463,15 @@ def header(slot, title: str, subtitle: str, badge: str, period: str = "", art_sr
     slot.markdown(header_html(title, subtitle, badge, period, art_src), unsafe_allow_html=True)
 
 
+# Přihlašovací obrazovka bez levého panelu. Navigaci chráněných stránek odstraňuje app.py (skrytá navigace
+# jen se stránkou Přihlášení); tento styl skryje jen prázdný rám panelu, který prohlížeči po odhlášení zůstane
+# z přihlášené relace (bez odkazů i obsahu). Vykresluje se jen bez přihlášení – po přihlášení se nepoužije.
+LOGIN_NO_SIDEBAR_CSS = """<style>
+section[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"],
+[data-testid="stExpandSidebarButton"] { display: none !important; }
+</style>"""
+
+
 def login_intro(title: str, subtitle: str, prompt: str) -> None:
     st.markdown(
         f'<div class="de-login"><img src="{brand_icon_src()}" alt=""><div class="t">{html.escape(title)}</div>'

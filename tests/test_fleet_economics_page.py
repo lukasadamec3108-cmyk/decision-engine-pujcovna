@@ -150,7 +150,12 @@ def test_page_is_in_overview_group_directly_below_dashboard():
 
 
 def test_not_reachable_without_login():
-    at = open_page(app(users=True), KEY)
+    at = app(users=True)
+    try:                                                   # bez přihlášení stránka vůbec není registrovaná
+        open_page(at, KEY)
+        raise AssertionError("stránka je dostupná bez přihlášení")
+    except ValueError as exc:
+        assert "Known pages: ['Přihlášení']" in str(exc)
     assert not at.exception
     assert [t.label for t in at.text_input] == ["Uživatelské jméno", "Heslo"]
     assert "Ekonomika flotily" not in plain(m.value for m in at.markdown)
