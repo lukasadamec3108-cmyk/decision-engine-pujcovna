@@ -75,12 +75,75 @@ def test_protected_content_hidden_before_login():
     assert [t.label for t in at.text_input] == ["Uživatelské jméno", "Heslo"]
 
 
+def not_registered(at, key) -> bool:
+    """Chráněná stránka bez přihlášení vůbec neexistuje – jediná stránka je skryté Přihlášení.
+    (V prohlížeči vede přímá adresa na přihlašovací obrazovku – ověřeno vizuální kontrolou.)"""
+    try:
+        open_page(at, key)
+    except ValueError as exc:
+        return "Known pages: ['Přihlášení']" in str(exc)
+    return False
+
+
 def test_no_page_is_reachable_without_login():
     at = app()
     for key in navigace.KEYS:                                   # i přímou adresou stránky
-        open_page(at, key)
+        assert not_registered(at, key), key
         assert content_hidden(at) and not at.exception, key
         assert [t.label for t in at.text_input] == ["Uživatelské jméno", "Heslo"], key
+
+
+# ---------------------------------------------------------------------------
+# Přihlašovací obrazovka bez levého panelu a navigace
+# ---------------------------------------------------------------------------
+
+def login_screen_clean(at) -> bool:
+    """Přihlašovací obrazovka: v panelu nic (žádná navigace, odhlášení ani text), styl skrytí panelu je
+    vykreslen, chráněný obsah není a formulář je vidět."""
+    import ui_theme as ui
+    sidebar_items = [*at.sidebar.markdown, *at.sidebar.button, *at.sidebar.text_input, *at.sidebar.expander]
+    return (not sidebar_items and content_hidden(at) and not at.exception
+            and any(m.value == ui.LOGIN_NO_SIDEBAR_CSS for m in at.main.markdown)
+            and any(t.label in ("Heslo", "Přístupové heslo") for t in at.text_input))
+
+
+def test_login_screen_has_no_sidebar_or_navigation():
+    assert login_screen_clean(app())
+    assert login_screen_clean(app(with_users=False))                     # i režim jednoho hesla
+
+
+def test_sidebar_appears_after_login_and_disappears_after_logout():
+    import ui_theme as ui
+    at = login(app(), "honza", HONZA)
+    assert logged_in(at)
+    assert not any(m.value == ui.LOGIN_NO_SIDEBAR_CSS for m in at.markdown)   # po přihlášení panel normálně
+    open_page(at, "kapacita")
+    assert any(b.key == "logout" for b in at.sidebar.button)
+    at.button(key="logout").click().run()
+    assert login_screen_clean(at)                                        # zpět na čistou obrazovku
+    login(at, "honza", HONZA)
+    assert logged_in(at) and not any(m.value == ui.LOGIN_NO_SIDEBAR_CSS for m in at.markdown)
+
+
+def test_protected_pages_show_only_clean_login_screen():
+    for at in (app(), app(with_users=False)):
+        for key in navigace.KEYS:                                        # přímá adresa každé stránky
+            assert not_registered(at, key), key
+            assert login_screen_clean(at), key
+    at = login(app(), "honza", HONZA)                                    # po odhlášení totéž
+    at.button(key="logout").click().run()
+    for key in navigace.KEYS:
+        assert not_registered(at, key), key
+        assert login_screen_clean(at), key
+
+
+def test_login_navigation_contains_only_hidden_login_page():
+    src = (ROOT / "app.py").read_text(encoding="utf-8")
+    gate = src[src.index('if not st.session_state.get("authenticated", False):'):]
+    gate = gate[:gate.index("st.stop()")]
+    assert 'position="hidden"' in gate and "st.Page(_login_page" in gate     # žádná chráněná stránka
+    assert "_PAGE_OBJ" not in gate and "navreg" not in gate
+    assert src.index("st.stop()", src.index("_login_page, title")) < src.index("nav = st.navigation(")
 
 
 def test_lukas_logs_in_with_current_password():

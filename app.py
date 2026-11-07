@@ -184,8 +184,18 @@ if st.session_state.get("authenticated") and not auth.still_allowed(
 ):
     _log_out()
 
+def _login_page() -> None:
+    """Jediná stránka nepřihlášeného uživatele – přihlašovací formulář vykresluje kód níže."""
+
+
 # Po úspěšném přihlášení se přihlašovací pole skryje (stav je uložen v relaci).
 if not st.session_state.get("authenticated", False):
+    # Bez přihlášení má aplikace jen tuto skrytou stránku: prohlížeč tak nedostane (a po odhlášení
+    # nezobrazí) seznam chráněných stránek a levý panel zmizí úplně. Přímá adresa chráněné stránky
+    # vede sem – obsah stránek se bez přihlášení nevykreslí (st.stop níže).
+    st.navigation([st.Page(_login_page, title="Přihlášení", icon=":material/lock:", default=True)],
+                  position="hidden")
+    st.markdown(ui.LOGIN_NO_SIDEBAR_CSS, unsafe_allow_html=True)
     users_mode = AUTH["mode"] == "users"
     _, login_col, _ = st.columns([1, 1.2, 1])
     with login_col:
