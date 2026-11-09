@@ -63,7 +63,9 @@ def test_form_inputs_defaults_and_buttons_unchanged():
     assert [b.label for b in at.main.button if b.label in ("Vyhodnotit požadavek", "Přidat k porovnání")] == [
         "Vyhodnotit požadavek", "Přidat k porovnání"]
     assert not [r for r in at.radio if r.key == "dp_kind"]                       # jen pronájem
-    assert any(e.label == "Jak plánovač rozhoduje" for e in at.main.expander)
+    assert [e.label for e in at.main.expander] == ["Provoz a kapacita", "Ekonomika", "Význam doporučení",
+                                                   "Konflikty a alternativy"]          # V6: skupiny vysvětlení
+    assert any("Jak plánovač rozhoduje" in m.value for m in at.main.markdown)
     assert any("Ukázková data" in m.value for m in at.main.markdown)
 
 
@@ -148,10 +150,82 @@ def test_explanation_groups_keep_every_original_item():
     names = {t.id for n in ast.walk(tree) if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)}
     assert {"DP_EXPLAIN", "DP_EXPLAIN_GROUPS"} <= names
     at = rental_app()
-    exp = [e for e in at.main.expander if e.label == "Jak plánovač rozhoduje"][0]
-    text = " ".join(m.value for m in exp.markdown)
-    for group in ("Provoz a kapacita", "Ekonomika", "Význam doporučení", "Konflikty a alternativy"):
-        assert f'<div class="dd-group">{group}</div>' in text
-    for item in ("Zdroj", "Provoz", "Ekonomika", "Štítky ekonomiky", "Doporučeno", "Nelze rozhodnout", "Konflikty",
-                 "Alternativy", "Nic se nemění", "Předběžné rezervace"):
-        assert f'<div class="t">{item}</div>' in text, item
+    groups = {"Provoz a kapacita": ("Zdroj", "Provoz", "Předběžné rezervace", "Nic se nemění"),
+              "Ekonomika": ("Ekonomika", "Provoz × ekonomika"),
+              "Význam doporučení": ("Štítky ekonomiky", "Doporučeno", "Nelze rozhodnout"),
+              "Konflikty a alternativy": ("Konflikty", "Alternativy")}
+    for group, items in groups.items():                       # V6: každá skupina ve vlastní rozbalovací sekci
+        [exp] = [e for e in at.main.expander if e.label == group]
+        assert not exp.proto.expanded, group                   # ve výchozím stavu sbalené
+        text = " ".join(m.value for m in exp.markdown)
+        for item in items:
+            assert f'<div class="t">{item}</div>' in text, (group, item)
+
+
+# ---------------------------------------------------------------------------
+# V6 – vizuální sjednocení (jen vzhled; vstupy, validace a výsledek plánovače beze změny)
+# ---------------------------------------------------------------------------
+
+def body(at):
+    return " ".join(m.value for m in at.main.markdown if not m.value.lstrip().startswith("<style"))
+
+
+def test_v6_header_with_photo_and_sample_data_line():
+    at = rental_app()
+    [hdr] = [m.value for m in at.main.markdown if 'class="de-header' in m.value]
+    assert "app/static/zahlavi_dashboard.webp" in hdr and ">Pronájem strojů<" in hdr
+    assert "Ověření nového pronájmu – kapacita a ekonomika" in hdr and "Ukázková data" in hdr
+    raw = body(at)
+    assert raw.index("Ukázková data") < raw.index("Nový požadavek na pronájem")          # označení nad formulářem
+    assert "Požadavky se nikam neukládají ani nic nemění v rezervacích či zakázkách" in raw
+    assert "Ověřte, zda se nový pronájem vejde do kapacity a zda se vyplatí." in raw   # úvod zůstává (dole)
+    assert 'class="de-note' not in raw                                               # bez svislého proužku
+
+
+def test_v6_empty_state():
+    at = rental_app()
+    raw = body(at)
+    assert "Zatím není zadaný žádný požadavek." in raw and "Vyhodnotit požadavek" in raw
+    assert not kpis(at) and "Výsledek vyhodnocení" not in raw
+
+
+def test_v6_result_is_marked_as_sample_and_upper_bound_and_shown_above_list():
+    at = rental_app()
+    submit(at, "Vyhodnotit požadavek", "PASOVY_DUMPER", 22, 23)
+    raw = body(at)
+    status = raw.split('class="fe-info rent-status">')[1].split("</div>")[0]
+    assert "Ukázková data" in status and "neúplné údaje – částka je horní mez" in status
+    assert "nejde o čistý zisk" in status
+    assert kpis(at)["Ekonomický přínos"][:2] == ("nejvýše 16 000 Kč", "? horní mez")
+    assert raw.index("Výsledek vyhodnocení") < raw.index("Porovnávané požadavky") < raw.index("Podrobné zdůvodnění")
+
+
+def test_v6_result_status_follows_planner_without_computing():
+    base = dict(econ_why="x")
+    assert "ekonomika se nehodnotí" in rv.result_status_html(dict(base, economy=None))
+    assert "přesný příspěvek" in rv.result_status_html(dict(base, economy=dict(status=pv.EXACT, value=1.0)))
+    assert "horní mez" in rv.result_status_html(dict(base, economy=dict(status=pv.WITH_UNKNOWN, hi=5.0)))
+    assert "nelze určit" in rv.result_status_html(dict(base, economy=dict(status=pv.WITH_UNKNOWN, hi=None)))
+    assert "nelze spočítat" in rv.result_status_html(dict(base, economy=dict(status=pv.INVALID, invalid=[])))
+
+
+def test_v6_evaluation_does_not_change_bookings_or_jobs():
+    import datamodel as dm
+    before = dm.data_fingerprint()
+    at = rental_app()
+    submit(at, "Vyhodnotit požadavek", "SILNICNI_VALEC", 15, 18)
+    submit(at, "Přidat k porovnání", "MINI_BAGR", 40, 44, price=6100)
+    assert dm.data_fingerprint() == before
+
+
+def test_v6_decision_centre_keeps_its_look():
+    import ui_theme as ui
+    at = app()
+    open_page(at, "rozhodovaci_centrum")
+    ok(at)
+    assert [e.label for e in at.main.expander] == ["Jak plánovač rozhoduje"]
+    assert not any(m.value == ui.RENTAL_LAYOUT_CSS for m in at.main.markdown)
+    [hdr] = [m.value for m in at.main.markdown if 'class="de-header' in m.value]
+    assert "zahlavi_dashboard.webp" not in hdr                                       # záhlaví beze změny
+    assert ui.ECON_LAYOUT_CSS == ui.managed_layout_css(ui.ECON_KEY)                  # Ekonomika beze změny
+

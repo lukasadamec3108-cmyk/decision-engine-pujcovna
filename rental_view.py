@@ -32,6 +32,25 @@ def dp_economy_value(card: dict) -> tuple:
     return "Nelze určit", html.escape("neplatný údaj: " + ("; ".join(e["invalid"]) or "neznámý"))
 
 
+def result_status_html(card: dict) -> str:
+    """V6: stručné označení výsledku nad KPI kartami – ukázková data a stav ekonomického přínosu.
+
+    Jen pojmenuje stav, který už určil plánovač (stejné větvení jako dp_economy_value); nic nepočítá."""
+    e = card["economy"]
+    if e is None:
+        econ = ui.dash_chip("ekonomika se nehodnotí", "info")
+    elif e["status"] == pv.EXACT:
+        econ = ui.dash_chip("přesný příspěvek z dat", "good")
+    elif e["status"] == pv.WITH_UNKNOWN and e["hi"] is not None:
+        econ = ui.dash_chip("neúplné údaje – částka je horní mez", "warn")
+    elif e["status"] == pv.WITH_UNKNOWN:
+        econ = ui.dash_chip("chybí údaje – přínos nelze určit", "bad")
+    else:
+        econ = ui.dash_chip("neplatný údaj – přínos nelze spočítat", "bad")
+    return ('<div class="fe-info rent-status">' + ui.status_chip("Ukázková data", "warn") + econ
+            + "<span>Příspěvek = tržba − variabilní náklady, nejde o čistý zisk.</span></div>")
+
+
 DP_REC_TONE = {pv.EC_REC: "good", pv.EC_NO: "bad"}      # „Méně výhodné“ = lepší je jiná varianta → neutrální
 
 
@@ -82,7 +101,8 @@ def rent_kpis(card: dict, related: list) -> list:
         dict(icon="coins", label="Ekonomický přínos", tone="accent", value=econ_value,
              cls="word" if econ_value == "Nelze určit" or econ_value.startswith("nejvýše") else "",
              chip=ui.dash_chip("ztráta", "bad") if card["economy"] and card["economy"]["status"] == pv.EXACT
-             and card["economy"]["value"] < 0 else "", sub=econ_why),
+             and card["economy"]["value"] < 0
+             else ui.dash_chip("horní mez", "warn") if econ_value.startswith("nejvýše") else "", sub=econ_why),
         dict(icon="alert", label="Kapacitní konflikt", tone="bad" if blocked_days else "good" if op == pv.OP_FITS
              else "neutral", **conf),
         dict(icon="spark", label="Výsledné doporučení", tone=rec_tone if rec_tone != "info" else "neutral",

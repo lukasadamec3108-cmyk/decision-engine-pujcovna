@@ -258,7 +258,7 @@ nav = st.navigation({group: [_PAGE_OBJ[k] for k in keys] for group, keys in navr
 PAGE = next(k for k, page in _PAGE_OBJ.items() if page is nav)
 PAGE_TITLE = next(p[2] for p in navreg.PAGES if p[0] == PAGE)
 ui.header(HEADER_SLOT, PAGE_TITLE, navreg.HEADER_SUBTITLES[PAGE], DEMO_BADGE,
-          art_src=ui.header_art_src(original=True) if PAGE in ("dashboard", "ekonomika") else None)   # V4/V5: Dashboard a Ekonomika
+          art_src=ui.header_art_src(original=True) if PAGE in ui.PHOTO_HEADER_PAGES else None)   # V4/V5: Dashboard a Ekonomika
 SHOW_INV_INPUTS = PAGE == "investice"          # investiční vstupy jen v sekci Investice
 
 
@@ -2494,6 +2494,8 @@ DP_EXPLAIN_GROUPS = [
     ("Konflikty a alternativy", [("Konflikty", _DP_EX["Konflikty"]), ("Alternativy", _DP_EX["Alternativy"])]),
 ]
 assert sorted(k for _, items in DP_EXPLAIN_GROUPS for k, _ in items if k in _DP_EX) == sorted(_DP_EX)   # nic nechybí
+DP_EXPLAIN_ICONS = {"Provoz a kapacita": ":material/calendar_month:", "Ekonomika": ":material/payments:",
+                    "Význam doporučení": ":material/label:", "Konflikty a alternativy": ":material/warning:"}
 
 
 
@@ -2549,12 +2551,16 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
     DP_RENT = PAGE == "pronajem"
     if DP_RENT:
         st.markdown(ui.RENTAL_CSS, unsafe_allow_html=True)
+        st.markdown(ui.RENTAL_LAYOUT_CSS, unsafe_allow_html=True)       # V6: vzhled jako Dashboard a Ekonomika
     with ui.tab_container("pronajem" if DP_RENT else "rozhodovaci_centrum"):
         if DP_RENT:
-            ui.tab_header("Pronájem strojů", "Ověřte, zda se nový pronájem vejde do kapacity a zda se vyplatí.")
             st.markdown(pv.CSS, unsafe_allow_html=True)
-            ui.note("<b>Ukázková data</b> – požadavky se nikam neukládají ani nic nemění v rezervacích či "
-                    "zakázkách; po obnovení stránky zmizí. Podrobnosti v části „Jak plánovač rozhoduje“.")
+            # V6: jeden řádek pod záhlavím – označení ukázkových dat a co se (ne)ukládá (text beze změny)
+            with st.container(horizontal=True, key="rent_topbar", vertical_alignment="center", gap="medium"):
+                st.markdown('<div class="fe-info">' + ui.status_chip("Ukázková data", "warn")
+                            + "<span>Požadavky se nikam neukládají ani nic nemění v rezervacích či zakázkách; po "
+                            "obnovení stránky zmizí. Podrobnosti v části „Jak plánovač rozhoduje“.</span></div>",
+                            unsafe_allow_html=True)
         else:
             ui.tab_header("Rozhodovací centrum", "Vejde se nový pronájem nebo vlastní zakázka do kapacity "
                           "a která varianta přinese víc?")
@@ -2672,7 +2678,7 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
                 b1, b2 = st.columns(2)
                 with b1:
                     dp_alone = st.form_submit_button("Vyhodnotit požadavek" if DP_RENT else "Vyhodnotit samostatně",
-                                                     width="stretch")
+                                                     width="stretch", type="primary" if DP_RENT else "secondary")
                 with b2:
                     dp_add = st.form_submit_button("Přidat k porovnání", width="stretch")
 
@@ -2693,10 +2699,24 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
                 st.session_state["dp_requests"] = ([new] if dp_alone else dp_requests + [new])
                 dp_requests = st.session_state["dp_requests"]
 
-        if not dp_requests:
+        if not dp_requests and DP_RENT:
+            with ui.dash_section("rent_empty_neutral"):                  # V6: přehledný prázdný stav
+                ui.dash_text("<b>Zatím není zadaný žádný požadavek.</b>")
+                ui.dash_text("Vyplňte stroj, počet kusů a dny ve formuláři výše a zvolte „Vyhodnotit požadavek“ – "
+                             "výsledek se zobrazí zde.", muted=True)
+        elif not dp_requests:
             ui.hint("Zatím není zadaný žádný požadavek.")
         else:
-            with (ui.dash_section("rent_list") if DP_RENT else contextlib.nullcontext()):
+            dp_list_slot = st.container() if not DP_RENT else None       # Rozhodovací centrum: seznam nahoře
+            res = planner_result(data_version, code_version, tuple(sorted(dp_starts.items())), pv.freeze(dp_requests))
+            if DP_RENT:
+                dp_related = [m for m in res["manual"] if m["related"]]
+                dp_card = next(c for c in res["cards"] if c["ref"] == dp_requests[-1]["ref"])
+                st.markdown(f'<div class="dd-section-title">Výsledek vyhodnocení<small>požadavek '
+                            f'{html.escape(dp_card["ref"])}</small></div>', unsafe_allow_html=True)
+                st.markdown(rv.result_status_html(dp_card), unsafe_allow_html=True)
+                ui.dash_kpis(rv.rent_kpis(dp_card, dp_related))
+            with (ui.dash_section("rent_list") if DP_RENT else dp_list_slot):
                 if DP_RENT:
                     ui.dash_section_head("route", "Porovnávané požadavky",
                                          "Vyhodnocují se společně – soupeří o stejnou volnou kapacitu", tone="neutral")
@@ -2713,13 +2733,7 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
                         st.button("Odebrat", key=f"dp_rm_{r['ref']}", on_click=dp_remove, args=(r["ref"],), width="stretch")
                 st.button("Vymazat vše", key="dp_clear", on_click=dp_clear)
 
-            res = planner_result(data_version, code_version, tuple(sorted(dp_starts.items())), pv.freeze(dp_requests))
             if DP_RENT:
-                dp_related = [m for m in res["manual"] if m["related"]]
-                dp_card = next(c for c in res["cards"] if c["ref"] == dp_requests[-1]["ref"])
-                st.markdown(f'<div class="dd-section-title">Výsledek vyhodnocení<small>požadavek '
-                            f'{html.escape(dp_card["ref"])}</small></div>', unsafe_allow_html=True)
-                ui.dash_kpis(rv.rent_kpis(dp_card, dp_related))
                 if len(res["cards"]) > 1:
                     st.markdown('<div class="dd-section-title">Porovnání variant<small>proveditelnost, přínos '
                                 'a doporučení každé varianty</small></div>', unsafe_allow_html=True)
@@ -2769,9 +2783,14 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
             else:
                 ui.section_title("Konflikty potvrzených závazků")
             if related:
-                for m in related:
-                    ui.insight(f"<b>K ručnímu řešení:</b> {html.escape(m['text'])}"
-                               + "".join(f"<br>Posun zakázky: {html.escape(a)}" for a in m["alternatives"]), tone="bad")
+                for i_m, m in enumerate(related):
+                    m_html = (f"<b>K ručnímu řešení:</b> {html.escape(m['text'])}"
+                              + "".join(f"<br>Posun zakázky: {html.escape(a)}" for a in m["alternatives"]))
+                    if DP_RENT:
+                        with ui.dash_section(f"rent_konflikt_{i_m}_bad"):
+                            ui.dash_text(m_html)
+                    else:
+                        ui.insight(m_html, tone="bad")
             else:
                 ui.hint("U dotčených strojů a dnů nejsou konflikty potvrzených závazků.")
             if len(res["manual"]) > len(related):
@@ -2788,12 +2807,15 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
                 for n in res["notes"]:
                     st.markdown(f"- {pv.md_escape(n)}")
 
-        with st.expander("Jak plánovač rozhoduje"):
-            if DP_RENT:                                      # stejné texty, jen rozdělené do skupin
-                for dp_group, dp_items in DP_EXPLAIN_GROUPS:
-                    st.markdown(f'<div class="dd-group">{dp_group}</div>', unsafe_allow_html=True)
+        if DP_RENT:                                          # V6: stejné texty, čtyři rozbalovací skupiny
+            st.markdown('<div class="dd-section-title">Jak plánovač rozhoduje<small>pravidla a význam '
+                        "výsledků</small></div>", unsafe_allow_html=True)
+            for dp_group, dp_items in DP_EXPLAIN_GROUPS:
+                with st.expander(dp_group, icon=DP_EXPLAIN_ICONS[dp_group]):
                     ui.explain(dp_items)
-            else:
+            ui.tab_header("Pronájem strojů", "Ověřte, zda se nový pronájem vejde do kapacity a zda se vyplatí.")
+        else:
+            with st.expander("Jak plánovač rozhoduje"):
                 ui.explain(DP_EXPLAIN)
 
 
@@ -3606,7 +3628,7 @@ def header_period() -> str:
 
 
 ui.header(HEADER_SLOT, PAGE_TITLE, navreg.HEADER_SUBTITLES[PAGE], DEMO_BADGE, header_period(),
-          ui.header_art_src(original=True) if PAGE in ("dashboard", "ekonomika") else None)
+          ui.header_art_src(original=True) if PAGE in ui.PHOTO_HEADER_PAGES else None)
 
 # Spuštění aktivní stránky (soubor stránky je jen značka – obsah vykreslil kód výše)
 nav.run()
