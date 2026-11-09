@@ -1295,13 +1295,14 @@ ECON_CSS = RENTAL_CSS.replace(_RENT, _ECON).replace("</style>", f"""
 </style>""")
 
 
-def econ_layout_css() -> str:
-    """Redesign MALOSTROJE V5 – Ekonomika flotily ve stylu Dashboardu V4 (jen vzhled, jen tato stránka).
+def managed_layout_css(key: str, topbar: str = "fe_topbar") -> str:
+    """Společný vzhled stránek ve stylu Dashboardu V4 (V5 Ekonomika flotily, V6 Pronájem strojů) – jen vzhled,
+    omezený na kontejner stránky `key` (st.container s klíčem de_tab_…).
 
     Převezme rozvržení Dashboardu (šířka, záhlaví s ilustrací, KPI karty, sekce) a místo svislých barevných
     proužků podbarví karty: problém jemně červeně, kladný úplný výsledek jemně zeleně, ostatní bíle / světle
-    šedě. ECON_CSS zůstává beze změny (vychází z něj i stránka Chybějící údaje)."""
-    E = _ECON
+    šedě. `topbar` = klíč řádku nad ukazateli (odkaz zpět, označení dat, období)."""
+    E = f".st-key-{key}"
     SHADOW = "0 2px 10px rgba(16,24,40,.07), 0 1px 2px rgba(16,24,40,.05)"
     tints = {"bad": (BRAND_RED_SOFT, "#F3D3D3"), "good": ("#EEF7F0", "#CFE7D6"), "neutral": ("#FFFFFF", "#EDEEF0"),
              "accent": ("#FFFFFF", "#EDEEF0"), "warn": (UI_BG, "#E6E8EB")}
@@ -1309,7 +1310,8 @@ def econ_layout_css() -> str:
         f'{E} [class*="st-key-de_dash_"][class*="_{name}"] {{ border-left: 1px solid {line} !important; '
         f"border-color: {line} !important; background: {bg} !important; }}"
         for name, (bg, line) in tints.items())
-    return dashboard_layout_css(ECON_KEY).replace("</style>", f"""
+    T = f".st-key-{topbar}"
+    return dashboard_layout_css(key).replace("</style>", f"""
 /* Karty bez svislých proužků – barva plochy nese význam */
 {tint_css}
 /* Hlavní ukazatele: stav (horní mez, chybí údaje…) zůstává výrazný štítek */
@@ -1323,9 +1325,9 @@ def econ_layout_css() -> str:
 {E} .dd-kpi.alert > .dd-chip {{ background: #fff; }}
 {E} .dd-kpi .dd-sub {{ color: #374151; }}
 /* Jeden řádek nad ukazateli: návrat, označení dat, období, metoda (na mobilu se zalomí) */
-{E} .st-key-fe_topbar {{ flex-wrap: wrap; row-gap: .35rem; margin: -.35rem 0 .45rem 0; }}
-{E} .st-key-fe_topbar > [data-testid="stElementContainer"] {{ width: auto !important; flex: 0 1 auto; }}
-{E} .st-key-fe_topbar [data-testid="stPageLink"] a {{ padding: .2rem .55rem .2rem .3rem; border-radius: 8px;
+{E} {T} {{ flex-wrap: wrap; row-gap: .35rem; margin: -.35rem 0 .45rem 0; }}
+{E} {T} > [data-testid="stElementContainer"] {{ width: auto !important; flex: 0 1 auto; }}
+{E} {T} [data-testid="stPageLink"] a {{ padding: .2rem .55rem .2rem .3rem; border-radius: 8px;
                                                     background: #fff; border: 1px solid #EDEEF0; }}
 {E} .fe-info {{ display: flex; flex-wrap: wrap; align-items: center; gap: .3rem 1.3rem; font-size: .98rem;
               color: #2B2F36; margin: 0; }}
@@ -1359,13 +1361,47 @@ def econ_layout_css() -> str:
   {E} .dd-section-title {{ font-size: 1.2rem; }}
   {E} .fe-st + details.de-more {{ margin-left: 0; }}
   {E} .fe-info {{ gap: .2rem .9rem; font-size: .9rem; }}
-  {E} .st-key-fe_topbar {{ margin-top: 0; }}
+  {E} {T} {{ margin-top: 0; }}
   {E} [data-testid="stExpander"] summary p {{ font-size: 1rem; }}
 }}
 </style>""")
 
 
+def econ_layout_css() -> str:
+    """Redesign MALOSTROJE V5 – Ekonomika flotily (ECON_CSS zůstává beze změny; vychází z něj i Chybějící údaje)."""
+    return managed_layout_css(ECON_KEY)
+
+
 ECON_LAYOUT_CSS = econ_layout_css()
+
+# Stránky se záhlavím s fotografií bagru (V4 Dashboard, V5 Ekonomika flotily, V6 Pronájem strojů)
+PHOTO_HEADER_PAGES = ("dashboard", "ekonomika", "pronajem")
+
+# V6 – Pronájem strojů: stejný společný vzhled jako Ekonomika flotily (RENTAL_CSS zůstává beze změny);
+# navíc jen formulář v kartě a prázdný stav.
+RENTAL_LAYOUT_CSS = managed_layout_css(RENT_KEY, topbar="rent_topbar").replace("</style>", f"""
+{_RENT} .st-key-de_dash_rent_form [data-testid="stForm"] {{ padding: 0; border: none; }}
+{_RENT} .st-key-de_dash_rent_form [data-testid="stNumberInputContainer"],
+{_RENT} .st-key-de_dash_rent_form [data-baseweb="select"] > div {{ border-radius: 10px; }}
+{_RENT} .st-key-de_dash_rent_form [data-testid="stFormSubmitButton"] button {{ min-height: 2.75rem; border-radius: 10px;
+                                                                             font-weight: 600; }}
+{_RENT} .rent-status {{ margin: 0 0 .6rem 0; }}
+{_RENT} .rent-status .dd-chip {{ font-size: .8rem; font-weight: 700; padding: .16rem .6rem; border-radius: 999px; }}
+{_RENT} [class*="st-key-de_dash_rent_empty"][class*="_neutral"] {{ background: {UI_BG} !important;
+                                                                 border-style: dashed !important; box-shadow: none; }}
+{_RENT} .st-key-rent_topbar .fe-info {{ flex-wrap: nowrap; align-items: baseline; gap: .7rem; }}
+{_RENT} .st-key-rent_topbar .fe-info .de-status {{ flex: 0 0 auto; }}
+@media (max-width: 640px) {{
+  /* Formulář na mobilu: dvojice polí vedle sebe (Stroj + kusy, Od + Do, obě tlačítka), cena na vlastním řádku */
+  {_RENT} .st-key-de_dash_rent_form [data-testid="stHorizontalBlock"] {{ flex-direction: row !important;
+      flex-wrap: wrap !important; gap: .55rem .6rem !important; }}
+  {_RENT} .st-key-de_dash_rent_form [data-testid="stColumn"] {{ flex: 1 1 calc(50% - .6rem) !important;
+      min-width: calc(50% - .6rem) !important; width: auto !important; }}
+  {_RENT} .st-key-de_dash_rent_form [data-testid="stFormSubmitButton"] button {{ min-height: 2.6rem; padding: .3rem .4rem; }}
+  {_RENT} .st-key-de_dash_rent_form [data-testid="stFormSubmitButton"] button p {{ font-size: .9rem; }}
+  {_RENT} .st-key-rent_topbar .fe-info {{ flex-wrap: wrap; }}
+}}
+</style>""")
 
 
 # ---------------------------------------------------------------------------
