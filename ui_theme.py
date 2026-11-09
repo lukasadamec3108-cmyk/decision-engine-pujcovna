@@ -1389,8 +1389,6 @@ RENTAL_LAYOUT_CSS = managed_layout_css(RENT_KEY, topbar="rent_topbar").replace("
 {_RENT} .rent-status .dd-chip {{ font-size: .8rem; font-weight: 700; padding: .16rem .6rem; border-radius: 999px; }}
 {_RENT} [class*="st-key-de_dash_rent_empty"][class*="_neutral"] {{ background: {UI_BG} !important;
                                                                  border-style: dashed !important; box-shadow: none; }}
-{_RENT} .st-key-rent_topbar .fe-info {{ flex-wrap: nowrap; align-items: baseline; gap: .7rem; }}
-{_RENT} .st-key-rent_topbar .fe-info .de-status {{ flex: 0 0 auto; }}
 @media (max-width: 640px) {{
   /* Formulář na mobilu: dvojice polí vedle sebe (Stroj + kusy, Od + Do, obě tlačítka), cena na vlastním řádku */
   {_RENT} .st-key-de_dash_rent_form [data-testid="stHorizontalBlock"] {{ flex-direction: row !important;
@@ -1399,7 +1397,6 @@ RENTAL_LAYOUT_CSS = managed_layout_css(RENT_KEY, topbar="rent_topbar").replace("
       min-width: calc(50% - .6rem) !important; width: auto !important; }}
   {_RENT} .st-key-de_dash_rent_form [data-testid="stFormSubmitButton"] button {{ min-height: 2.6rem; padding: .3rem .4rem; }}
   {_RENT} .st-key-de_dash_rent_form [data-testid="stFormSubmitButton"] button p {{ font-size: .9rem; }}
-  {_RENT} .st-key-rent_topbar .fe-info {{ flex-wrap: wrap; }}
 }}
 </style>""")
 
