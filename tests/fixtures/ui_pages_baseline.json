@@ -256,7 +256,7 @@
     "95 000": 4,
     "96": 4
    },
-   "text": "0a2debf716d6319a",
+   "text": "c37acb0f0c596808",
    "widgets": [
     {
      "key": "fe_period",
@@ -838,17 +838,21 @@
     "plotly_chart": 0
    },
    "expanders": [
-    "Jak plánovač rozhoduje"
+    "Provoz a kapacita",
+    "Ekonomika",
+    "Význam doporučení",
+    "Konflikty a alternativy"
    ],
    "numbers": {
     "0": 6,
-    "1": 12,
+    "1": 14,
     "10": 2,
     "11": 2,
     "14": 2,
     "17": 6,
     "2": 2,
     "24": 4,
+    "25": 2,
     "3": 12,
     "4": 2,
     "5": 4,
@@ -856,7 +860,7 @@
     "8": 6,
     "9": 2
    },
-   "text": "df3f4a3cf7e118aa",
+   "text": "47bfee0c486b721d",
    "widgets": [
     {
      "key": "dp_r_type",

@@ -2545,6 +2545,15 @@ def dp_economic_comparison(panels: list, sig: str) -> None:
             st.markdown(pv.sim_html(spec, result), unsafe_allow_html=True)
 
 
+# Záhlaví: doplnit skutečný rozsah používaných dat (pronájmy, plán zakázek, servis) – stejný kalendář jako
+# Dashboard a Plánování kapacity. Jen zobrazení, nic se nepřepočítává jinak.
+def header_period() -> str:
+    _, hp_plan, _ = plan_jobs(jobs_df, machine_capacity, code_version)
+    hp_cal = cv.build(data_model, cv.job_starts_from_plan(jobs_df, hp_plan))
+    ends = [a.end for a in hp_cal.assignments] + [j.latest for j in hp_cal.open_jobs if j.latest is not None]
+    return f"Rozsah dat: dny plánu 1–{max(ends)}" if ends else ""
+
+
 if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka 8 (Pronájem = stejný nástroj, jen pronájem)
     # Pronájem strojů: modernizovaný vzhled (karty jako Dashboard); Rozhodovací centrum beze změny vzhledu.
     # Formulář, validace, požadavky a výsledek plánovače jsou pro obě stránky stejné.
@@ -2556,10 +2565,14 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
         if DP_RENT:
             st.markdown(pv.CSS, unsafe_allow_html=True)
             # V6: jeden řádek pod záhlavím – označení ukázkových dat a co se (ne)ukládá (text beze změny)
+            # Stejný řádek jako na Ekonomice flotily: návrat na Dashboard, označení dat, období (rozsah dat
+            # ze záhlaví) a krátce, že se nic neukládá. Celá věta je pod obsahem stránky.
             with st.container(horizontal=True, key="rent_topbar", vertical_alignment="center", gap="medium"):
+                page_link("dashboard", "Zpět na Dashboard")
+                dp_period = header_period().removeprefix("Rozsah dat: ")
                 st.markdown('<div class="fe-info">' + ui.status_chip("Ukázková data", "warn")
-                            + "<span>Požadavky se nikam neukládají ani nic nemění v rezervacích či zakázkách; po "
-                            "obnovení stránky zmizí. Podrobnosti v části „Jak plánovač rozhoduje“.</span></div>",
+                            + (f"<span><b>Období dat:</b> {html.escape(dp_period)}</span>" if dp_period else "")
+                            + "<span><b>Požadavky:</b> neukládají se, rezervace ani zakázky se nemění</span></div>",
                             unsafe_allow_html=True)
         else:
             ui.tab_header("Rozhodovací centrum", "Vejde se nový pronájem nebo vlastní zakázka do kapacity "
@@ -2814,6 +2827,9 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
                 with st.expander(dp_group, icon=DP_EXPLAIN_ICONS[dp_group]):
                     ui.explain(dp_items)
             ui.tab_header("Pronájem strojů", "Ověřte, zda se nový pronájem vejde do kapacity a zda se vyplatí.")
+            st.markdown('<div class="fe-src">Požadavky se nikam neukládají ani nic nemění v rezervacích či zakázkách; '
+                        "po obnovení stránky zmizí. Podrobnosti v části „Jak plánovač rozhoduje“.</div>",
+                        unsafe_allow_html=True)
         else:
             with st.expander("Jak plánovač rozhoduje"):
                 ui.explain(DP_EXPLAIN)
@@ -3616,15 +3632,6 @@ if PAGE == "chybejici_udaje":
                 st.dataframe(pd.DataFrame(dg_view["table"]), width="stretch", hide_index=True)
             else:
                 ui.dash_text("V datech nechybí žádný údaj, který výpočty používají.", muted=True)
-
-
-# Záhlaví: doplnit skutečný rozsah používaných dat (pronájmy, plán zakázek, servis) – stejný kalendář jako
-# Dashboard a Plánování kapacity. Jen zobrazení, nic se nepřepočítává jinak.
-def header_period() -> str:
-    _, hp_plan, _ = plan_jobs(jobs_df, machine_capacity, code_version)
-    hp_cal = cv.build(data_model, cv.job_starts_from_plan(jobs_df, hp_plan))
-    ends = [a.end for a in hp_cal.assignments] + [j.latest for j in hp_cal.open_jobs if j.latest is not None]
-    return f"Rozsah dat: dny plánu 1–{max(ends)}" if ends else ""
 
 
 ui.header(HEADER_SLOT, PAGE_TITLE, navreg.HEADER_SUBTITLES[PAGE], DEMO_BADGE, header_period(),

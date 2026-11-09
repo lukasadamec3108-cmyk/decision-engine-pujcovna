@@ -229,3 +229,28 @@ def test_v6_decision_centre_keeps_its_look():
     assert "zahlavi_dashboard.webp" not in hdr                                       # záhlaví beze změny
     assert ui.ECON_LAYOUT_CSS == ui.managed_layout_css(ui.ECON_KEY)                  # Ekonomika beze změny
 
+
+
+def test_v6_same_banner_and_info_line_as_fleet_economics():
+    """Pronájem strojů a Ekonomika flotily: stejná komponenta záhlaví (stejná fotografie a třídy), stejný
+    společný vzhled (managed_layout_css) a stejný řádek pod záhlavím (návrat na Dashboard, označení dat, období)."""
+    import re
+    import ui_theme as ui
+    at = app()
+    headers, bars = {}, {}
+    for key in ("ekonomika", "pronajem"):
+        open_page(at, key)
+        ok(at)
+        [hdr] = [m.value for m in at.main.markdown if 'class="de-header' in m.value]
+        headers[key] = re.sub(r">[^<]*<", "><", hdr)                     # jen struktura a atributy, bez textů
+        links = [p for p in at.main.get("page_link") if p.proto.label == "Zpět na Dashboard"]
+        assert len(links) == 1, key
+        bars[key] = any('class="fe-info"' in m.value and "Ukázková data" in m.value for m in at.main.markdown)
+    assert headers["ekonomika"] == headers["pronajem"] and "app/static/zahlavi_dashboard.webp" in headers["pronajem"]
+    assert all(bars.values())
+    shared = ui.managed_layout_css(ui.RENT_KEY, topbar="rent_topbar").split("</style>")[0]
+    assert ui.RENTAL_LAYOUT_CSS.startswith(shared)                                   # stejný společný vzhled
+    assert ui.ECON_LAYOUT_CSS == ui.managed_layout_css(ui.ECON_KEY)                  # Ekonomika beze změny
+    open_page(at, "pronajem")
+    raw = " ".join(m.value for m in at.main.markdown)
+    assert "<b>Období dat:</b> dny plánu 1–25" in raw                                # stejný rozsah jako v záhlaví
