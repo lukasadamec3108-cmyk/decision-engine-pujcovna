@@ -1375,7 +1375,34 @@ def econ_layout_css() -> str:
 ECON_LAYOUT_CSS = econ_layout_css()
 
 # Stránky se záhlavím s fotografií bagru (V4 Dashboard, V5 Ekonomika flotily, V6 Pronájem strojů)
-PHOTO_HEADER_PAGES = ("dashboard", "ekonomika", "pronajem")
+PHOTO_HEADER_PAGES = ("dashboard", "ekonomika", "pronajem", "zakazky")
+
+# Vlastní zakázky: nový styl pouze pro tuto stránku; JOBS_CSS nadále sdílí Strojový park.
+JOBS_LAYOUT_CSS = managed_layout_css(JOBS_KEY, topbar="jobs_topbar").replace("</style>", f"""
+{_JOBS} .jobs-chart-scroll {{ display: none; }}
+{_JOBS} .st-key-jobs_economics .dd-head {{ align-items: flex-start; }}
+{_JOBS} .st-key-jobs_economics .dd-row .v {{ white-space: normal; }}
+@media (max-width: 1100px) {{
+  {_JOBS} .st-key-jobs_economics [data-testid="stHorizontalBlock"] {{ flex-direction: column; }}
+  {_JOBS} .st-key-jobs_economics [data-testid="stColumn"] {{ width: 100%; flex: 1 1 auto; }}
+}}
+@media (max-width: 640px) {{
+  {_JOBS} .dd-section-title small {{ display: block; margin: .2rem 0 0; }}
+  /* Dlouhý odkaz se zalomí; cíl musí být čitelný i na úzkém telefonu. */
+  {_JOBS} .st-key-jobs_topbar [data-testid="stPageLink"] a {{ height: auto; }}
+  {_JOBS} .st-key-jobs_topbar [data-testid="stPageLink"] p {{ white-space: normal; overflow: visible;
+                                                                         text-overflow: clip; }}
+  /* Dlouhé názvy zakázek nesmějí vytlačit časovou osu do několika pixelů. */
+  {_JOBS} .jobs-chart-scroll {{ display: block; color: {UI_MUTED}; font-size: .84rem; margin: 0 0 .4rem; }}
+  {_JOBS} .st-key-jobs_gantt_scroll {{ overflow-x: auto; }}
+  {_JOBS} .st-key-jobs_gantt_scroll [data-testid="stElementContainer"]:has([data-testid="stPlotlyChart"]) {{ min-width: 560px; }}
+}}
+@media (max-width: 380px) {{
+  /* Stejné karty a typografie, více místa pro celé částky včetně měny. */
+  {_JOBS} .dd-kpis {{ grid-template-columns: minmax(0, 1fr); }}
+}}
+</style>""")
+
 
 # V6 – Pronájem strojů: stejný společný vzhled jako Ekonomika flotily (RENTAL_CSS zůstává beze změny);
 # navíc jen formulář v kartě a prázdný stav.

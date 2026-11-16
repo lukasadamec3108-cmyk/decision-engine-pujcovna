@@ -1742,7 +1742,10 @@ if PAGE == "zakazky":                                     # sekce Vlastní zaká
     # Modernizace UI: karty a sekce jako Dashboard / Pronájem strojů. Výpočty plánu (plan_jobs,
     # scheduling.summary/evaluate/conflicts/utilization) a přínos zakázek jsou beze změny.
     st.markdown(ui.JOBS_CSS, unsafe_allow_html=True)
+    st.markdown(ui.JOBS_LAYOUT_CSS, unsafe_allow_html=True)
     with ui.tab_container("zakazky"):
+        with st.container(key="jobs_topbar", gap="small"):
+            page_link("kapacita", "Zkontrolovat pronájmy a servis v Plánování kapacity")
         ui.tab_header("Plán zakázek a vytížení strojů",
                       "Rozvrh 12 zakázek ze zásobníku (fiktivní data): žádný stroj není ve stejný den využit víckrát, "
                       "než kolik je kusů, a <b>zisk zakázek po penále</b> je co nejvyšší.")
@@ -1812,39 +1815,6 @@ if PAGE == "zakazky":                                     # sekce Vlastní zaká
                 f"Nelze naplánovat (chybí potřebný stroj): <b>{', '.join(waiting)}</b>.", tone="bad"
             )
 
-        # ---- Srovnání s původním plánem -----------------------------------------------------------
-        st.markdown('<div class="dd-section-title">Srovnání s původním plánem<small>stejné zakázky a data, '
-                    'jiné pořadí</small></div>', unsafe_allow_html=True)
-        with ui.dash_section("cmp"):
-            ui.dash_compare(
-                ["Ukazatel", "Původní plán", "Nový plán", "Změna"],
-                [
-                    ("Zakázky po termínu", [f"{old_sum['late']} z {old_sum['scheduled']}",
-                                            f"{plan_sum['late']} z {plan_sum['scheduled']}"],
-                     jobs_delta(plan_sum["late"], old_sum["late"], "zakázky", better_lower=True)),
-                    ("Penále celkem", [fmt_czk(old_sum["penalty"]), fmt_czk(plan_sum["penalty"])],
-                     jobs_delta(plan_sum["penalty"], old_sum["penalty"], "", better_lower=True, money=True)),
-                    ("Délka plánu", [fmt_days(old_sum["length"], 0), fmt_days(plan_sum["length"], 0)],
-                     jobs_delta(plan_sum["length"], old_sum["length"], "dní", better_lower=True)),
-                    ("Zisk po penále", [fmt_czk(old_sum["profit_after_penalty"]),
-                                        fmt_czk(plan_sum["profit_after_penalty"])],
-                     jobs_delta(plan_sum["profit_after_penalty"], old_sum["profit_after_penalty"], "",
-                                better_lower=False, money=True)),
-                    ("Kolize mezi zakázkami plánu", [str(len(old_conflicts)), str(len(plan_conflicts))],
-                     jobs_delta(len(plan_conflicts), len(old_conflicts), "", better_lower=True)),
-                ],
-            )
-            ui.more("Proč je nový plán výhodnější",
-                    f"Obě varianty plánují stejných {plan_sum['scheduled']} zakázek na stejných ukázkových "
-                    f"datech. Nový plán je o <b>{fmt_czk(gain)}</b> výhodnější jen díky jinému pořadí a "
-                    "využití volných dní strojů. Původní plán řadil zakázky podle skóre bez ohledu na "
-                    "termíny a stroj nevyužil, dokud nebyl volný pro další zakázku v pořadí.")
-            ui.more("Co kolize mezi zakázkami nehlídá",
-                    "<b>Kolize mezi zakázkami plánu</b> počítá jen překrytí vlastních zakázek navzájem. Pronájmy "
-                    "strojů a servis plán nezná, takže s nimi se zakázky překrývat mohou – takové konflikty "
-                    "ukazuje sekce <b>Plánování kapacity</b>. Další krok: zkontrolovat tam konfliktní dny a "
-                    "vyřešit je ručně.")
-
         # ---- Harmonogram --------------------------------------------------------------------------
         st.markdown('<div class="dd-section-title">Harmonogram<small>pruh = doba zakázky, svislá čárka = '
                     'smluvní termín</small></div>', unsafe_allow_html=True)
@@ -1897,72 +1867,83 @@ if PAGE == "zakazky":                                     # sekce Vlastní zaká
         fig_gantt.update_layout(legend=dict(orientation="h", yanchor="top", y=-0.16, x=0),
                                 margin=dict(b=70))
         with ui.dash_section("gantt"):
-            chart(fig_gantt)
+            st.markdown('<p class="jobs-chart-scroll">Harmonogram lze posouvat do strany.</p>',
+                        unsafe_allow_html=True)
+            with st.container(key="jobs_gantt_scroll"):
+                chart(fig_gantt)
             ui.dash_text(
                 "<b>Modrá</b> = zakázka skončí včas, <b>červená</b> = po termínu (vpravo počet dní zpoždění). "
                 "Svislá čárka je smluvní termín (poslední den, kdy má být zakázka hotová). "
                 "★ = zakázka s největším přínosem pro plán.", muted=True)
 
-        # ---- Prioritní zakázka --------------------------------------------------------------------
-        if best_job is not None:
-            top = job_contrib.iloc[0]
-            with ui.dash_section("best_accent"):
-                ui.dash_section_head("spark", "Zakázka s největším přínosem pro plán",
-                                     "Nejméně výhodné ji ztratit nebo odložit", tone="accent")
-                ui.dash_kv("Zakázka", "★ " + html.escape(str(best_job["job_name"])),
-                           f"termín v plánu den {int(best_job['start_day'])}–{int(best_job['end_day'])} "
-                           f"(smluvní termín den {int(best_job['deadline'])})")
-                ui.dash_rows([
-                    ("Zisk zakázky", fmt_czk(top["profit"]), ""),
-                    ("Penále, které zakázka přidá plánu", fmt_czk(top["added_penalty"]), ""),
-                    ("Čistý přínos pro plán", fmt_czk(top["contribution"]),
-                     "zisk zakázky − přidané penále celého plánu", True),
-                ])
-                ui.more("Jak se počítá čistý přínos",
-                        "Čistý přínos = zisk zakázky − o kolik se kvůli ní zvýší nejnižší možné penále "
-                        "celého plánu (její vlastní zpoždění i zdržení ostatních zakázek). Tuto zakázku "
-                        "je proto nejméně výhodné ztratit nebo odložit.")
-            with st.expander("Přínos všech zakázek pro plán"):
-                ctab = job_contrib.assign(
-                    **{
-                        "Zakázka": job_contrib["job_name"],
-                        "Zisk": job_contrib["profit"].apply(fmt_czk),
-                        "Přidané penále": job_contrib["added_penalty"].apply(fmt_czk),
-                        "Čistý přínos": job_contrib["contribution"].apply(fmt_czk),
-                    }
-                )[["Zakázka", "Zisk", "Přidané penále", "Čistý přínos"]]
-                st.dataframe(ctab, width="stretch", hide_index=True)
+        # Ekonomické porovnání a přínos: na menších obrazovkách karty pod sebou.
+        with st.container(key="jobs_economics"):
+            compare_col, contribution_col = st.columns([3, 2], gap="medium")
+            with compare_col:
+                # ---- Srovnání s původním plánem -----------------------------------------------------------
+                with ui.dash_section("cmp"):
+                    st.markdown('<div class="dd-title">Srovnání s původním plánem</div>'
+                                '<div class="dd-cap">stejné zakázky a data, jiné pořadí</div>',
+                                unsafe_allow_html=True)
+                    ui.dash_compare(
+                        ["Ukazatel", "Původní plán", "Nový plán", "Změna"],
+                        [
+                            ("Zakázky po termínu", [f"{old_sum['late']} z {old_sum['scheduled']}",
+                                                    f"{plan_sum['late']} z {plan_sum['scheduled']}"],
+                             jobs_delta(plan_sum["late"], old_sum["late"], "zakázky", better_lower=True)),
+                            ("Penále celkem", [fmt_czk(old_sum["penalty"]), fmt_czk(plan_sum["penalty"])],
+                             jobs_delta(plan_sum["penalty"], old_sum["penalty"], "", better_lower=True, money=True)),
+                            ("Délka plánu", [fmt_days(old_sum["length"], 0), fmt_days(plan_sum["length"], 0)],
+                             jobs_delta(plan_sum["length"], old_sum["length"], "dní", better_lower=True)),
+                            ("Zisk po penále", [fmt_czk(old_sum["profit_after_penalty"]),
+                                                fmt_czk(plan_sum["profit_after_penalty"])],
+                             jobs_delta(plan_sum["profit_after_penalty"], old_sum["profit_after_penalty"], "",
+                                        better_lower=False, money=True)),
+                            ("Kolize mezi zakázkami plánu", [str(len(old_conflicts)), str(len(plan_conflicts))],
+                             jobs_delta(len(plan_conflicts), len(old_conflicts), "", better_lower=True)),
+                        ],
+                    )
+                    ui.more("Proč je nový plán výhodnější",
+                            f"Obě varianty plánují stejných {plan_sum['scheduled']} zakázek na stejných ukázkových "
+                            f"datech. Nový plán je o <b>{fmt_czk(gain)}</b> výhodnější jen díky jinému pořadí a "
+                            "využití volných dní strojů. Původní plán řadil zakázky podle skóre bez ohledu na "
+                            "termíny a stroj nevyužil, dokud nebyl volný pro další zakázku v pořadí.")
+                    ui.more("Co kolize mezi zakázkami nehlídá",
+                            "<b>Kolize mezi zakázkami plánu</b> počítá jen překrytí vlastních zakázek navzájem. Pronájmy "
+                            "strojů a servis plán nezná, takže s nimi se zakázky překrývat mohou – takové konflikty "
+                            "ukazuje sekce <b>Plánování kapacity</b>. Další krok: zkontrolovat tam konfliktní dny a "
+                            "vyřešit je ručně.")
 
-        # ---- Detail -------------------------------------------------------------------------------
-        st.markdown('<div class="dd-section-title">Detail zakázek<small>v pořadí podle začátku · '
-                    'tabulku lze posouvat do strany</small></div>', unsafe_allow_html=True)
-        detail = gantt.assign(
-            **{
-                "Zakázka": gantt["job_name"].map(gantt_labels),
-                "Stav": np.where(gantt["days_late"] > 0, "✕ Po termínu", "✓ Včas"),
-                "Stroje": gantt["machines"].apply(", ".join),
-                "Začátek (den)": gantt["start_day"].astype(int),
-                "Konec (den)": gantt["end_day"].astype(int),
-                "Termín (den)": gantt["deadline"].astype(int),
-                "Zpoždění (dny)": gantt["days_late"].astype(int),
-                "Tržba": gantt["revenue"].apply(fmt_czk),
-                "Náklady": gantt["costs"].apply(fmt_czk),
-                "Zisk": gantt["profit"].apply(fmt_czk),
-                "Penále": gantt["penalty"].apply(fmt_czk),
-                "Zisk po penále": gantt["profit_after_penalty"].apply(fmt_czk),
-                "Priorita": gantt["priority"].map(ui.PRIORITY_CZ),
-                "Riziko": gantt["risk_level"].map(ui.RISK_CZ),
-            }
-        )[["Zakázka", "Stav", "Začátek (den)", "Konec (den)", "Termín (den)", "Zpoždění (dny)", "Zisk po penále",
-           "Zisk", "Penále", "Tržba", "Náklady", "Stroje", "Priorita", "Riziko"]]
-        st.dataframe(
-            detail, width="stretch", hide_index=True, height=35 * (len(detail) + 1) + 3,   # všechny řádky
-            column_config={
-                "Zakázka": st.column_config.TextColumn(pinned=True, width="medium"),
-                "Stav": st.column_config.TextColumn(width=110),
-                "Stroje": st.column_config.TextColumn(width="medium"),
-            },
-        )
+            with contribution_col:
+                # ---- Prioritní zakázka --------------------------------------------------------------------
+                if best_job is not None:
+                    top = job_contrib.iloc[0]
+                    with ui.dash_section("best_accent"):
+                        ui.dash_section_head("spark", "Zakázka s největším přínosem pro plán",
+                                             "Nejméně výhodné ji ztratit nebo odložit", tone="accent")
+                        ui.dash_kv("Zakázka", "★ " + html.escape(str(best_job["job_name"])),
+                                   f"termín v plánu den {int(best_job['start_day'])}–{int(best_job['end_day'])} "
+                                   f"(smluvní termín den {int(best_job['deadline'])})")
+                        ui.dash_rows([
+                            ("Zisk zakázky", fmt_czk(top["profit"]), ""),
+                            ("Penále, které zakázka přidá plánu", fmt_czk(top["added_penalty"]), ""),
+                            ("Čistý přínos pro plán", fmt_czk(top["contribution"]),
+                             "zisk zakázky − přidané penále celého plánu", True),
+                        ])
+                        ui.more("Jak se počítá čistý přínos",
+                                "Čistý přínos = zisk zakázky − o kolik se kvůli ní zvýší nejnižší možné penále "
+                                "celého plánu (její vlastní zpoždění i zdržení ostatních zakázek). Tuto zakázku "
+                                "je proto nejméně výhodné ztratit nebo odložit.")
+                    with st.expander("Přínos všech zakázek pro plán"):
+                        ctab = job_contrib.assign(
+                            **{
+                                "Zakázka": job_contrib["job_name"],
+                                "Zisk": job_contrib["profit"].apply(fmt_czk),
+                                "Přidané penále": job_contrib["added_penalty"].apply(fmt_czk),
+                                "Čistý přínos": job_contrib["contribution"].apply(fmt_czk),
+                            }
+                        )[["Zakázka", "Zisk", "Přidané penále", "Čistý přínos"]]
+                        st.dataframe(ctab, width="stretch", hide_index=True)
 
         # ---- Vytížení strojů ----------------------------------------------------------------------
         st.markdown('<div class="dd-section-title">Vytížení strojů zakázkami<small>jen vlastní zakázky '
@@ -1997,6 +1978,39 @@ if PAGE == "zakazky":                                     # sekce Vlastní zaká
                 "Pronájmy a servis nezahrnuje – celkovou obsazenost ukazuje sekce Plánování kapacity. "
                 f"Nejvytíženější je <b>{bottleneck_machine}</b> ({fmt_pct(bottleneck_utilization, 0)}, oranžově). "
                 "Tečkovaná čára = 100 % kapacity.", muted=True)
+
+        # ---- Detail -------------------------------------------------------------------------------
+        st.markdown('<div class="dd-section-title">Detail zakázek<small>v pořadí podle začátku · '
+                    'tabulku lze posouvat do strany</small></div>', unsafe_allow_html=True)
+        detail = gantt.assign(
+            **{
+                "Zakázka": gantt["job_name"].map(gantt_labels),
+                "Stav": np.where(gantt["days_late"] > 0, "✕ Po termínu", "✓ Včas"),
+                "Stroje": gantt["machines"].apply(", ".join),
+                "Začátek (den)": gantt["start_day"].astype(int),
+                "Konec (den)": gantt["end_day"].astype(int),
+                "Termín (den)": gantt["deadline"].astype(int),
+                "Zpoždění (dny)": gantt["days_late"].astype(int),
+                "Tržba": gantt["revenue"].apply(fmt_czk),
+                "Náklady": gantt["costs"].apply(fmt_czk),
+                "Zisk": gantt["profit"].apply(fmt_czk),
+                "Penále": gantt["penalty"].apply(fmt_czk),
+                "Zisk po penále": gantt["profit_after_penalty"].apply(fmt_czk),
+                "Priorita": gantt["priority"].map(ui.PRIORITY_CZ),
+                "Riziko": gantt["risk_level"].map(ui.RISK_CZ),
+            }
+        )[["Zakázka", "Stav", "Začátek (den)", "Konec (den)", "Termín (den)", "Zpoždění (dny)", "Zisk po penále",
+           "Zisk", "Penále", "Tržba", "Náklady", "Stroje", "Priorita", "Riziko"]]
+        st.dataframe(
+            detail, width="stretch", hide_index=True, height=35 * (len(detail) + 1) + 3,   # všechny řádky
+            column_config={
+                "Zakázka": st.column_config.TextColumn(pinned=True, width="medium"),
+                "Stav": st.column_config.TextColumn(width=110),
+                "Stroje": st.column_config.TextColumn(width="medium"),
+            },
+        )
+
+        page_link("rozhodovaci_centrum", "Ověřit novou zakázku v Rozhodovacím centru")
 
         with st.expander("Předpoklady a metodika"):
             ui.explain(
@@ -2819,8 +2833,6 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
                 ui.explain(DP_EXPLAIN)
 
 
-if PAGE == "zakazky":
-    page_link("rozhodovaci_centrum", "Ověřit novou zakázku v Rozhodovacím centru")
 
 
 # ==================================================

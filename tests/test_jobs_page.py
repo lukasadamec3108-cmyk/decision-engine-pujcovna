@@ -107,3 +107,11 @@ def test_methodology_expander_kept():
     for item in ("Cíl plánu", "Pojmy", "Stroje", "Jak se plán hledá", "Co model nezahrnuje"):
         assert f'<div class="t">{item}</div>' in text
     assert any(e.label == "Přínos všech zakázek pro plán" for e in at.main.expander)
+
+
+def test_schedule_precedes_economics_and_details():
+    shown = plain(texts(jobs_app()))
+    sections = ["Harmonogram", "Srovnání s původním plánem", "Zakázka s největším přínosem pro plán",
+                "Vytížení strojů zakázkami", "Detail zakázek"]
+    positions = [shown.index(section) for section in sections]
+    assert positions == sorted(positions)

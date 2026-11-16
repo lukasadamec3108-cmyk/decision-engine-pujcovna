@@ -107,7 +107,11 @@ def test_original_functions_are_on_their_pages():
     assert len(at.get("plotly_chart")) >= 4
     open_page(at, "zakazky")
     assert any("Konec (den)" in d.value.columns for d in at.dataframe)  # harmonogram / plán
-    assert [p.proto.label for p in at.get("page_link")] == ["Ověřit novou zakázku v Rozhodovacím centru"]
+    # Zachovat původní akci a schválený přímý přechod ke konfliktům pronájmů a servisu.
+    assert [p.proto.label for p in at.get("page_link")] == [
+        "Zkontrolovat pronájmy a servis v Plánování kapacity",
+        "Ověřit novou zakázku v Rozhodovacím centru",
+    ]
     open_page(at, "kapacita")
     assert at.radio(key="cap_view").value == "Kalendář dostupnosti"
     assert at.multiselect(key="cap_types") and at.slider(key="cap_period")
