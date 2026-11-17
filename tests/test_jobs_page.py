@@ -109,9 +109,33 @@ def test_methodology_expander_kept():
     assert any(e.label == "Přínos všech zakázek pro plán" for e in at.main.expander)
 
 
-def test_schedule_precedes_economics_and_details():
+def test_visible_economics_precedes_collapsed_details():
     shown = plain(texts(jobs_app()))
-    sections = ["Harmonogram", "Srovnání s původním plánem", "Zakázka s největším přínosem pro plán",
+    sections = ["Srovnání s původním plánem", "Zakázka s největším přínosem pro plán", "Harmonogram",
                 "Vytížení strojů zakázkami", "Detail zakázek"]
     positions = [shown.index(section) for section in sections]
     assert positions == sorted(positions)
+
+
+def test_details_default_closed_and_summaries_match_existing_results():
+    at = jobs_app()
+    for label in ("Harmonogram", "Vytížení strojů zakázkami", "Detail zakázek"):
+        exp = next(e for e in at.main.expander if e.label == label)
+        assert exp.proto.expanded is False
+    summary = plain(" ".join(m.value for m in at.main.markdown if 'class="jobs-summary"' in m.value))
+    assert "9 z 12 zakázek včas" in summary and "3 po termínu" in summary
+    assert "20 dní" in summary and "108 000 Kč" in summary
+    assert "Pásový dumper" in summary and "95 %" in summary
+    assert "12 naplánovaných zakázek" in summary
+
+
+def test_detail_row_colors_follow_existing_status_without_changing_values():
+    import ui_theme as ui
+    at = jobs_app()
+    detail = next(d for d in at.main.dataframe if "Konec (den)" in d.value.columns)
+    assert len(detail.value) == 12
+    for _, row in detail.value.iterrows():
+        color = ui.BAD_BG if row["Stav"] == "✕ Po termínu" else ui.OK_BG
+        assert all(f"background-color: {color}" in style for style in ui.jobs_row_style(row))
+    arrow = getattr(detail.proto, "arrow_data", detail.proto)
+    assert ui.BAD_BG in arrow.styler.styles and ui.OK_BG in arrow.styler.styles

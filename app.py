@@ -1769,6 +1769,7 @@ if PAGE == "zakazky":                                     # sekce Vlastní zaká
         old_conflicts = sch.conflicts(old_plan, machine_capacity)
         gain = plan_sum["profit_after_penalty"] - old_sum["profit_after_penalty"]
         on_time = plan_sum["scheduled"] - plan_sum["late"]
+        best_job = job_plan.loc[job_contrib.iloc[0]["job_index"]] if not job_contrib.empty else None
 
         def jobs_delta(new, old, unit, better_lower, money=False):
             """Štítek změny nový − původní plán (symbol + text, barva jen doplňuje)."""
@@ -1814,67 +1815,6 @@ if PAGE == "zakazky":                                     # sekce Vlastní zaká
             ui.insight(
                 f"Nelze naplánovat (chybí potřebný stroj): <b>{', '.join(waiting)}</b>.", tone="bad"
             )
-
-        # ---- Harmonogram --------------------------------------------------------------------------
-        st.markdown('<div class="dd-section-title">Harmonogram<small>pruh = doba zakázky, svislá čárka = '
-                    'smluvní termín</small></div>', unsafe_allow_html=True)
-        planned = job_plan[job_plan["scheduled"]].copy()
-        planned["status"] = np.where(planned["days_late"] > 0, "Po termínu", "Včas")
-        best_job = job_plan.loc[job_contrib.iloc[0]["job_index"]] if not job_contrib.empty else None
-        gantt = planned.sort_values(["start_day", "end_day"])
-        gantt["hover"] = [
-            f"<b>{r.job_name}</b><br>Den {int(r.start_day)}–{int(r.end_day)} · termín den {r.deadline}"
-            f"<br>{r.status}"
-            + (f" ({r.days_late} dní, penále {fmt_czk(r.penalty)})" if r.days_late else "")
-            + f"<br>Stroje: {', '.join(r.machines)}"
-            f"<br>Zisk {fmt_czk(r.profit)} · po penále {fmt_czk(r.profit_after_penalty)}"
-            for r in gantt.itertuples()
-        ]
-        # Popisek osy: nejpřínosnější zakázka označená ★ (jen zobrazení, pořadí řádků beze změny)
-        best_name = best_job["job_name"] if best_job is not None else None
-        gantt_labels = {n: (f"★ {n}" if n == best_name else n) for n in gantt["job_name"]}
-        fig_gantt = go.Figure()
-        for status, color, label in (("Včas", ui.BLUE, "✓ Včas"), ("Po termínu", ui.BAD, "✕ Po termínu")):
-            part = gantt[gantt["status"] == status]
-            if part.empty:
-                continue
-            fig_gantt.add_trace(
-                go.Bar(
-                    y=part["job_name"].map(gantt_labels), x=part["duration"], base=part["start_day"] - 1,
-                    orientation="h", name=label,
-                    marker=dict(color=color, line=dict(color="#fff", width=2)),
-                    text=["" if d <= 0 else f"+{int(d)} d" for d in part["days_late"]],
-                    textposition="outside", cliponaxis=False,
-                    textfont=dict(color=ui.BAD_TEXT, size=12),
-                    hovertext=part["hover"], hoverinfo="text",
-                )
-            )
-        fig_gantt.add_trace(
-            go.Scatter(
-                y=gantt["job_name"].map(gantt_labels), x=gantt["deadline"], mode="markers", name="Termín",
-                marker=dict(symbol="line-ns", size=18, line=dict(color=ui.NAVY, width=3)),
-                hovertemplate="Termín: den %{x}<extra></extra>",
-            )
-        )
-        fig_gantt.update_yaxes(categoryorder="array", categoryarray=list(gantt["job_name"].map(gantt_labels)),
-                               autorange="reversed", title_text="")
-        x_end = max(plan_sum["length"], int(planned["deadline"].max()) if len(planned) else 0) + 5
-        fig_gantt.update_xaxes(title_text="Den plánu", dtick=5, range=[0, x_end], showgrid=True,
-                               gridcolor="#EEF0F3")
-        fig_gantt.update_layout(barmode="overlay", bargap=0.35)
-        ui.readable_axes(ui.style_fig(fig_gantt, height=max(420, 34 * len(gantt) + 140)))
-        # Legenda pod grafem – na mobilu se tak nepřekrývá s ikonami grafu.
-        fig_gantt.update_layout(legend=dict(orientation="h", yanchor="top", y=-0.16, x=0),
-                                margin=dict(b=70))
-        with ui.dash_section("gantt"):
-            st.markdown('<p class="jobs-chart-scroll">Harmonogram lze posouvat do strany.</p>',
-                        unsafe_allow_html=True)
-            with st.container(key="jobs_gantt_scroll"):
-                chart(fig_gantt)
-            ui.dash_text(
-                "<b>Modrá</b> = zakázka skončí včas, <b>červená</b> = po termínu (vpravo počet dní zpoždění). "
-                "Svislá čárka je smluvní termín (poslední den, kdy má být zakázka hotová). "
-                "★ = zakázka s největším přínosem pro plán.", muted=True)
 
         # Ekonomické porovnání a přínos: na menších obrazovkách karty pod sebou.
         with st.container(key="jobs_economics"):
@@ -1945,9 +1885,71 @@ if PAGE == "zakazky":                                     # sekce Vlastní zaká
                         )[["Zakázka", "Zisk", "Přidané penále", "Čistý přínos"]]
                         st.dataframe(ctab, width="stretch", hide_index=True)
 
+        # ---- Harmonogram --------------------------------------------------------------------------
+        planned = job_plan[job_plan["scheduled"]].copy()
+        planned["status"] = np.where(planned["days_late"] > 0, "Po termínu", "Včas")
+        gantt = planned.sort_values(["start_day", "end_day"])
+        gantt["hover"] = [
+            f"<b>{r.job_name}</b><br>Den {int(r.start_day)}–{int(r.end_day)} · termín den {r.deadline}"
+            f"<br>{r.status}"
+            + (f" ({r.days_late} dní, penále {fmt_czk(r.penalty)})" if r.days_late else "")
+            + f"<br>Stroje: {', '.join(r.machines)}"
+            f"<br>Zisk {fmt_czk(r.profit)} · po penále {fmt_czk(r.profit_after_penalty)}"
+            for r in gantt.itertuples()
+        ]
+        # Popisek osy: nejpřínosnější zakázka označená ★ (jen zobrazení, pořadí řádků beze změny)
+        best_name = best_job["job_name"] if best_job is not None else None
+        gantt_labels = {n: (f"★ {n}" if n == best_name else n) for n in gantt["job_name"]}
+        fig_gantt = go.Figure()
+        for status, color, label in (("Včas", ui.JOBS_ON_TIME, "✓ Včas"), ("Po termínu", ui.JOBS_LATE, "✕ Po termínu")):
+            part = gantt[gantt["status"] == status]
+            if part.empty:
+                continue
+            fig_gantt.add_trace(
+                go.Bar(
+                    y=part["job_name"].map(gantt_labels), x=part["duration"], base=part["start_day"] - 1,
+                    orientation="h", name=label,
+                    marker=dict(color=color, line=dict(color="#fff", width=2)),
+                    text=["" if d <= 0 else f"+{int(d)} d" for d in part["days_late"]],
+                    textposition="outside", cliponaxis=False,
+                    textfont=dict(color=ui.BAD_TEXT, size=12),
+                    hovertext=part["hover"], hoverinfo="text",
+                )
+            )
+        fig_gantt.add_trace(
+            go.Scatter(
+                y=gantt["job_name"].map(gantt_labels), x=gantt["deadline"], mode="markers", name="Termín",
+                marker=dict(symbol="line-ns", size=18, line=dict(color=ui.NAVY, width=3)),
+                hovertemplate="Termín: den %{x}<extra></extra>",
+            )
+        )
+        fig_gantt.update_yaxes(categoryorder="array", categoryarray=list(gantt["job_name"].map(gantt_labels)),
+                               autorange="reversed", title_text="")
+        x_end = max(plan_sum["length"], int(planned["deadline"].max()) if len(planned) else 0) + 5
+        fig_gantt.update_xaxes(title_text="Den plánu", dtick=5, range=[0, x_end], showgrid=True,
+                               gridcolor="#EEF0F3")
+        fig_gantt.update_layout(barmode="overlay", bargap=0.35)
+        ui.readable_axes(ui.style_fig(fig_gantt, height=max(420, 34 * len(gantt) + 140)))
+        # Legenda pod grafem – na mobilu se tak nepřekrývá s ikonami grafu.
+        fig_gantt.update_layout(legend=dict(orientation="h", yanchor="top", y=-0.16, x=0),
+                                margin=dict(b=70))
+        st.markdown('<p class="jobs-summary">'
+                    f"<b>Harmonogram</b>: {on_time} z {plan_sum['scheduled']} zakázek včas · "
+                    f"{plan_sum['late']} po termínu · délka plánu {fmt_days(plan_sum['length'], 0)} · "
+                    f"penále {fmt_czk(plan_sum['penalty'])}.</p>", unsafe_allow_html=True)
+        with st.expander("Harmonogram", expanded=False):
+            with ui.dash_section("gantt"):
+                st.markdown('<p class="jobs-chart-scroll">Harmonogram lze posouvat do strany.</p>',
+                            unsafe_allow_html=True)
+                with st.container(key="jobs_gantt_scroll"):
+                    chart(fig_gantt)
+                ui.dash_text(
+                    "Pruh = doba zakázky. "
+                    "<b>Modrá</b> = zakázka skončí včas, <b>červená</b> = po termínu (vpravo počet dní zpoždění). "
+                    "Svislá čárka je smluvní termín (poslední den, kdy má být zakázka hotová). "
+                    "★ = zakázka s největším přínosem pro plán.", muted=True)
+
         # ---- Vytížení strojů ----------------------------------------------------------------------
-        st.markdown('<div class="dd-section-title">Vytížení strojů zakázkami<small>jen vlastní zakázky '
-                    'v plánu</small></div>', unsafe_allow_html=True)
         machine_usage_df = sch.utilization(job_plan, machine_capacity)
         bottleneck_machine = machine_usage_df.iloc[0]["machine"]
         bottleneck_utilization = float(machine_usage_df.iloc[0]["utilization"])
@@ -1958,7 +1960,7 @@ if PAGE == "zakazky":                                     # sekce Vlastní zaká
                 x=machine_usage_df["utilization"],
                 y=usage_labels,
                 orientation="h",
-                marker=dict(color=[ui.CHART_HIGHLIGHT if i == 0 else ui.BLUE for i in range(len(machine_usage_df))],
+                marker=dict(color=[ui.JOBS_BUSY if i == 0 else ui.JOBS_ON_TIME for i in range(len(machine_usage_df))],
                             line=dict(color="#fff", width=2)),
                 text=[fmt_pct(v) for v in machine_usage_df["utilization"]], textposition="outside",
                 cliponaxis=False, customdata=machine_usage_df["used_days"],
@@ -1966,22 +1968,25 @@ if PAGE == "zakazky":                                     # sekce Vlastní zaká
             )
         )
         fig_usage.update_yaxes(autorange="reversed")
-        fig_usage.update_xaxes(title_text="Vytížení zakázkami v plánu (%)", range=[0, 130], showgrid=True,
+        fig_usage.update_xaxes(title_text="Vytížení zakázkami<br>v plánu (%)", range=[0, 130], showgrid=True,
                                gridcolor="#EEF0F3")
         fig_usage.add_vline(x=100, line=dict(color=ui.NAVY, width=1, dash="dot"))
         fig_usage.update_layout(bargap=0.35)
-        with ui.dash_section("usage"):
-            chart(ui.readable_axes(ui.style_fig(fig_usage, height=max(320, 34 * len(machine_usage_df) + 110),
-                                                legend=False)))
-            ui.dash_text(
-                f"Vytížení = dny stroje na zakázkách ÷ (počet kusů × délka plánu {fmt_days(plan_sum['length'], 0)}). "
-                "Pronájmy a servis nezahrnuje – celkovou obsazenost ukazuje sekce Plánování kapacity. "
-                f"Nejvytíženější je <b>{bottleneck_machine}</b> ({fmt_pct(bottleneck_utilization, 0)}, oranžově). "
-                "Tečkovaná čára = 100 % kapacity.", muted=True)
+        st.markdown('<p class="jobs-summary">'
+                    f"<b>Vytížení strojů zakázkami</b> – nejvytíženější stroj: <b>{html.escape(str(bottleneck_machine))}</b> "
+                    f"({fmt_pct(bottleneck_utilization, 0)}). Jen vlastní zakázky; pronájmy a servis nejsou zahrnuty.</p>",
+                    unsafe_allow_html=True)
+        with st.expander("Vytížení strojů zakázkami", expanded=False):
+            with ui.dash_section("usage"):
+                chart(ui.readable_axes(ui.style_fig(fig_usage, height=max(320, 34 * len(machine_usage_df) + 110),
+                                                    legend=False)))
+                ui.dash_text(
+                    f"Vytížení = dny stroje na zakázkách ÷ (počet kusů × délka plánu {fmt_days(plan_sum['length'], 0)}). "
+                    "Pronájmy a servis nezahrnuje – celkovou obsazenost ukazuje sekce Plánování kapacity. "
+                    f"Nejvytíženější je <b>{bottleneck_machine}</b> ({fmt_pct(bottleneck_utilization, 0)}, oranžově). "
+                    "Tečkovaná čára = 100 % kapacity.", muted=True)
 
         # ---- Detail -------------------------------------------------------------------------------
-        st.markdown('<div class="dd-section-title">Detail zakázek<small>v pořadí podle začátku · '
-                    'tabulku lze posouvat do strany</small></div>', unsafe_allow_html=True)
         detail = gantt.assign(
             **{
                 "Zakázka": gantt["job_name"].map(gantt_labels),
@@ -2001,14 +2006,19 @@ if PAGE == "zakazky":                                     # sekce Vlastní zaká
             }
         )[["Zakázka", "Stav", "Začátek (den)", "Konec (den)", "Termín (den)", "Zpoždění (dny)", "Zisk po penále",
            "Zisk", "Penále", "Tržba", "Náklady", "Stroje", "Priorita", "Riziko"]]
-        st.dataframe(
-            detail, width="stretch", hide_index=True, height=35 * (len(detail) + 1) + 3,   # všechny řádky
-            column_config={
-                "Zakázka": st.column_config.TextColumn(pinned=True, width="medium"),
-                "Stav": st.column_config.TextColumn(width=110),
-                "Stroje": st.column_config.TextColumn(width="medium"),
-            },
-        )
+        st.markdown('<p class="jobs-summary">'
+                    f"<b>Detail zakázek</b>: {len(detail)} naplánovaných zakázek: termíny, ekonomika, stroje, priorita a riziko.</p>",
+                    unsafe_allow_html=True)
+        with st.expander("Detail zakázek", expanded=False):
+            ui.dash_text("V pořadí podle začátku · tabulku lze posouvat do strany.", muted=True)
+            st.dataframe(
+                detail.style.apply(ui.jobs_row_style, axis=1), width="stretch", hide_index=True, height=35 * (len(detail) + 1) + 3,   # všechny řádky
+                column_config={
+                    "Zakázka": st.column_config.TextColumn(pinned=True, width="medium"),
+                    "Stav": st.column_config.TextColumn(width=110),
+                    "Stroje": st.column_config.TextColumn(width="medium"),
+                },
+            )
 
         page_link("rozhodovaci_centrum", "Ověřit novou zakázku v Rozhodovacím centru")
 

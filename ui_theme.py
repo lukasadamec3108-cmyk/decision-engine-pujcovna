@@ -1377,9 +1377,22 @@ ECON_LAYOUT_CSS = econ_layout_css()
 # Stránky se záhlavím s fotografií bagru (V4 Dashboard, V5 Ekonomika flotily, V6 Pronájem strojů)
 PHOTO_HEADER_PAGES = ("dashboard", "ekonomika", "pronajem", "zakazky")
 
+# Tlumené odstíny pouze pro grafy Vlastních zakázek; význam barev zůstává stejný.
+JOBS_ON_TIME = "#526F91"
+JOBS_LATE = "#AD514B"
+JOBS_BUSY = "#A66B32"
+
+
+def jobs_row_style(row):
+    """Jen prezentace již vypočteného stavu; data tabulky se nemění."""
+    background = BAD_BG if row["Stav"] == "✕ Po termínu" else OK_BG
+    return [f"background-color: {background}; color: {INK}"] * len(row)
+
+
 # Vlastní zakázky: nový styl pouze pro tuto stránku; JOBS_CSS nadále sdílí Strojový park.
 JOBS_LAYOUT_CSS = managed_layout_css(JOBS_KEY, topbar="jobs_topbar").replace("</style>", f"""
 {_JOBS} .jobs-chart-scroll {{ display: none; }}
+{_JOBS} .jobs-summary {{ color: {INK}; font-size: .95rem; line-height: 1.5; margin: .8rem 0 .35rem; }}
 {_JOBS} .st-key-jobs_economics .dd-head {{ align-items: flex-start; }}
 {_JOBS} .st-key-jobs_economics .dd-row .v {{ white-space: normal; }}
 @media (max-width: 1100px) {{
@@ -1388,9 +1401,13 @@ JOBS_LAYOUT_CSS = managed_layout_css(JOBS_KEY, topbar="jobs_topbar").replace("</
 }}
 @media (max-width: 640px) {{
   {_JOBS} .dd-section-title small {{ display: block; margin: .2rem 0 0; }}
+  /* Kartu už tvoří expander: další rámeček a padding by zúžily graf na telefonu. */
+  {_JOBS} [data-testid="stExpander"] .st-key-de_dash_gantt,
+  {_JOBS} [data-testid="stExpander"] .st-key-de_dash_usage {{ padding: 0 !important; border: none !important;
+                                                                         box-shadow: none !important; }}
   /* Dlouhý odkaz se zalomí; cíl musí být čitelný i na úzkém telefonu. */
-  {_JOBS} .st-key-jobs_topbar [data-testid="stPageLink"] a {{ height: auto; }}
-  {_JOBS} .st-key-jobs_topbar [data-testid="stPageLink"] p {{ white-space: normal; overflow: visible;
+  {_JOBS} [data-testid="stPageLink"] a {{ height: auto; }}
+  {_JOBS} [data-testid="stPageLink"] p {{ white-space: normal; overflow: visible;
                                                                          text-overflow: clip; }}
   /* Dlouhé názvy zakázek nesmějí vytlačit časovou osu do několika pixelů. */
   {_JOBS} .jobs-chart-scroll {{ display: block; color: {UI_MUTED}; font-size: .84rem; margin: 0 0 .4rem; }}
