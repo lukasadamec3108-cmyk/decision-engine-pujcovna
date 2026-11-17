@@ -70,6 +70,20 @@ def _numbers_diff(got, want):
     return missing, extra
 
 
+def with_jobs_summary_numbers(original):
+    """Přesně schválené duplicity demo hodnot ve třech nových shrnutích.
+
+    Extraktor čte markdown přes value i body; ostatní původní čísla zůstávají pod kontrolou.
+    Shrnutí a výchozí sbalení samostatně ověřuje test_jobs_page.py.
+    """
+    from collections import Counter
+    added = Counter(extract.numbers("9 z 12; 3; 20 dní; 108 000 Kč; 95 %; 12 zakázek"))
+    expected = Counter(original)
+    expected.update(added)
+    expected.update(added)
+    return dict(expected)
+
+
 def test_tab_labels_unchanged():
     labels = baseline()["tab_labels"]
     assert current_state()["tab_labels"] == labels[:5] == navigace.INVESTICE_TABS      # záložky Investic
@@ -82,7 +96,10 @@ def test_tab_labels_unchanged():
 def test_visible_numbers_unchanged_in_every_tab():
     now, base = current_state(), expected_original()
     for name in AREAS:
-        missing, extra = _numbers_diff(_area(now, name)["numbers"], _area(base, name)["numbers"])
+        want = _area(base, name)["numbers"]
+        if name == "6":
+            want = with_jobs_summary_numbers(want)
+        missing, extra = _numbers_diff(_area(now, name)["numbers"], want)
         assert not missing and not extra, f"oblast {name}: chybí {missing}, navíc {extra}"
 
 
@@ -126,7 +143,8 @@ def test_pages_match_pages_baseline():
     for key in navigace.KEYS:
         for part in ("main", "sidebar"):
             got, want = now[key][part], base[key][part]
-            missing, extra = _numbers_diff(got["numbers"], want["numbers"])
+            expected_numbers = with_jobs_summary_numbers(want["numbers"]) if key == "zakazky" and part == "main" else want["numbers"]
+            missing, extra = _numbers_diff(got["numbers"], expected_numbers)
             assert not missing and not extra, f"stránka {key}/{part}: chybí {missing}, navíc {extra}"
             assert got["widgets"] == want["widgets"], f"stránka {key}/{part}: liší se widgety"
             assert got["elements"] == want["elements"], f"stránka {key}/{part}: liší se prvky"
