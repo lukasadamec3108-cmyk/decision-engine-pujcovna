@@ -1375,7 +1375,64 @@ def econ_layout_css() -> str:
 ECON_LAYOUT_CSS = econ_layout_css()
 
 # Stránky se záhlavím s fotografií bagru (V4 Dashboard, V5 Ekonomika flotily, V6 Pronájem strojů)
-PHOTO_HEADER_PAGES = ("dashboard", "ekonomika", "pronajem", "zakazky")
+PHOTO_HEADER_PAGES = ("dashboard", "ekonomika", "pronajem", "zakazky", "strojovy_park")
+
+def fleet_ranked_economics(rows):
+    """Prezentační pořadí podle nezaokrouhleného zisku; vstupní řádky se nemění."""
+    return sorted(rows, key=lambda row: row["profit"], reverse=True)
+
+
+# Stejné tlumené modré a červené odstíny jako na stránce Vlastní zakázky.
+FLEET_CHART_PROFIT = "#526F91"
+FLEET_CHART_LOSS = "#AD514B"
+
+
+# Nový vzhled pouze Strojového parku; sdílené FLEET_CSS a tabulka Investic zůstávají stejné.
+FLEET_LAYOUT_CSS = managed_layout_css(FLEET_KEY, topbar="fleet_topbar").replace("</style>", f"""
+{_FLEET} .fleet-summary {{ color: {INK}; line-height: 1.5; margin: .8rem 0 .35rem; font-size: .95rem; }}
+{_FLEET} .fleet-chart-scroll {{ display: none; }}
+@media (max-width: 640px) {{
+  {_FLEET} table.dd-cmp td.l::before {{ content: "Pořadí"; color: {UI_MUTED}; font-weight: 500; }}
+  {_FLEET} [data-testid="stPageLink"] a {{ height: auto; }}
+  {_FLEET} [data-testid="stPageLink"] p {{ white-space: normal; overflow: visible; text-overflow: clip; }}
+  {_FLEET} .fleet-chart-scroll {{ display: block; font-size: .84rem; color: {UI_MUTED}; }}
+  {_FLEET} .st-key-fleet_graph_scroll {{ overflow-x: auto; }}
+  {_FLEET} .st-key-fleet_graph_scroll [data-testid="stElementContainer"]:has([data-testid="stPlotlyChart"]) {{ min-width: 560px; }}
+  {_FLEET} [data-testid="stExpander"] [class*="st-key-de_dash_"] {{ padding: 0 !important; border: none !important; box-shadow: none !important; }}
+}}
+/* Kompaktní karty pouze ekonomické tabulky Strojového parku na úzkých telefonech.
+   Jedna tabulka a stejné hodnoty: mění se jen vizuální rozložení buněk. */
+@media (max-width: 390px) {{
+  {_FLEET} .st-key-de_dash_ekonomika table.dd-cmp tbody {{ display: grid; gap: .75rem; }}
+  {_FLEET} .st-key-de_dash_ekonomika table.dd-cmp tbody tr {{ display: grid;
+      grid-template-columns: 2.65rem minmax(0, 1fr); gap: .35rem .65rem; box-sizing: border-box;
+      padding: .75rem; border: 1px solid {UI_LINE}; border-radius: 12px; background: #fff; }}
+  {_FLEET} .st-key-de_dash_ekonomika table.dd-cmp tbody tr:last-child {{ border-bottom: 1px solid {UI_LINE}; }}
+  {_FLEET} .st-key-de_dash_ekonomika table.dd-cmp td.l {{ grid-column: 1; grid-row: 1 / span 2;
+      flex-direction: column; align-items: center; align-self: start; gap: .1rem; padding: .35rem .15rem;
+      background: {UI_BG}; border-radius: 9px; font-size: 1.3rem; font-weight: 800; }}
+  {_FLEET} .st-key-de_dash_ekonomika table.dd-cmp td.l::before {{ font-size: .58rem; }}
+  {_FLEET} .st-key-de_dash_ekonomika table.dd-cmp td:nth-child(2) {{ grid-column: 2; grid-row: 1;
+      display: block; padding: 0; text-align: left; font-size: 1.02rem; line-height: 1.3;
+      font-weight: 700; overflow-wrap: anywhere; }}
+  {_FLEET} .st-key-de_dash_ekonomika table.dd-cmp td:nth-child(2)::before {{ content: none; }}
+  {_FLEET} .st-key-de_dash_ekonomika table.dd-cmp td.chg {{ grid-column: 2; grid-row: 2;
+      flex-direction: column; align-items: flex-start; gap: .15rem; padding: 0 0 .35rem;
+      text-align: left; font-size: 1.3rem; line-height: 1.2; }}
+  {_FLEET} .st-key-de_dash_ekonomika table.dd-cmp td.chg::before {{
+      content: "Provozní zisk · Kč/měs. · model · jeden kus"; font-size: .72rem; line-height: 1.35; }}
+  {_FLEET} .st-key-de_dash_ekonomika table.dd-cmp td:nth-child(n+3):not(:last-child) {{ grid-column: 1 / -1;
+      align-items: baseline; padding: .3rem 0 0; border-top: 1px solid {UI_LINE}; font-size: .82rem; gap: .5rem; }}
+  {_FLEET} .st-key-de_dash_ekonomika table.dd-cmp td:nth-child(3) {{ grid-row: 3; }}
+  {_FLEET} .st-key-de_dash_ekonomika table.dd-cmp td:nth-child(4) {{ grid-row: 4; }}
+  {_FLEET} .st-key-de_dash_ekonomika table.dd-cmp td:nth-child(5) {{ grid-row: 5; }}
+  {_FLEET} .st-key-de_dash_ekonomika table.dd-cmp td:nth-child(6) {{ grid-row: 6; }}
+}}
+@media (max-width: 380px) {{
+  {_FLEET} .dd-kpis {{ grid-template-columns: minmax(0, 1fr); }}
+}}
+</style>""")
+
 
 # Tlumené odstíny pouze pro grafy Vlastních zakázek; význam barev zůstává stejný.
 JOBS_ON_TIME = "#526F91"
