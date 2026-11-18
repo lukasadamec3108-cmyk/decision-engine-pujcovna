@@ -3407,6 +3407,7 @@ if PAGE == "strojovy_park":
     # Modernizace UI: karty a sekce jako Dashboard / Vlastní zakázky. Počty kusů = data flotily
     # (machine_capacity), ekonomika = jeden kus podle portfolio.type_month – nic nového se nepočítá.
     st.markdown(ui.FLEET_CSS, unsafe_allow_html=True)
+    st.markdown(ui.FLEET_LAYOUT_CSS, unsafe_allow_html=True)
     with ui.tab_container("strojovy_park"):
         ui.tab_header(
             "Strojový park",
@@ -3416,7 +3417,7 @@ if PAGE == "strojovy_park":
         fleet_econ = unit_economics_rows()
         fleet_total = sum(machine_capacity.values())
         fleet_types = len(machine_capacity)
-        fleet_by_profit = sorted(fleet_econ, key=lambda r: r["profit"], reverse=True)
+        fleet_by_profit = ui.fleet_ranked_economics(fleet_econ)
         fleet_by_revenue = sorted(fleet_econ, key=lambda r: r["revenue"], reverse=True)
         fleet_loss = [r for r in fleet_econ if r["profit"] < 0]
         fleet_word = lambda n, one, few, many: cv.plural(n, one, few, many).split(" ", 1)[1]
@@ -3429,50 +3430,65 @@ if PAGE == "strojovy_park":
             dict(icon="route", label="Počet typů strojů", tone="neutral",
                  value=f"{fleet_types}<small>{fleet_word(fleet_types, 'typ', 'typy', 'typů')}</small>",
                  sub="různé kategorie strojů ve flotile"),
-            dict(icon="coins", label="Měsíční tržby jednoho kusu", tone="accent",
-                 value=f"{fmt_num(fleet_by_revenue[-1]['revenue'])}–{fmt_czk(fleet_by_revenue[0]['revenue'])}",
-                 chip=ui.dash_chip("model · 1 kus", "info"),
-                 sub=f"rozpětí podle typu · nejvíc {html.escape(fleet_by_revenue[0]['machine'])}"),
-            dict(icon="spark", label="Měsíční provozní zisk jednoho kusu", tone="accent",
-                 value=f"{fmt_num(fleet_by_profit[-1]['profit'])}–{fmt_czk(fleet_by_profit[0]['profit'])}",
-                 chip=(ui.dash_chip(f"{len(fleet_loss)} z {fleet_types} typů ve ztrátě", "bad") if fleet_loss
-                       else ui.dash_chip(f"všech {fleet_types} typů v zisku", "good")),
-                 sub=f"rozpětí podle typu · nejvíc {html.escape(fleet_by_profit[0]['machine'])}"),
+            dict(icon="coins", label="Nejvyšší měsíční provozní zisk", tone="accent",
+                 value=fmt_czk(fleet_by_profit[0]["profit"]),
+                 chip=ui.dash_chip("model · jeden kus", "info"),
+                 sub=html.escape(fleet_by_profit[0]["machine"])),
+            dict(icon="spark", label="Nejnižší měsíční provozní zisk", tone="bad" if fleet_loss else "neutral",
+                 value=fmt_czk(fleet_by_profit[-1]["profit"]),
+                 chip=ui.dash_chip("model · jeden kus", "info"),
+                 sub=html.escape(fleet_by_profit[-1]["machine"])),
         ])
+        ui.dash_text(
+            f"<b>Model · jeden kus:</b> měsíční tržby {fmt_num(fleet_by_revenue[-1]['revenue'])}–"
+            f"{fmt_czk(fleet_by_revenue[0]['revenue'])} (nejvíc {html.escape(fleet_by_revenue[0]['machine'])}); "
+            f"měsíční provozní zisk {fmt_num(fleet_by_profit[-1]['profit'])}–{fmt_czk(fleet_by_profit[0]['profit'])}.")
+        st.markdown(ui.dash_chip(f"{len(fleet_loss)} z {fleet_types} typů ve ztrátě", "bad") if fleet_loss
+                    else ui.dash_chip(f"všech {fleet_types} typů v zisku", "good"), unsafe_allow_html=True)
         ui.dash_text("Souhrn tržeb a zisku za celou flotilu se záměrně nezobrazuje – ekonomika je model "
                      "<b>jednoho kusu</b> pro rozhodování o nákupu, ne výsledek stávající flotily "
                      "(podrobnosti v části Metodika).", muted=True)
 
+        with ui.dash_section("fleet_leaders"):
+            st.markdown('<div class="dd-title">Tři nejziskovější typy</div>'
+                        '<p class="dd-cap">Podle měsíčního provozního zisku · model · jeden kus</p>',
+                        unsafe_allow_html=True)
+            ui.dash_rows([(r["machine"], fmt_czk(r["profit"]), "model · jeden kus")
+                          for r in fleet_by_profit[:3]])
+
         # ---- Stroje ve flotile ----------------------------------------------------------------------
-        st.markdown(f'<div class="dd-section-title">Počet kusů ve flotile<small>{fleet_total} '
+        st.markdown(f'<p class="fleet-summary">Počet kusů ve flotile: {fleet_total} '
                     f'{fleet_word(fleet_total, "kus", "kusy", "kusů")} · {fleet_types} '
-                    f'{fleet_word(fleet_types, "typ", "typy", "typů")}</small></div>', unsafe_allow_html=True)
-        with ui.dash_section("flotila"):
-            ui.dash_units(list(machine_capacity.items()),
-                          f"Celkem <b>{fleet_total}</b> {fleet_word(fleet_total, 'kus', 'kusy', 'kusů')} "
-                          "ve flotile (ukázková data).")
+                    f'{fleet_word(fleet_types, "typ", "typy", "typů")} (ukázková data).</p>', unsafe_allow_html=True)
+        with st.expander("Počet kusů ve flotile", expanded=False):
+            with ui.dash_section("flotila"):
+                ui.dash_units(list(machine_capacity.items()),
+                              f"Celkem <b>{fleet_total}</b> {fleet_word(fleet_total, 'kus', 'kusy', 'kusů')} "
+                              "ve flotile (ukázková data).")
 
         # ---- Ekonomika jednoho kusu -----------------------------------------------------------------
-        st.markdown('<div class="dd-section-title">Ekonomika jednoho kusu podle dat<small>model na 1 kus '
-                    'a průměrný měsíc · částky v Kč</small></div>', unsafe_allow_html=True)
-        with ui.dash_section("ekonomika"):
-            ui.dash_compare(
-                UNIT_ECON_COLUMNS,
-                [(t[0], t[1:5], f'<span class="neg">{t[5]}</span>' if r["profit"] < 0 else t[5])
-                 for r, t in ((r, unit_economics_texts(r)) for r in fleet_econ)],
-            )
-            ui.dash_text("Ekonomika jednoho kusu používá individuální fixní náklady a servis strojů z dat – "
-                         "stejně jako Investice → Nákup strojů.", muted=True)
+        st.markdown(f'<p class="fleet-summary">Ekonomika jednoho kusu podle dat: {len(fleet_by_profit)} typů · '
+                    'model · jeden kus · seřazeno podle nezaokrouhleného zisku.</p>', unsafe_allow_html=True)
+        with st.expander("Ekonomika jednoho kusu podle dat", expanded=False):
+            with ui.dash_section("ekonomika"):
+                ui.dash_compare(
+                    ["Pořadí"] + UNIT_ECON_COLUMNS,
+                    [(str(rank), [html.escape(t[0])] + t[1:5],
+                      f'<span class="neg">{t[5]}</span>' if r["profit"] < 0 else t[5])
+                     for rank, (r, t) in enumerate(((r, unit_economics_texts(r)) for r in fleet_by_profit), start=1)],
+                )
+                ui.dash_text("Ekonomika jednoho kusu používá individuální fixní náklady a servis strojů z dat – "
+                             "stejně jako Investice → Nákup strojů.", muted=True)
 
         # ---- Graf provozního zisku (stejné hodnoty jako tabulka) ------------------------------------
-        st.markdown('<div class="dd-section-title">Provozní zisk jednoho kusu podle typu<small>seřazeno '
-                    'od nejvyššího · Kč za měsíc</small></div>', unsafe_allow_html=True)
+        st.markdown('<p class="fleet-summary">Provozní zisk jednoho kusu podle typu · model · jeden kus · '
+                    'od nejvyššího · Kč za měsíc.</p>', unsafe_allow_html=True)
         fig_fleet = go.Figure(
             go.Bar(
                 x=[r["profit"] for r in fleet_by_profit],
                 y=[r["machine"] for r in fleet_by_profit],
                 orientation="h",
-                marker=dict(color=[ui.BAD if r["profit"] < 0 else ui.BLUE for r in fleet_by_profit],
+                marker=dict(color=[ui.FLEET_CHART_LOSS if r["profit"] < 0 else ui.FLEET_CHART_PROFIT for r in fleet_by_profit],
                             line=dict(color="#fff", width=2)),
                 text=[fmt_czk(r["profit"]) for r in fleet_by_profit], textposition="outside", cliponaxis=False,
                 customdata=[[fmt_czk(r["revenue"]), fmt_czk(r["costs"])] for r in fleet_by_profit],
@@ -3489,12 +3505,15 @@ if PAGE == "strojovy_park":
         fig_fleet.update_layout(bargap=0.35, separators=", ")
         if fleet_loss:
             fig_fleet.add_vline(x=0, line=dict(color=ui.NAVY, width=1))
-        with ui.dash_section("graf"):
-            chart(ui.readable_axes(ui.style_fig(fig_fleet, height=max(320, 34 * len(fleet_econ) + 110),
-                                                legend=False)))
-            ui.dash_text("Graf ukazuje přesně hodnoty sloupce „Provozní zisk“ z tabulky výše – ekonomiku "
-                         "<b>jednoho kusu</b> každého typu, ne celé flotily."
-                         + (" Červeně = ztráta." if fleet_loss else ""), muted=True)
+        with st.expander("Provozní zisk jednoho kusu podle typu", expanded=False):
+            with ui.dash_section("graf"):
+                st.markdown('<p class="fleet-chart-scroll">Graf lze posouvat do strany.</p>', unsafe_allow_html=True)
+                with st.container(key="fleet_graph_scroll"):
+                    chart(ui.readable_axes(ui.style_fig(fig_fleet, height=max(320, 34 * len(fleet_econ) + 110),
+                                                        legend=False)))
+                ui.dash_text("Graf ukazuje přesně hodnoty sloupce „Provozní zisk“ z tabulky výše – ekonomiku "
+                             "<b>jednoho kusu</b> každého typu, ne celé flotily."
+                             + (" Červeně = ztráta." if fleet_loss else ""), muted=True)
 
         # ---- Metodika a data ------------------------------------------------------------------------
         with st.expander("Metodika a data"):
@@ -3519,6 +3538,7 @@ if PAGE == "strojovy_park":
         with ui.dash_links("strojovy_park"):
             page_link("kapacita", "Obsazenost strojů po dnech – Plánování kapacity")
             page_link("investice", "Nákup strojů – Investice")
+            page_link("ekonomika", "Výsledek za období – Ekonomika flotily")
 
 
 # ==================================================

@@ -84,6 +84,21 @@ def with_jobs_summary_numbers(original):
     return dict(expected)
 
 
+def with_fleet_presentation_numbers(original):
+    """Schválené pořadí 1–8, souhrny a top tři; původní ekonomické hodnoty se nemění.
+
+    Dvě původní číselná označení „1 kus“ nahrazuje „jeden kus“.
+    Extraktor markdown počítá přes value i body. Obsah samostatně hlídá test_fleet_page.
+    """
+    from collections import Counter
+    added = Counter(extract.numbers("1 2 3 4 5 6 7 8; 8; 22 825; 89 040; 89 040; 77 740; 62 450"))
+    expected = Counter(original)
+    for _ in range(2):
+        expected.update(added)
+        expected.subtract({"1": 2})
+    return dict(expected)
+
+
 def test_tab_labels_unchanged():
     labels = baseline()["tab_labels"]
     assert current_state()["tab_labels"] == labels[:5] == navigace.INVESTICE_TABS      # záložky Investic
@@ -144,6 +159,8 @@ def test_pages_match_pages_baseline():
         for part in ("main", "sidebar"):
             got, want = now[key][part], base[key][part]
             expected_numbers = with_jobs_summary_numbers(want["numbers"]) if key == "zakazky" and part == "main" else want["numbers"]
+            if key == "strojovy_park" and part == "main":
+                expected_numbers = with_fleet_presentation_numbers(expected_numbers)
             missing, extra = _numbers_diff(got["numbers"], expected_numbers)
             assert not missing and not extra, f"stránka {key}/{part}: chybí {missing}, navíc {extra}"
             assert got["widgets"] == want["widgets"], f"stránka {key}/{part}: liší se widgety"
