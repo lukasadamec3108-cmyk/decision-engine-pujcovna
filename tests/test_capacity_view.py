@@ -284,3 +284,33 @@ if __name__ == "__main__":
         if name.startswith("test_"):
             fn()
             print("OK", name)
+
+
+def test_planning_presentation_preserves_states_and_marks_conflict_without_color():
+    cal = cp.build_calendar(
+        [Unit("A1", "A"), Unit("B1", "B"), Unit("C1", "C")],
+        [Assignment("rental", "R", "A", 1, 1), Assignment("job", "J", "A", 1, 1),
+         Assignment("rental", "T", "B", 1, 1, status="tentative")],
+        open_jobs=[OpenJob("O", "C", 1, None, 1)])
+    frame = cv.grid(cal, 1, 1, ["A", "B", "C"])
+    before = frame.copy(deep=True)
+    rendered = cv.grid_html(frame, {"A": "A", "B": "B", "C": "C"}, cv.fleet_units(cal), planning=True)
+    assert 'cc-alert' in rendered and '⚠' in rendered and '+1' in rendered
+    assert 'scope="row"' in rendered and 'scope="col"' in rendered and 'tabindex="0"' in rendered
+    assert 'aria-description=' in rendered and 'neblokuje' in rendered
+    by_type = {row.type_id: cv.planning_cell_html(row._asdict(), row.type_id, None) for row in frame.itertuples()}
+    assert '>1<small>/1' in by_type["B"] and 'cc-tent' in by_type["B"]
+    assert '>?</div>' in by_type["C"] and 'seg free' not in by_type["C"]
+    assert 'nikoli volné kusy' in by_type["A"]
+    pd.testing.assert_frame_equal(frame, before)
+
+
+def test_enhanced_presentation_is_opt_in_for_shared_calendar():
+    cal = cp.build_calendar([Unit("A1", "A")],
+                            [Assignment("rental", "R", "A", 1, 1), Assignment("job", "J", "A", 1, 1)])
+    frame = cv.grid(cal, 1, 1, ["A"])
+    legacy = cv.grid_html(frame, {"A": "Stroj A"}, cv.fleet_units(cal))
+    assert 'cc-alert' not in legacy and 'cc-planning' not in legacy
+    assert '<th>1</th>' in legacy and '<td class="cc-type">' in legacy
+    assert 'class="cc over"' in legacy and '>+1</div>' in legacy
+    assert cv.grid_html(frame, {"A": "Stroj A"}, cv.fleet_units(cal), planning=False) == legacy

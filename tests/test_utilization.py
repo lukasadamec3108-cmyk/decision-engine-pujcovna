@@ -261,7 +261,7 @@ def test_overview_button_opens_type_in_calendar():
     assert at.radio(key="cap_view").value == "Kalendář dostupnosti"
     assert at.multiselect(key="cap_types").value == ["KOLOVY_BAGR"]
     assert at.selectbox(key="cap_detail_type").value == "KOLOVY_BAGR"
-    html_text = [m.value for m in at.main.markdown if "cc-table" in m.value][0]
+    html_text = [m.value for m in at.main.markdown if '<table class="cc-table">' in m.value][0]
     assert "Kolový bagr" in html_text and "Mini bagr" not in html_text
     assert not at.exception
 

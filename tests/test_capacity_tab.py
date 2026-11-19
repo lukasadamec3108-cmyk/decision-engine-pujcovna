@@ -4,6 +4,7 @@ Spuštění: python -m pytest tests   nebo   python tests/test_capacity_tab.py
 """
 
 import os
+import re
 import secrets
 import sys
 from datetime import date
@@ -36,7 +37,7 @@ def tab(at):
 
 
 def grid_html(at):
-    return [m.value for m in tab(at).markdown if "cc-table" in m.value][0]
+    return [m.value for m in tab(at).markdown if '<table class="cc-table">' in m.value][0]
 
 
 def chip(at):
@@ -66,7 +67,7 @@ def test_filters_type_period_and_dates():
     assert "Silniční válec" in html_text and "Mini bagr" not in html_text
     at.slider(key="cap_period").set_value((14, 19)).run()
     html_text = grid_html(at)
-    assert "<th>14" in html_text and "<th>19" in html_text and "<th>13" not in html_text
+    assert re.search(r'<th[^>]*>14', html_text) and re.search(r'<th[^>]*>19', html_text) and not re.search(r'<th[^>]*>13', html_text)
     assert at.number_input(key="cap_detail_day").value == 14        # detail dne drží rozsah období
     at.date_input(key="cap_plan_start").set_value(date(2026, 12, 20)).run()
     assert not at.exception, [e.value for e in at.exception]
