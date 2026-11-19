@@ -218,14 +218,15 @@ def test_v6_evaluation_does_not_change_bookings_or_jobs():
     assert dm.data_fingerprint() == before
 
 
-def test_v6_decision_centre_keeps_its_look():
+def test_decision_centre_uses_isolated_layout_and_keeps_rental_layout_separate():
     import ui_theme as ui
     at = app()
     open_page(at, "rozhodovaci_centrum")
     ok(at)
     assert [e.label for e in at.main.expander] == ["Jak plánovač rozhoduje"]
-    assert not any(m.value == ui.RENTAL_LAYOUT_CSS for m in at.main.markdown)
+    assert not any(m.value.strip() == ui.RENTAL_LAYOUT_CSS.strip() for m in at.main.markdown)
     [hdr] = [m.value for m in at.main.markdown if 'class="de-header' in m.value]
-    assert "zahlavi_dashboard.webp" not in hdr                                       # záhlaví beze změny
+    assert "zahlavi_dashboard.webp" in hdr
+    assert any(m.value.strip() == ui.DECISION_LAYOUT_CSS.strip() for m in at.main.markdown)
     assert ui.ECON_LAYOUT_CSS == ui.managed_layout_css(ui.ECON_KEY)                  # Ekonomika beze změny
 

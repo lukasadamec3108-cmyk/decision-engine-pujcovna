@@ -255,6 +255,9 @@ def test_tab_in_app_full_flow_without_changing_data():
     assert badges(at) == [(pv.OP_NO, None)]                               # nevejde se → ekonomika se nehodnotí
     blocking = [d.value for d in at.main.dataframe if "Co stroj drží" in d.value.columns][0]
     assert set(blocking["Co stroj drží"]) == {"pronájem FIKT-P01"}
+    important_details = [e for e in at.main.expander if e.label.startswith(
+        ("Co blokuje", "Chybějící údaje", "Všechny konflikty"))]
+    assert important_details and all(e.proto.expanded for e in important_details)
     # 3) soupeření s předběžnou rezervací – nelze rozhodnout, rezervace zůstává
     at.selectbox(key="dp_r_type").set_value("PASOVY_DUMPER")
     at.number_input(key="dp_r_from").set_value(22); at.number_input(key="dp_r_to").set_value(23)

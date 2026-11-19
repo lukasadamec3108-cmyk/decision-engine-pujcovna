@@ -2572,12 +2572,14 @@ def dp_economic_comparison(panels: list, sig: str) -> None:
 
 
 if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka 8 (Pronájem = stejný nástroj, jen pronájem)
-    # Pronájem strojů: modernizovaný vzhled (karty jako Dashboard); Rozhodovací centrum beze změny vzhledu.
+    # Obě stránky používají společný plánovač; jejich prezentační styly jsou izolované.
     # Formulář, validace, požadavky a výsledek plánovače jsou pro obě stránky stejné.
     DP_RENT = PAGE == "pronajem"
     if DP_RENT:
         st.markdown(ui.RENTAL_CSS, unsafe_allow_html=True)
         st.markdown(ui.RENTAL_LAYOUT_CSS, unsafe_allow_html=True)       # V6: vzhled jako Dashboard a Ekonomika
+    else:
+        st.markdown(ui.DECISION_LAYOUT_CSS, unsafe_allow_html=True)
     with ui.tab_container("pronajem" if DP_RENT else "rozhodovaci_centrum"):
         if DP_RENT:
             st.markdown(pv.CSS, unsafe_allow_html=True)
@@ -2609,104 +2611,105 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
         dp_starts = cv.job_starts_from_plan(jobs_df, dp_plan)
         dp_requests = st.session_state.setdefault("dp_requests", [])
 
-        if not DP_RENT:
-            ui.section_title("Rozhodovací plánovač", "nový požadavek na pronájem nebo vlastní zakázku")
-        if PAGE == "pronajem":
-            dp_kind = DP_KINDS[0]
-        else:
-            dp_kind = st.radio("Typ požadavku", DP_KINDS, horizontal=True, key="dp_kind")
-        if dp_kind == DP_KINDS[1]:
-            # výchozí hodnoty polí zakázky jen přes stav relace (šablona je pak může přepsat bez varování)
-            for i in range(DP_JOB_ROWS):
-                st.session_state.setdefault(f"dp_j_type{i}", DP_NONE)
-                st.session_state.setdefault(f"dp_j_qty{i}", 1)
-            st.session_state.setdefault("dp_j_start", 1)
-            st.session_state.setdefault("dp_j_dur", 1)
-            dp_jobs = data_model.jobs["job_id"].tolist()
-            dp_tpl = st.selectbox(
-                "Vyplnit podle existující zakázky (nepovinné – jen šablona, původní zakázka se nemění)",
-                [DP_NONE] + dp_jobs, key="dp_template",
-                format_func=lambda j: j if j == DP_NONE else f"{j} – {data_model.jobs.set_index('job_id').loc[j, 'name']}",
-            )
-            if dp_tpl != st.session_state.get("dp_template_used"):
-                st.session_state["dp_template_used"] = dp_tpl
-                if dp_tpl != DP_NONE:                      # předvyplnit formulář (před vykreslením polí)
-                    tpl = pv.job_template(data_model, dp_tpl)
-                    st.session_state["dp_j_name"] = tpl["name"]
-                    for i in range(DP_JOB_ROWS):
-                        t, q = tpl["needs"][i] if i < len(tpl["needs"]) else (DP_NONE, 1)
-                        st.session_state[f"dp_j_type{i}"] = t if t in dp_types else DP_NONE
-                        st.session_state[f"dp_j_qty{i}"] = q
-                    st.session_state["dp_j_dur"] = tpl["duration"] or 1
-                    st.session_state["dp_j_start"] = tpl["earliest"] or 1
-                    for key, val in (("dp_j_earliest", tpl["earliest"]), ("dp_j_deadline", tpl["deadline"]),
-                                     ("dp_j_revenue", tpl["revenue"]), ("dp_j_direct", tpl["direct_cost"]),
-                                     ("dp_j_penalty", tpl["penalty_per_day"])):
-                        st.session_state[key] = val      # chybějící hodnota zůstane prázdná, ne 0
+        with (ui.dash_section("decision_form") if not DP_RENT else contextlib.nullcontext()):
+            if not DP_RENT:
+                ui.section_title("Rozhodovací plánovač", "nový požadavek na pronájem nebo vlastní zakázku")
+            if PAGE == "pronajem":
+                dp_kind = DP_KINDS[0]
+            else:
+                dp_kind = st.radio("Typ požadavku", DP_KINDS, horizontal=True, key="dp_kind")
+            if dp_kind == DP_KINDS[1]:
+                # výchozí hodnoty polí zakázky jen přes stav relace (šablona je pak může přepsat bez varování)
+                for i in range(DP_JOB_ROWS):
+                    st.session_state.setdefault(f"dp_j_type{i}", DP_NONE)
+                    st.session_state.setdefault(f"dp_j_qty{i}", 1)
+                st.session_state.setdefault("dp_j_start", 1)
+                st.session_state.setdefault("dp_j_dur", 1)
+                dp_jobs = data_model.jobs["job_id"].tolist()
+                dp_tpl = st.selectbox(
+                    "Vyplnit podle existující zakázky (nepovinné – jen šablona, původní zakázka se nemění)",
+                    [DP_NONE] + dp_jobs, key="dp_template",
+                    format_func=lambda j: j if j == DP_NONE else f"{j} – {data_model.jobs.set_index('job_id').loc[j, 'name']}",
+                )
+                if dp_tpl != st.session_state.get("dp_template_used"):
+                    st.session_state["dp_template_used"] = dp_tpl
+                    if dp_tpl != DP_NONE:                      # předvyplnit formulář (před vykreslením polí)
+                        tpl = pv.job_template(data_model, dp_tpl)
+                        st.session_state["dp_j_name"] = tpl["name"]
+                        for i in range(DP_JOB_ROWS):
+                            t, q = tpl["needs"][i] if i < len(tpl["needs"]) else (DP_NONE, 1)
+                            st.session_state[f"dp_j_type{i}"] = t if t in dp_types else DP_NONE
+                            st.session_state[f"dp_j_qty{i}"] = q
+                        st.session_state["dp_j_dur"] = tpl["duration"] or 1
+                        st.session_state["dp_j_start"] = tpl["earliest"] or 1
+                        for key, val in (("dp_j_earliest", tpl["earliest"]), ("dp_j_deadline", tpl["deadline"]),
+                                         ("dp_j_revenue", tpl["revenue"]), ("dp_j_direct", tpl["direct_cost"]),
+                                         ("dp_j_penalty", tpl["penalty_per_day"])):
+                            st.session_state[key] = val      # chybějící hodnota zůstane prázdná, ne 0
 
-        with (ui.dash_section("rent_form") if DP_RENT else contextlib.nullcontext()):
-            if DP_RENT:
-                ui.dash_section_head("truck", "Nový požadavek na pronájem",
-                                     "Dny plánu (den 1 = první den) · prázdná cena = ceník stroje · požadavky jsou "
-                                     "společné s Rozhodovacím centrem, kde zadáte i vlastní zakázku", tone="accent")
-            with st.form("dp_form", border=not DP_RENT):
-                if dp_kind == DP_KINDS[0]:
-                    r1, r2 = st.columns([3, 1])
-                    with r1:
-                        dp_r_type = st.selectbox("Stroj", dp_types, format_func=lambda t: dp_names[t], key="dp_r_type")
-                    with r2:
-                        dp_r_qty = st.number_input("Počet kusů", min_value=1, max_value=10, value=1, step=1, key="dp_r_qty")
-                    r3, r4, r5 = st.columns(3)
-                    with r3:
-                        dp_r_from = st.number_input("Od dne", min_value=1, max_value=365, value=21, step=1, key="dp_r_from")
-                    with r4:
-                        dp_r_to = st.number_input("Do dne (včetně)", min_value=1, max_value=365, value=24, step=1,
-                                                  key="dp_r_to")
-                    with r5:
-                        dp_r_price = st.number_input(
-                            "Cena za den (Kč, nepovinné)", min_value=0.0, value=None, step=500.0, key="dp_r_price",
-                            help="Nevyplněno = ceník typu stroje z ukázkových dat.")
-                else:
-                    dp_j_name = st.text_input("Název zakázky (nepovinné)", key="dp_j_name", max_chars=80)
-                    st.caption("Stroje, které zakázka potřebuje současně po celou dobu:")
-                    dp_rows = []
-                    for i in range(DP_JOB_ROWS):
-                        c1, c2 = st.columns([3, 1])
-                        with c1:
-                            t = st.selectbox(f"Stroj {i + 1}", [DP_NONE] + dp_types, key=f"dp_j_type{i}",
-                                             format_func=lambda t: t if t == DP_NONE else dp_names[t])
-                        with c2:
-                            q = st.number_input(f"Kusů {i + 1}", min_value=1, max_value=10, step=1, key=f"dp_j_qty{i}")
-                        dp_rows.append((None if t == DP_NONE else t, q))
-                    j1, j2, j3, j4 = st.columns(4)
-                    with j1:
-                        dp_j_start = st.number_input("Začátek (den)", min_value=1, max_value=365, step=1, key="dp_j_start")
-                    with j2:
-                        dp_j_dur = st.number_input("Délka (dny)", min_value=1, max_value=120, step=1, key="dp_j_dur")
-                    with j3:
-                        dp_j_earliest = st.number_input("Nejdřívější začátek", min_value=1, max_value=365, value=None,
-                                                        step=1, key="dp_j_earliest",
-                                                        help="Okno pro nabídku posunu bez penále (nepovinné).")
-                    with j4:
-                        dp_j_deadline = st.number_input("Termín dokončení", min_value=1, max_value=365, value=None,
-                                                        step=1, key="dp_j_deadline")
-                    e1, e2, e3 = st.columns(3)
-                    with e1:
-                        dp_j_revenue = st.number_input("Tržba (Kč)", min_value=0.0, value=None, step=1000.0,
-                                                       key="dp_j_revenue")
-                    with e2:
-                        dp_j_direct = st.number_input("Přímé náklady (Kč)", min_value=0.0, value=None, step=1000.0,
-                                                      key="dp_j_direct")
-                    with e3:
-                        dp_j_penalty = st.number_input("Penále za den (Kč)", min_value=0.0, value=None, step=500.0,
-                                                       key="dp_j_penalty")
-                    st.caption("Nevyplněný ekonomický údaj se nepočítá jako 0 – výsledek bude označený jako neúplný.")
-                b1, b2 = st.columns(2)
-                with b1:
-                    dp_alone = st.form_submit_button("Vyhodnotit požadavek" if DP_RENT else "Vyhodnotit samostatně",
-                                                     width="stretch", type="primary" if DP_RENT else "secondary")
-                with b2:
-                    dp_add = st.form_submit_button("Přidat k porovnání", width="stretch")
+            with (ui.dash_section("rent_form") if DP_RENT else contextlib.nullcontext()):
+                if DP_RENT:
+                    ui.dash_section_head("truck", "Nový požadavek na pronájem",
+                                         "Dny plánu (den 1 = první den) · prázdná cena = ceník stroje · požadavky jsou "
+                                         "společné s Rozhodovacím centrem, kde zadáte i vlastní zakázku", tone="accent")
+                with st.form("dp_form", border=False):
+                    if dp_kind == DP_KINDS[0]:
+                        r1, r2 = st.columns([3, 1])
+                        with r1:
+                            dp_r_type = st.selectbox("Stroj", dp_types, format_func=lambda t: dp_names[t], key="dp_r_type")
+                        with r2:
+                            dp_r_qty = st.number_input("Počet kusů", min_value=1, max_value=10, value=1, step=1, key="dp_r_qty")
+                        r3, r4, r5 = st.columns(3)
+                        with r3:
+                            dp_r_from = st.number_input("Od dne", min_value=1, max_value=365, value=21, step=1, key="dp_r_from")
+                        with r4:
+                            dp_r_to = st.number_input("Do dne (včetně)", min_value=1, max_value=365, value=24, step=1,
+                                                      key="dp_r_to")
+                        with r5:
+                            dp_r_price = st.number_input(
+                                "Cena za den (Kč, nepovinné)", min_value=0.0, value=None, step=500.0, key="dp_r_price",
+                                help="Nevyplněno = ceník typu stroje z ukázkových dat.")
+                    else:
+                        dp_j_name = st.text_input("Název zakázky (nepovinné)", key="dp_j_name", max_chars=80)
+                        st.caption("Stroje, které zakázka potřebuje současně po celou dobu:")
+                        dp_rows = []
+                        for i in range(DP_JOB_ROWS):
+                            c1, c2 = st.columns([3, 1])
+                            with c1:
+                                t = st.selectbox(f"Stroj {i + 1}", [DP_NONE] + dp_types, key=f"dp_j_type{i}",
+                                                 format_func=lambda t: t if t == DP_NONE else dp_names[t])
+                            with c2:
+                                q = st.number_input(f"Kusů {i + 1}", min_value=1, max_value=10, step=1, key=f"dp_j_qty{i}")
+                            dp_rows.append((None if t == DP_NONE else t, q))
+                        j1, j2, j3, j4 = st.columns(4)
+                        with j1:
+                            dp_j_start = st.number_input("Začátek (den)", min_value=1, max_value=365, step=1, key="dp_j_start")
+                        with j2:
+                            dp_j_dur = st.number_input("Délka (dny)", min_value=1, max_value=120, step=1, key="dp_j_dur")
+                        with j3:
+                            dp_j_earliest = st.number_input("Nejdřívější začátek", min_value=1, max_value=365, value=None,
+                                                            step=1, key="dp_j_earliest",
+                                                            help="Okno pro nabídku posunu bez penále (nepovinné).")
+                        with j4:
+                            dp_j_deadline = st.number_input("Termín dokončení", min_value=1, max_value=365, value=None,
+                                                            step=1, key="dp_j_deadline")
+                        e1, e2, e3 = st.columns(3)
+                        with e1:
+                            dp_j_revenue = st.number_input("Tržba (Kč)", min_value=0.0, value=None, step=1000.0,
+                                                           key="dp_j_revenue")
+                        with e2:
+                            dp_j_direct = st.number_input("Přímé náklady (Kč)", min_value=0.0, value=None, step=1000.0,
+                                                          key="dp_j_direct")
+                        with e3:
+                            dp_j_penalty = st.number_input("Penále za den (Kč)", min_value=0.0, value=None, step=500.0,
+                                                           key="dp_j_penalty")
+                        st.caption("Nevyplněný ekonomický údaj se nepočítá jako 0 – výsledek bude označený jako neúplný.")
+                    b1, b2 = st.columns(2)
+                    with b1:
+                        dp_alone = st.form_submit_button("Vyhodnotit požadavek" if DP_RENT else "Vyhodnotit samostatně",
+                                                         width="stretch", type="primary" if DP_RENT else "secondary")
+                    with b2:
+                        dp_add = st.form_submit_button("Přidat k porovnání", width="stretch")
 
         if dp_alone or dp_add:
             existing = [] if dp_alone else [r["ref"] for r in dp_requests]
@@ -2733,7 +2736,7 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
         elif not dp_requests:
             ui.hint("Zatím není zadaný žádný požadavek.")
         else:
-            dp_list_slot = st.container() if not DP_RENT else None       # Rozhodovací centrum: seznam nahoře
+            dp_list_slot = ui.dash_section("decision_list") if not DP_RENT else None       # Rozhodovací centrum: seznam nahoře
             res = planner_result(data_version, code_version, tuple(sorted(dp_starts.items())), pv.freeze(dp_requests))
             if DP_RENT:
                 dp_related = [m for m in res["manual"] if m["related"]]
@@ -2779,7 +2782,7 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
             for card in res["cards"]:
                 st.markdown(pv.card_html(card, dp_names), unsafe_allow_html=True)
                 if card["blocking"]:
-                    with st.expander(f"Co blokuje {card['ref']} ({len(card['blocking'])} dní × stroj)"):
+                    with st.expander(f"Co blokuje {card['ref']} ({len(card['blocking'])} dní × stroj)", expanded=not DP_RENT):
                         st.dataframe(pv.blocking_table(card, dp_names), width="stretch", hide_index=True)
                 for alt in card["alternatives"]:
                     st.markdown(f"- Alternativa (jen návrh, nic se nemění): {pv.md_escape(alt)}")
@@ -2798,7 +2801,7 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
             if not DP_RENT:
                 ui.section_title("Dostupnost dotčených strojů")
             _, dp_html, _ = capacity_grid(data_version, code_version, tuple(sorted(dp_starts.items())), dp_lo, dp_hi,
-                                          dp_types_used, None)
+                                          dp_types_used, None, planning=not DP_RENT)
             with (st.expander("Dostupnost dotčených strojů – kalendář") if DP_RENT else contextlib.nullcontext()):
                 st.markdown(dp_html, unsafe_allow_html=True)
                 ui.hint("Kalendář ukazuje kapacitu po potvrzených závazcích a servisu – nové požadavky v něm nejsou.")
@@ -2820,11 +2823,12 @@ if PAGE in ("pronajem", "rozhodovaci_centrum"):              # dříve záložka
             else:
                 ui.hint("U dotčených strojů a dnů nejsou konflikty potvrzených závazků.")
             if len(res["manual"]) > len(related):
-                with st.expander(f"Všechny konflikty potvrzených závazků ({len(res['manual'])})"):
+                with st.expander(f"Všechny konflikty potvrzených závazků ({len(res['manual'])})", expanded=not DP_RENT):
                     for m in res["manual"]:
                         st.markdown(f"- {pv.md_escape(m['text'])}")
 
-            with st.expander("Chybějící údaje" + (f" ({len(res['missing_relevant'])})" if res["missing_relevant"] else "")):
+            with st.expander("Chybějící údaje" + (f" ({len(res['missing_relevant'])})" if res["missing_relevant"] else ""),
+                             expanded=not DP_RENT):
                 if res["missing_relevant"]:
                     for x in res["missing_relevant"]:
                         st.markdown(f"- {pv.md_escape(x)}")          # může obsahovat text od uživatele

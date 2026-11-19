@@ -1375,7 +1375,7 @@ def econ_layout_css() -> str:
 ECON_LAYOUT_CSS = econ_layout_css()
 
 # Stránky se záhlavím s fotografií bagru (V4 Dashboard, V5 Ekonomika flotily, V6 Pronájem strojů)
-PHOTO_HEADER_PAGES = ("dashboard", "ekonomika", "pronajem", "zakazky", "strojovy_park", "kapacita")
+PHOTO_HEADER_PAGES = ("dashboard", "ekonomika", "pronajem", "zakazky", "strojovy_park", "kapacita", "rozhodovaci_centrum")
 
 # Plánování kapacity: izolované rozložení; základní kalendář sdílený s plánovačem se nemění.
 _CAPACITY = ".st-key-de_tab_kapacita"
@@ -1427,6 +1427,55 @@ CAPACITY_LAYOUT_CSS = managed_layout_css(TAB_KEY_PREFIX + "kapacita", topbar="ca
   {_CAPACITY} .de-kpi {{ border-radius: 12px; }}
   {_CAPACITY} .de-kpi .val {{ font-size: 1.6rem; }}
   {_CAPACITY} .cc-table .cc-type {{ min-width: 104px; width: 104px; max-width: 104px; padding: .5rem; }}
+}}
+</style>""")
+
+
+# Rozhodovací centrum: společné komponenty, přepisy pouze uvnitř této stránky.
+_DECISION = ".st-key-de_tab_rozhodovaci_centrum"
+DECISION_LAYOUT_CSS = dash_css(TAB_KEY_PREFIX + "rozhodovaci_centrum") + managed_layout_css(
+    TAB_KEY_PREFIX + "rozhodovaci_centrum", topbar="decision_topbar").replace("</style>", f"""
+{_DECISION} .de-section-title {{ font-size: 1.35rem; margin: 1rem 0 .55rem; }}
+{_DECISION} .st-key-de_dash_decision_form .de-section-title,
+{_DECISION} .st-key-de_dash_decision_list .de-section-title {{ margin-top: 0; }}
+{_DECISION} [data-testid="stForm"] {{ border: none; padding: 0; }}
+{_DECISION} [data-testid="stFormSubmitButton"] button {{ min-height: 2.75rem; border-radius: 10px; font-weight: 600; }}
+{_DECISION} .st-key-de_dash_decision_list {{ padding: 1rem 1.25rem !important; }}
+{_DECISION} .dp-card, {_DECISION} .dp-panel {{ border-radius: 16px; padding: 1.15rem 1.35rem;
+  box-shadow: 0 2px 10px rgba(16,24,40,.06); margin: .65rem 0; }}
+{_DECISION} .dp-card {{ border-color: {UI_LINE}; }}
+{_DECISION} .dp-panel {{ background: #fff; }}
+{_DECISION} .dp-answer {{ font-size: 1.25rem; line-height: 1.45; }}
+{_DECISION} .dp-title {{ font-size: 1.08rem; }}
+{_DECISION} .dp-badge {{ white-space: normal; overflow-wrap: anywhere; line-height: 1.5; padding: .2rem .6rem; }}
+{_DECISION} .dp-sub, {_DECISION} .dp-note, {_DECISION} .dp-sec {{ line-height: 1.5; }}
+{_DECISION} .dp-var {{ padding: .5rem 0; }}
+{_DECISION} .dp-seg.c0 {{ background: #E8EFF5; border-color: #526F91; }}
+{_DECISION} .dp-seg.c1 {{ background: #EFEAF5; border-color: #78638F; }}
+{_DECISION} .dp-seg.c2 {{ background: #F7EFE2; border-color: #A66B32; }}
+{_DECISION} .dp-seg.c3 {{ background: #E8F2F2; border-color: #537D83; }}
+{_DECISION} .dp-seg.c4 {{ background: #F5EAF0; border-color: #98657E; }}
+{_DECISION} .cc-wrap {{ max-width: 100%; border-radius: 14px; overscroll-behavior-x: contain; }}
+{_DECISION} .cc-wrap:focus-visible {{ outline: 3px solid {BRAND_RED}; outline-offset: 2px; }}
+{_DECISION} .cc-table .cc-type {{ background: #fff; z-index: 2; }}
+{_DECISION} .cc-table thead .cc-type {{ background: {UI_BG}; z-index: 3; }}
+{_DECISION} .cc-table th, {_DECISION} .cc-table td {{ min-width: 44px; }}
+{_DECISION} .cc-num {{ font-weight: 800; }}
+{_DECISION} .cc-num small {{ font-weight: 600; color: inherit; }}
+{_DECISION} .cc-alert {{ display: block; line-height: 1; }}
+{_DECISION} .cc-legend {{ gap: .6rem 1rem; line-height: 1.5; }}
+{_DECISION} .seg.free, {_DECISION} .cc-legend i.free {{ background: #377A58; }}
+{_DECISION} .seg.rental, {_DECISION} .cc-legend i.rental {{ background: #526F91; }}
+{_DECISION} .seg.job, {_DECISION} .cc-legend i.job {{ background: #A66B32; }}
+{_DECISION} .seg.maintenance, {_DECISION} .cc-legend i.maintenance {{ background: #6B7280; }}
+@media (max-width: 640px) {{
+  .stApp:has({_DECISION}) [data-testid="stHeader"] {{ background: {UI_BG}; }}
+  .stApp:has({_DECISION}) [data-testid="stMain"] {{ top: 3.75rem; height: calc(100% - 3.75rem); }}
+  {_DECISION} .st-key-de_dash_decision_form [data-testid="stHorizontalBlock"] {{ flex-direction: column !important; }}
+  {_DECISION} .st-key-de_dash_decision_form [data-testid="stColumn"] {{ width: 100% !important; flex: 1 1 100% !important; min-width: 0 !important; }}
+  {_DECISION} .dp-card, {_DECISION} .dp-panel {{ padding: .9rem; border-radius: 12px; }}
+  {_DECISION} .dp-answer {{ font-size: 1.1rem; }}
+  {_DECISION} .cc-table .cc-type {{ min-width: 104px; max-width: 104px; white-space: normal; overflow-wrap: anywhere; }}
 }}
 </style>""")
 
