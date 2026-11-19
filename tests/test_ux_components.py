@@ -178,11 +178,14 @@ def test_original_header_art_is_served_as_static_file_only_on_dashboard():
     assert "enableStaticServing = true" in (ROOT / ".streamlit" / "config.toml").read_text(encoding="utf-8")
 
 
-def test_dashboard_header_uses_original_art_other_pages_do_not():
+def test_dashboard_and_capacity_use_photo_while_decision_centre_keeps_original_header():
     at = open_page(app(), "dashboard")
     [hdr] = [m.value for m in at.main.markdown if 'class="de-header' in m.value]
     assert "app/static/zahlavi_dashboard.webp" in hdr and len(hdr) < 5000            # obrázek není vložený do HTML
     at = open_page(at, "kapacita")
+    [hdr] = [m.value for m in at.main.markdown if 'class="de-header' in m.value]
+    assert "app/static/zahlavi_dashboard.webp" in hdr and 'class="de-ph' in hdr and len(hdr) < 5000
+    at = open_page(at, "rozhodovaci_centrum")
     [hdr] = [m.value for m in at.main.markdown if 'class="de-header' in m.value]
     assert "zahlavi_dashboard" not in hdr and "data:image/svg+xml" in hdr
 

@@ -186,6 +186,21 @@ def cell_html(row, name: str, plan_start) -> str:
     return f'<td class="cc {cls}" title="{title}">{num}<div class="cc-bar">{segs}</div>{mark}</td>'
 
 
+def planning_cell_html(row, name: str, plan_start) -> str:
+    """Pouze prezentace Plánování kapacity; původní renderer zůstává ostatním stránkám."""
+    cell = cell_html(row, name, plan_start)
+    descriptions = {
+        cp.OVER: "Konflikt: plus označuje nároky nad kapacitu, nikoli volné kusy.",
+        cp.UNKNOWN: "Dostupnost nelze určit; otazník neznamená volno.",
+    }
+    description = descriptions.get(row["status"], "Volné kusy z kusů přítomných v daný den.")
+    if row["tentative"]:
+        description += " Předběžná rezervace kapacitu neblokuje."
+    cell = cell.replace('<td ', '<td aria-description="' + html.escape(description, quote=True) + '" ', 1)
+    return cell.replace('<div class="cc-num over">',
+                        '<div class="cc-num over"><span class="cc-alert" aria-hidden="true">⚠</span> ', 1)
+
+
 CSS = """
 <style>
 .cc-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #E3E6EA;border-radius:10px;margin:.4rem 0 .6rem 0;background:#fff}
@@ -261,33 +276,41 @@ def scope_texts(start: int, end: int, types: list, all_types: list, names: dict,
     return period, machines
 
 
-def legend_html() -> str:
-    items = [f'<span><i style="background:{COLORS[k]}"></i>{LABELS[k]}</span>'
-             for k in ("free", "rental", "job", "maintenance")]
+def legend_html(planning: bool = False) -> str:
+    items = ([f'<span><i class="{k}" aria-hidden="true"></i>{LABELS[k]}</span>'
+              for k in ("free", "rental", "job", "maintenance")] if planning else
+             [f'<span><i style="background:{COLORS[k]}"></i>{LABELS[k]}</span>'
+              for k in ("free", "rental", "job", "maintenance")])
     items += ['<span><i class="overbox"></i>konflikt / nad kapacitu (+ počet kusů navíc)</span>',
               '<span><i class="unknown"></i>? nelze určit – chybí údaje, nejde o volno</span>',
               '<span><i class="tent"></i>předběžná rezervace (kapacitu neblokuje)</span>']
     return f'<div class="cc-legend">{"".join(items)}</div>'
 
 
-def grid_html(df: pd.DataFrame, names: dict, units: dict, plan_start=None) -> str:
+def grid_html(df: pd.DataFrame, names: dict, units: dict, plan_start=None, *, planning: bool = False) -> str:
     """HTML mřížka: řádky = typy strojů (v pořadí `names`), sloupce = dny.
     Číslo v buňce = volné kusy / kusy k dispozici."""
     day_list = sorted(df["day"].unique())
     head = '<th class="cc-type">Stroj / den plánu</th>' + "".join(
-        f'<th>{d}' + (f'<small>{html.escape(day_label(d, plan_start, short=True))}</small>' if plan_start else "")
+        (f'<th scope="col">{d}' if planning else f'<th>{d}') + (f'<small>{html.escape(day_label(d, plan_start, short=True))}</small>' if plan_start else "")
         + "</th>" for d in day_list)
+    if planning:
+        head = head.replace('<th class="cc-type">', '<th class="cc-type" scope="col">', 1)
     body = ""
     present = set(df["type_id"])
     order = [t for t in names if t in present] + sorted(present - set(names))
     for t in order:
         rows = df[df["type_id"] == t]
         name = names.get(t, t)
-        cells = "".join(cell_html(r, name, plan_start) for _, r in rows.sort_values("day").iterrows())
+        render_cell = planning_cell_html if planning else cell_html
+        cells = "".join(render_cell(r, name, plan_start) for _, r in rows.sort_values("day").iterrows())
         n = units.get(t, 0)
-        body += (f'<tr><td class="cc-type">{html.escape(name)}<small>{n} ks ve flotile</small></td>'
-                 f"{cells}</tr>")
-    return (CSS + legend_html() + f'<div class="cc-wrap"><table class="cc-table"><thead><tr>{head}'
+        row_header = (f'<th class="cc-type" scope="row">{html.escape(name)}<small>{n} ks ve flotile</small></th>'
+                      if planning else f'<td class="cc-type">{html.escape(name)}<small>{n} ks ve flotile</small></td>')
+        body += f"<tr>{row_header}{cells}</tr>"
+    wrap = ('<div class="cc-wrap cc-planning" role="region" aria-label="Kapacitní kalendář, posouvatelný do strany" tabindex="0">'
+            if planning else '<div class="cc-wrap">')
+    return (CSS + legend_html(planning) + wrap + f'<table class="cc-table"><thead><tr>{head}'
             f"</tr></thead><tbody>{body}</tbody></table></div>")
 
 

@@ -2056,7 +2056,7 @@ if PAGE == "zakazky":                                     # sekce Vlastní zaká
 # Termíny zakázek přebírá z plánu záložky 6 (stejná funkce plan_jobs, výsledek z mezipaměti).
 
 @st.cache_data(show_spinner=False, max_entries=64)
-def capacity_grid(data_version: str, code_version: str, job_starts: tuple, start: int, end: int, types: tuple, plan_start):
+def capacity_grid(data_version: str, code_version: str, job_starts: tuple, start: int, end: int, types: tuple, plan_start, *, planning: bool = False):
     """Mřížka, její HTML a konflikty za období. Streamlit spouští kód všech záložek při každém
     kliknutí – mezipaměť zajistí, že se kalendář přepočítá jen při změně jeho vstupů (včetně
     změny dat: data_version). Ukládají se jen obyčejné tabulky a text (viz load_data_model)."""
@@ -2065,7 +2065,7 @@ def capacity_grid(data_version: str, code_version: str, job_starts: tuple, start
     cal = cv.build(model, dict(job_starts))
     names = cv.type_names(model)
     grid = cv.grid(cal, start, end, list(types))
-    return (grid, cv.grid_html(grid, names, cv.fleet_units(cal), plan_start),
+    return (grid, cv.grid_html(grid, names, cv.fleet_units(cal), plan_start, planning=planning),
             cv.conflicts_table(cal, start, end, list(types), names, cv.job_info(model), plan_start))
 
 
@@ -2139,6 +2139,7 @@ if PAGE == "kapacita":                                    # sekce Plánování k
         # Souhrnné ukazatele se vypisují do místa NAD filtry (summary_slot), ale počítají se až PO přečtení
         # filtrů – vždy tedy odpovídají aktuálnímu výběru. Widgety, jejich klíče, pořadí a výchozí hodnoty se nemění.
         st.markdown(cv.TAB_CSS + cv.CALENDAR_TAB_CSS, unsafe_allow_html=True)
+        st.markdown(ui.CAPACITY_LAYOUT_CSS, unsafe_allow_html=True)
         ui.tab_header(
             "Kapacita strojů po dnech",
             "Kolik kusů je v jednotlivých dnech volných a co je drží: <b>potvrzené</b> pronájmy, plán vlastních "
@@ -2193,7 +2194,7 @@ if PAGE == "kapacita":                                    # sekce Plánování k
 
         if cap_view == CAP_VIEWS[0]:
             cap_grid, cap_html, cap_conf = capacity_grid(
-                data_version, code_version, tuple(sorted(cap_starts.items())), cap_from, cap_to, tuple(cap_types), cap_start)
+                data_version, code_version, tuple(sorted(cap_starts.items())), cap_from, cap_to, tuple(cap_types), cap_start, planning=True)
             cap_sum = cv.summary(cap_grid, cap_names)
             n_conf = len(cap_sum["conflict_days"])
             with cap_summary:
@@ -2205,6 +2206,7 @@ if PAGE == "kapacita":                                    # sekce Plánování k
                                   + cv.days_text(cap_sum["conflict_days"], cap_start)),
                              negative=n_conf > 0),
                         dict(label="Nelze určit", value=str(cap_sum["unknown_cells"]),
+                             chip=(ui.status_chip("Neúplné údaje", "warn") if cap_sum["unknown_cells"] else ""),
                              sub=("dní × strojů s neúplnými údaji o kapacitě" if cap_sum["unknown_cells"]
                                   else "údaje o kapacitě jsou úplné")),
                         dict(label="Nejvytíženější stroj", value=html.escape(cap_sum["busiest"] or "–"),

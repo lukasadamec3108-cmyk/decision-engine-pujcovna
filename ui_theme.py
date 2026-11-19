@@ -1375,7 +1375,61 @@ def econ_layout_css() -> str:
 ECON_LAYOUT_CSS = econ_layout_css()
 
 # Stránky se záhlavím s fotografií bagru (V4 Dashboard, V5 Ekonomika flotily, V6 Pronájem strojů)
-PHOTO_HEADER_PAGES = ("dashboard", "ekonomika", "pronajem", "zakazky", "strojovy_park")
+PHOTO_HEADER_PAGES = ("dashboard", "ekonomika", "pronajem", "zakazky", "strojovy_park", "kapacita")
+
+# Plánování kapacity: izolované rozložení; základní kalendář sdílený s plánovačem se nemění.
+_CAPACITY = ".st-key-de_tab_kapacita"
+CAPACITY_LAYOUT_CSS = managed_layout_css(TAB_KEY_PREFIX + "kapacita", topbar="capacity_topbar").replace("</style>", f"""
+{_CAPACITY} .de-kpis {{ grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.05rem; align-items: stretch; }}
+{_CAPACITY} .de-kpi {{ border: 1px solid #EDEEF0; border-radius: 16px; padding: 1.15rem 1.45rem;
+  background: #fff; box-shadow: 0 2px 10px rgba(16,24,40,.07); min-width: 0; }}
+{_CAPACITY} .de-kpi:has(.val.neg) {{ background: {BAD_BG}; border-color: #F3D3D3; }}
+{_CAPACITY} .de-kpi .lbl {{ font-size: .9rem; letter-spacing: .02em; color: {INK}; }}
+{_CAPACITY} .de-kpi .val {{ font-size: clamp(1.35rem, 2vw, 2.3rem); line-height: 1.2; overflow-wrap: anywhere; }}
+{_CAPACITY} .de-kpi .sub {{ font-size: .9rem; line-height: 1.45; color: {UI_MUTED}; }}
+{_CAPACITY} .de-kpi:has(.val.neg) .lbl::before {{ content: "⚠ "; }}
+{_CAPACITY} .de-kpi .val .de-status {{ display: block; width: fit-content; margin-top: .4rem; font-size: .75rem; }}
+{_CAPACITY} .de-section {{ font-size: 1.35rem; font-weight: 700; margin: 1.4rem 0 .6rem; }}
+{_CAPACITY} .st-key-de_filters_kapacita {{ border-radius: 16px; background: #fff; border-color: {UI_LINE};
+  box-shadow: 0 2px 10px rgba(16,24,40,.05); }}
+{_CAPACITY} .cc-wrap {{ border-radius: 14px; border-color: {UI_LINE}; background: #fff;
+  box-shadow: 0 2px 10px rgba(16,24,40,.05); max-width: 100%; overscroll-behavior-x: contain; }}
+{_CAPACITY} .cc-wrap:focus-visible {{ outline: 3px solid {BRAND_RED}; outline-offset: 2px; }}
+{_CAPACITY} .cc-table {{ table-layout: fixed; }}
+{_CAPACITY} .cc-table th, {_CAPACITY} .cc-table td {{ box-sizing: border-box; min-width: 48px; padding: .55rem .25rem; }}
+{_CAPACITY} .cc-table thead th {{ width: 48px; min-width: 48px; font-weight: 700; color: {INK}; background: {UI_BG}; z-index: 1; }}
+{_CAPACITY} .cc-table .cc-type {{ min-width: 152px; width: 152px; max-width: 152px; padding: .55rem .75rem;
+  background: #fff; box-shadow: 2px 0 4px rgba(16,24,40,.06); z-index: 2; }}
+{_CAPACITY} .cc-table thead .cc-type {{ background: {UI_BG}; z-index: 3; }}
+{_CAPACITY} .cc-num {{ font-size: .95rem; line-height: 1.35; font-weight: 800; }}
+{_CAPACITY} .cc-num small {{ font-size: .78rem; font-weight: 600; color: inherit; }}
+{_CAPACITY} .cc-alert {{ display: block; font-size: .8rem; line-height: 1; }}
+{_CAPACITY} .cc-bar {{ height: 7px; gap: 2px; margin-top: .35rem; }}
+{_CAPACITY} .cc.free {{ background: #F1F8F4; }}
+{_CAPACITY} .cc.full {{ background: #F5F6F8; }}
+{_CAPACITY} .cc.over {{ background: {BAD_BG}; box-shadow: inset 0 0 0 2px {BAD_TEXT}; }}
+{_CAPACITY} .seg.free, {_CAPACITY} .cc-legend i.free {{ background: #377A58; }}
+{_CAPACITY} .seg.rental, {_CAPACITY} .cc-legend i.rental {{ background: #526F91; }}
+{_CAPACITY} .seg.job, {_CAPACITY} .cc-legend i.job {{ background: #A66B32; }}
+{_CAPACITY} .seg.maintenance, {_CAPACITY} .cc-legend i.maintenance {{ background: #6B7280; }}
+{_CAPACITY} .cc-tent {{ height: auto; border-color: #526F91; margin-top: .3rem; }}
+{_CAPACITY} .cc-tent::after {{ content: "předb."; display: block; font-size: .6rem; color: #374151; }}
+{_CAPACITY} .cc-legend {{ gap: .6rem 1rem; line-height: 1.5; margin: .8rem 0; font-size: .85rem; }}
+{_CAPACITY} .cc-legend span {{ align-items: center; }}
+@media (max-width: 1100px) {{
+  {_CAPACITY} .de-kpi {{ padding: .9rem; }}
+}}
+@media (max-width: 640px) {{
+  /* Mobilní lišta Streamlitu má 3.75rem; obsah se posouvá pod ní ve vlastním prostoru. */
+  .stApp:has({_CAPACITY}) [data-testid="stHeader"] {{ background: {UI_BG}; }}
+  .stApp:has({_CAPACITY}) [data-testid="stMain"] {{ top: 3.75rem; height: calc(100% - 3.75rem); }}
+  {_CAPACITY} .de-kpis {{ grid-template-columns: 1fr; gap: .65rem; }}
+  {_CAPACITY} .de-kpi {{ border-radius: 12px; }}
+  {_CAPACITY} .de-kpi .val {{ font-size: 1.6rem; }}
+  {_CAPACITY} .cc-table .cc-type {{ min-width: 104px; width: 104px; max-width: 104px; padding: .5rem; }}
+}}
+</style>""")
+
 
 def fleet_ranked_economics(rows):
     """Prezentační pořadí podle nezaokrouhleného zisku; vstupní řádky se nemění."""
