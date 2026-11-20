@@ -70,19 +70,40 @@ def slider(page, key, target):
     raise AssertionError(f'Unable to set slider {key}')
 
 
+def editor(page, opened):
+    details = page.locator('.st-key-de_inv_editor details')
+    if (details.get_attribute('open') is not None) != opened:
+        details.locator('summary').click(); idle(page)
+
+
+def snapshot(page, output, width, stage):
+    page.get_by_test_id('stMain').evaluate('e=>e.scrollTop=0')
+    page.mouse.move(1, 70); page.wait_for_timeout(300)
+    page.screenshot(path=str(output/f'{width}-{stage}.png'))
+
+
 def view(page, slug):
+    page.locator(f'.st-key-inv_view_{slug} button:visible').click()
+    idle(page)
+
+
+def sidebar(page):
     expand = page.get_by_test_id('stExpandSidebarButton')
     if expand.count() and expand.is_visible():
         expand.click(); page.wait_for_timeout(400)
-    side = page.get_by_test_id('stSidebar')
-    details = side.get_by_test_id('stExpander').locator('details')
-    if details.get_attribute('open') is None:
-        details.locator('summary').click(); page.wait_for_timeout(400)
-    side.locator(f'.st-key-nav_inv_{slug} button:visible').click()
-    idle(page)
-    close = page.get_by_test_id('stSidebarCollapseButton')
-    if page.viewport_size['width'] < 500 and close.is_visible():
-        close.click(); page.wait_for_timeout(400)
+    return page.get_by_test_id('stSidebar')
+
+
+def group(page, name, opened):
+    details = sidebar(page).locator(f'.st-key-nav_group_{name} details')
+    if (details.get_attribute('open') is not None) != opened:
+        details.locator('summary').click(); idle(page)
+
+
+def check_groups(page, overview, operations):
+    side = sidebar(page)
+    for name, expected in [('prehled', overview), ('provoz', operations)]:
+        assert (side.locator(f'.st-key-nav_group_{name} details').get_attribute('open') is not None) == expected
 
 
 def run(url, output):
@@ -101,37 +122,71 @@ def run(url, output):
                 page = browser.new_page(viewport={'width': width, 'height': 1200}, accept_downloads=True)
                 page.goto(url.rstrip('/')+'/investice?pohled=doporuceni')
                 page.locator('input[type=password]').fill(password); page.keyboard.press('Enter')
-                page.locator('.st-key-de_inv_inputs').wait_for(timeout=120000); idle(page)
+                page.locator('.st-key-de_inv_inputs').wait_for(state='attached', timeout=120000); idle(page)
                 close = page.get_by_test_id('stSidebarCollapseButton')
                 if width < 500 and close.is_visible(): close.click()
+                first = page.locator('.st-key-inv_view_doporuceni button:visible')
+                first.focus(); page.keyboard.press('Tab')
+                second = page.locator('.st-key-inv_view_vysledky button:visible')
+                assert second.evaluate('e=>e===document.activeElement')
+                assert second.evaluate('e=>getComputedStyle(e).outlineStyle') != 'none'
+                page.keyboard.press('Enter'); idle(page)
+                assert 'pohled=vysledky' in page.url
+                assert second.evaluate('e=>e===document.activeElement')
+                view(page, 'doporuceni')
+                editor(page, True)
                 for key, value in zip(KEYS[:3], EXPECTED[:3]): select(page, key, value)
                 number(page, 'inv_budget', EXPECTED[6])
-                details = page.locator('.st-key-de_inv_advanced details')
-                if details.get_attribute('open') is None: details.locator('summary').click()
+                details = page.locator('.st-key-de_inv_editor details')
                 number(page, 'inv_fixed_cost', EXPECTED[3])
                 slider(page, 'inv_expected_days', EXPECTED[4]); slider(page, 'inv_n', EXPECTED[5])
                 assert values(page) == EXPECTED
-                page.locator('.st-key-de_inv_inputs').screenshot(path=str(output/f'{width}-valid.png'))
-                if width in (1024, 390):
-                    details.locator('summary').click(); idle(page)
+                snapshot(page, output, width, 'valid')
                 select(page, 'inv_machine_2', EXPECTED[0])
+                if width in (1024, 390):
+                    editor(page, False)
                 assert all(page.locator(f'.st-key-{k}').count() == 1 for k in KEYS), 'All seven widgets must remain mounted during validation'
                 assert values(page) == [EXPECTED[0], EXPECTED[0], *EXPECTED[2:]], values(page)
                 expect(page.get_by_test_id('stAlert')).to_contain_text('různé')
                 assert not page.locator('.de-hero').count()
                 assert not page.get_by_test_id('stPlotlyChart').count()
                 assert not page.get_by_role('button', name='Stáhnout report (DOCX)', exact=True).count()
-                page.locator('.st-key-de_inv_inputs').screenshot(path=str(output/f'{width}-invalid.png'))
+                snapshot(page, output, width, 'invalid')
                 # I změna pohledu během validace musí zachovat všechny vstupy.
                 view(page, 'riziko')
                 assert values(page) == [EXPECTED[0], EXPECTED[0], *EXPECTED[2:]]
+                editor(page, True)
                 select(page, 'inv_machine_2', EXPECTED[1])
                 assert values(page) == EXPECTED, values(page)
-                page.locator('.st-key-de_inv_inputs').screenshot(path=str(output/f'{width}-repaired.png'))
+                snapshot(page, output, width, 'repaired')
+                editor(page, False)
                 for slug in navigace.INVESTICE_VIEWS:
                     view(page, slug)
                     assert values(page) == EXPECTED, (slug, values(page))
-                    expect(page.locator('.de-inv-summary')).to_contain_text('optimistický')
+                    expect(page.locator('.de-inv-summary')).to_contain_text('Optimistický')
+                    editor(page, True)
+                    number(page, 'inv_fixed_cost', 65000)
+                    assert 'pohled='+slug in page.url
+                    expect(page.locator('.de-inv-summary')).to_contain_text('65')
+                    number(page, 'inv_fixed_cost', EXPECTED[3])
+                    editor(page, False)
+                    assert values(page) == EXPECTED
+                page.go_back(); page.locator('.st-key-de_inv_obsah_4_on').wait_for(); idle(page)
+                assert values(page) == EXPECTED
+                page.go_forward(); page.locator('.st-key-de_inv_obsah_5_on').wait_for(); idle(page)
+                assert values(page) == EXPECTED
+                group(page, 'prehled', False); group(page, 'provoz', True)
+                sidebar(page).get_by_role('link', name='Pronájem strojů', exact=True).click(); idle(page)
+                check_groups(page, False, True)
+                sidebar(page).get_by_role('link', name='Investice', exact=True).click(); idle(page)
+                check_groups(page, False, True); assert values(page) == EXPECTED
+                group(page, 'prehled', True); group(page, 'provoz', False)
+                sidebar(page).get_by_role('link', name='Dashboard', exact=True).click(); idle(page)
+                check_groups(page, True, False)
+                sidebar(page).get_by_role('link', name='Investice', exact=True).click(); idle(page)
+                check_groups(page, True, False); assert values(page) == EXPECTED
+                close = page.get_by_test_id('stSidebarCollapseButton')
+                if width < 500 and close.is_visible(): close.click()
                 view(page, 'doporuceni')
                 with page.expect_download() as info:
                     page.get_by_role('button', name='Stáhnout report (DOCX)', exact=True).click()
@@ -142,6 +197,17 @@ def run(url, output):
                 idle(page); assert values(page) == EXPECTED
                 print(f'PASS {width}: seven inputs, invalid/repair, all views, exact DOCX', flush=True)
                 page.close()
+            for i, slug in enumerate(navigace.INVESTICE_VIEWS, 1):
+                page = browser.new_page(viewport={'width': 1440, 'height': 1200})
+                page.goto(url.rstrip('/')+'/investice?pohled='+slug)
+                expect(page.locator('input[type=password]')).to_be_visible()
+                assert not page.locator('.de-header').count()
+                page.locator('input[type=password]').fill(password); page.keyboard.press('Enter')
+                page.locator(f'.st-key-de_inv_obsah_{i}_on').wait_for(timeout=120000); idle(page)
+                assert 'pohled='+slug in page.url
+                assert not page.get_by_test_id('stSidebar').locator('[class*=st-key-inv_view_]').count()
+                page.close()
+            print('PASS all five direct URLs and login gates', flush=True)
         finally:
             browser.close()
 

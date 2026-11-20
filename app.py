@@ -327,23 +327,32 @@ def _open_investment_view(slug: str) -> None:
         st.switch_page(_PAGE_OBJ["investice"], query_params={"pohled": slug})
 
 
-# Nativní registr dál řídí stránky a přímé adresy. Jediné viditelné menu je zde.
+def _remember_sidebar_group(key: str) -> None:
+    st.session_state[INV_KEEP + key] = st.session_state[key]
+
+
+def _sidebar_page(key: str) -> None:
+    with st.container(key=f"de_nav_{key}_{'active' if PAGE == key else 'idle'}"):
+        st.page_link(_PAGE_OBJ[key], label=_PAGE_OBJ[key].title, icon=_PAGE_OBJ[key].icon, width="stretch")
+
+
+# Registr a URL zůstávají stejné; sidebar obsahuje jen skutečné stránky.
 with st.sidebar.container(key="de_sidebar_navigation"):
     for group, keys in navreg.groups().items():
-        if group == "Investice":
-            with st.expander("Investice", expanded=PAGE == "investice", icon=":material/savings:"):
-                for slug, label in navreg.INVESTICE_VIEWS.items():
-                    active = PAGE == "investice" and label == navreg.investment_tab(st.query_params.get("pohled"))
-                    st.button(label.split(" ", 1)[1], key=f"nav_inv_{slug}", width="stretch",
-                              type="primary" if active else "tertiary",
-                              icon=":material/check:" if active else None,
-                              help="Aktuální pohled" if active else None,
-                              on_click=_open_investment_view, args=(slug,))
+        if group in ("Přehled", "Provoz"):
+            group_key = "nav_group_" + ("prehled" if group == "Přehled" else "provoz")
+            with st.expander(group, key=group_key,
+                             expanded=st.session_state.get(INV_KEEP + group_key, PAGE in keys),
+                             on_change=_remember_sidebar_group, args=(group_key,),
+                             icon=":material/dashboard:" if group == "Přehled" else ":material/construction:"):
+                for key in keys:
+                    _sidebar_page(key)
+        elif group == "Investice":
+            _sidebar_page("investice")
         else:
             st.markdown(f'<div class="de-nav-group">{group}</div>', unsafe_allow_html=True)
             for key in keys:
-                with st.container(key=f"de_nav_{key}_{'active' if PAGE == key else 'idle'}"):
-                    st.page_link(_PAGE_OBJ[key], label=_PAGE_OBJ[key].title, icon=_PAGE_OBJ[key].icon, width="stretch")
+                _sidebar_page(key)
 
 st.sidebar.markdown(
     '<div class="de-demo"><b>Ukázková data</b> · všechny hodnoty jsou fiktivní</div>',
@@ -352,26 +361,40 @@ st.sidebar.markdown(
 INV_PANEL_TITLE = "Nastavení investičního scénáře"
 INV_TAB = navreg.investment_tab(st.query_params.get("pohled"))
 if SHOW_INV_INPUTS:
-    # Obsah všech pohledů i pořadí výpočtů zůstávají stejné; přepíná pouze sidebar/URL.
-    st.markdown(ui.INVESTMENT_SCENARIO_CSS, unsafe_allow_html=True)
-    with st.container(key="de_inv_inputs", border=True):
-        ui.section_title(INV_PANEL_TITLE)
-        sb_machines = st.container()
-        with sb_machines:
-            sb_machines_header = st.empty()
-            sb_machine_1, sb_machine_2 = st.columns(2, gap="medium")
-        sb_market, sb_budget = st.columns(2, gap="medium")
-        with st.expander("Pokročilé nastavení", key="de_inv_advanced", expanded=False, icon=":material/tune:"):
+    st.markdown(ui.INVESTMENT_SCENARIO_CSS + ui.INVESTMENT_NAVIGATION_CSS, unsafe_allow_html=True)
+    # Pořadí v DOM je pevné. Vstupy se plní později na původních místech výpočtového toku.
+    inv_summary_slot = st.empty()
+    with st.expander("Upravit investiční scénář", key="de_inv_editor", expanded=False,
+                     on_change="rerun", icon=":material/tune:"):
+        with st.container(key="de_inv_inputs"):
+            ui.section_title(INV_PANEL_TITLE)
+            sb_machines = st.container()
+            with sb_machines:
+                sb_machines_header = st.empty()
+                sb_machine_1, sb_machine_2 = st.columns(2, gap="medium")
+            sb_market, sb_budget = st.columns(2, gap="medium")
             sb_costs, sb_advanced = st.columns(2, gap="medium")
-        ui.hint("Porovnání dvojice používá společný fixní náklad a simulovaný scénář trhu. "
-                "Nákup strojů vybírá ze všech typů podle rozpočtu, individuálních nákladů a průměrné "
-                "poptávky z dat bez simulace. Volba dvojice, scénář trhu ani pokročilé parametry "
-                "tento nákupní model nemění.")
-        sb_jobs = st.container()
-    inv_summary_slot = st.empty()        # shrnutí zvolených hodnot – vidět i při sbaleném panelu
-    inv_tab_area = st.container(key="de_inv_obsah")      # obsah záložek (pod panelem)
+            ui.hint("Porovnání dvojice používá společný fixní náklad a simulovaný scénář trhu. "
+                    "Nákup strojů vybírá ze všech typů podle rozpočtu, individuálních nákladů a průměrné "
+                    "poptávky z dat bez simulace. Volba dvojice, scénář trhu ani pokročilé parametry "
+                    "tento nákupní model nemění.")
+            sb_jobs = st.container()
+    with st.container(key="de_inv_view_tiles"):
+        active_slug = next(slug for slug, label in navreg.INVESTICE_VIEWS.items() if label == INV_TAB)
+        st.markdown(ui.investment_active_tile_css(active_slug), unsafe_allow_html=True)
+        for col, (slug, label), icon in zip(st.columns(5, gap="small"), navreg.INVESTICE_VIEWS.items(),
+                                           ui.INVESTMENT_VIEW_ICONS):
+            with col:
+                st.button(label.split(" ", 1)[1], icon=icon, key="inv_view_" + slug, width="stretch",
+                          type="secondary",
+                          help="Zobrazit pohled " + label.split(" ", 1)[1],
+                          on_click=_open_investment_view, args=(slug,))
+        st.markdown('<span class="inv-current-view" role="status" aria-live="polite">Aktuální pohled: '
+                    + html.escape(INV_TAB.split(" ", 1)[1]) + '</span>', unsafe_allow_html=True)
+    inv_tab_area = st.container(key="de_inv_obsah")
 else:
     sb_machines = sb_machines_header = sb_machine_1 = sb_machine_2 = sb_costs = sb_market = sb_budget = sb_jobs = sb_advanced = inv_summary_slot = None
+
 sb_user = st.sidebar.container()
 
 # --- Přihlášený uživatel, odhlášení a nástroj správce (jen role admin) ---
@@ -584,9 +607,7 @@ budget = _inv_input(
 if SHOW_INV_INPUTS:
     ui.sidebar_amount(sb_budget, fmt_czk(budget), "k dispozici na nákup strojů")
     inv_summary_slot.markdown(
-        f'<div class="de-inv-summary"><b>{html.escape(machine_1)}</b> × <b>{html.escape(machine_2)}</b> · '
-        f"trh {html.escape(scenario.lower())} · fixní náklad {fmt_czk(fixed_cost)} měsíčně · "
-        f"rozpočet {fmt_czk(budget)}</div>",
+        ui.investment_summary_html(machine_1, machine_2, scenario, budget, fixed_cost, expected_days, n),
         unsafe_allow_html=True,
     )
 

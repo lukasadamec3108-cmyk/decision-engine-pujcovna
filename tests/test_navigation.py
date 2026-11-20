@@ -52,7 +52,7 @@ def inv_values(at):
 
 
 def investment_panel(at):
-    return [n for n in at.main.children.values() if getattr(n, "key", None) == "de_inv_inputs"][0]
+    return [n for n in at.main if getattr(n, "key", None) == "de_inv_inputs"][0]
 
 
 def test_registry_has_all_sections_in_required_order():
@@ -96,7 +96,7 @@ def test_every_section_renders_and_has_expected_content():
             assert not sidebar_inputs, key                                     # v panelu jen navigace a uživatel
             has_inputs = bool([w for w in at.main.number_input if w.key == "inv_fixed_cost"])
             assert has_inputs == (key == "investice"), key                    # vstupy jen v Investicích
-            has_panel = any(getattr(n, "key", None) == "de_inv_inputs" for n in at.main.children.values())
+            has_panel = any(getattr(n, "key", None) == "de_inv_inputs" for n in at.main)
             assert has_panel == (key == "investice"), key
             if key == "investice":
                 assert len(at.tabs) == 0
@@ -216,14 +216,12 @@ def test_investment_panel_holds_each_input_exactly_once():
         sorted(INV_KEYS)                                                  # všech 7 vstupů je v panelu
     groups = [m.value for m in panel.markdown if m.value.startswith("### ")]
     assert groups == ["### 1 · Porovnávané stroje", "### 2 · Trh", "### 3 · Investiční rozpočet", "### 4 · Náklady"]
-    [advanced] = [e for e in panel.expander if e.label == "Pokročilé nastavení"]
-    assert not advanced.proto.expanded
-    assert sorted(w.key for kind in (advanced.number_input, advanced.slider) for w in kind) == [
-        "inv_expected_days", "inv_fixed_cost", "inv_n"]
-    advanced_keys = {w.key for kind in (advanced.number_input, advanced.slider) for w in kind}
-    assert advanced_keys.isdisjoint({"inv_machine_1", "inv_machine_2", "inv_scenario", "inv_budget"})
-    assert sorted(w.key for w in at.sidebar.button if w.key != "logout") == sorted(
-        "nav_inv_" + slug for slug in navigace.INVESTICE_VIEWS)
+    [editor] = [e for e in at.main.expander if e.label == "Upravit investiční scénář"]
+    assert not editor.proto.expanded
+    assert sorted(w.key for kind in (editor.selectbox, editor.number_input, editor.slider) for w in kind) == sorted(INV_KEYS)
+    assert not panel.expander
+    assert [b.key for b in at.sidebar.button] == ["logout"]
+
 
 
 def test_investment_summary_follows_inputs():
@@ -232,12 +230,12 @@ def test_investment_summary_follows_inputs():
     summary = [m.value for m in at.main.markdown if 'class="de-inv-summary"' in m.value]
     assert len(summary) == 1
     plain = summary[0].replace("\u00a0", " ")
-    assert "Mini bagr" in plain and "Pásový dumper" in plain and "trh realistický" in plain
-    assert "100 000 Kč měsíčně" in plain and "rozpočet 3 000 000 Kč" in plain
+    assert "Mini bagr" in plain and "Pásový dumper" in plain and "Realistický" in plain
+    assert "100 000 Kč měsíčně" in plain and "Investiční rozpočet" in plain and "3 000 000 Kč" in plain
     at.selectbox(key="inv_scenario").set_value("Pesimistický")
     at.number_input(key="inv_budget").set_value(2000000).run()
     plain = [m.value for m in at.main.markdown if 'class="de-inv-summary"' in m.value][0].replace("\u00a0", " ")
-    assert "trh pesimistický" in plain and "rozpočet 2 000 000 Kč" in plain
+    assert "Pesimistický" in plain and "2 000 000 Kč" in plain
 
 
 def test_equal_machines_warning_points_to_panel():
@@ -265,14 +263,15 @@ def test_investment_sidebar_replaces_tabs_and_keeps_panel_before_content():
     open_page(at, "investice")
     layout = _investice_layout(at)
     kinds = [(t, k) for t, k, _ in layout]
-    panel_i = kinds.index(("flex_container", "de_inv_inputs"))
+    panel_i = next(i for i, (kind, _, label) in enumerate(layout) if kind == "expander" and label == "Upravit investiční scénář")
+    tiles_i = kinds.index(("flex_container", "de_inv_view_tiles"))
     content_i = kinds.index(("flex_container", "de_inv_obsah"))
-    assert panel_i < content_i
+    assert panel_i < tiles_i < content_i
     assert not at.tabs
-    assert [b.label for b in at.sidebar.button if str(b.key).startswith("nav_inv_")] == [
+    assert [b.label for b in at.main.button if str(b.key).startswith("inv_view_")] == [
         label.split(" ", 1)[1] for label in navigace.INVESTICE_TABS]
-    assert [e.label for e in at.sidebar.expander] == ["Investice"]
-    assert at.sidebar.expander[0].proto.expanded
+    assert [e.label for e in at.sidebar.expander] == ["Přehled", "Provoz"]
+    assert not at.sidebar.button(key="logout").disabled
 
 
 def _content_keys(at):
@@ -303,18 +302,22 @@ def test_switching_investment_tab_keeps_inputs_and_shows_one_content():
 
 def test_investment_sidebar_callbacks_preserve_scenario_and_unknown_url_is_safe():
     at = app()
-    at.sidebar.button(key="nav_inv_riziko").click().run()
+    open_page(at, "investice")
+    at.button(key="inv_view_riziko").click().run()
     ok(at)
     assert at.query_params["pohled"] == "riziko"
     assert "de_inv_obsah_3_on" in _content_keys(at)
     at.number_input(key="inv_fixed_cost").set_value(130000).run()
     for i, slug in enumerate(navigace.INVESTICE_VIEWS, 1):
-        at.sidebar.button(key="nav_inv_" + slug).click().run()
+        at.button(key="inv_view_" + slug).click().run()
         ok(at)
         assert "de_inv_obsah_" + str(i) + "_on" in _content_keys(at)
         assert at.number_input(key="inv_fixed_cost").value == 130000
-        active = [b for b in at.sidebar.button if b.help == "Aktuální pohled"]
-        assert len(active) == 1 and active[0].key == "nav_inv_" + slug
+        active = [m.value for m in at.main.markdown if 'id="de-inv-active-tile-style"' in m.value]
+        assert len(active) == 1 and f".st-key-inv_view_{slug} button" in active[0]
+        status = [m.value for m in at.main.markdown if 'class="inv-current-view"' in m.value]
+        assert len(status) == 1 and navigace.INVESTICE_VIEWS[slug].split(" ", 1)[1] in status[0]
+
     at.query_params["pohled"] = "<script>unknown</script>"
     at.run()
     ok(at)

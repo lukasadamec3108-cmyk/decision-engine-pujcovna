@@ -99,4 +99,4 @@ def test_sensitivity_styles_photo_and_shared_panel_are_isolated(tmp_path):
         header=next(m.value for m in at.main.markdown if 'class="de-header' in m.value)
         assert ('zahlavi_dashboard.webp' in header)==True
         assert any(m.value.strip()==ui.INVESTMENT_SENSITIVITY_CSS.strip() for m in at.main.markdown)==(i==3)
-        assert len([n for n in at.main.children.values() if getattr(n,'key',None)=='de_inv_inputs'])==1
+        assert len([n for n in at.main if getattr(n,'key',None)=='de_inv_inputs'])==1

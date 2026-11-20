@@ -50,7 +50,7 @@ def test_capacity_page_and_investment_sidebar_views_are_present():
     assert any("Kapacita strojů po dnech" in m.value for m in tab(at).markdown)   # původní nadpis obsahu
     inv = open_page(logged_in_app(), "investice")
     assert not inv.tabs
-    assert [b.label for b in inv.sidebar.button if str(b.key).startswith("nav_inv_")] == [
+    assert [b.label for b in inv.main.button if str(b.key).startswith("inv_view_")] == [
         "Doporučení", "Možné výsledky", "Riziko", "Co ovlivňuje zisk", "Nákup strojů"]
     html_text = grid_html(at)
     for name in ("Mini bagr", "Pásový dumper", "Silniční válec", "Nákladní auto"):
