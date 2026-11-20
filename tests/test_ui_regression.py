@@ -104,24 +104,42 @@ def test_tab_labels_unchanged():
     assert current_state()["tab_labels"] == labels[:5] == navigace.INVESTICE_TABS      # záložky Investic
     assert len(labels) == len(navigace.ORIGINAL_TABS)                                  # 6–8 → vlastní stránky
     for key in navigace.KEYS:
-        want = navigace.INVESTICE_TABS if key == "investice" else []
+        want = []  # Pět pohledů nově přepíná sidebar; obsah a číselné reference zůstávají stejné.
         assert current_state()["pages"][key]["tab_labels"] == want, key
+
+
+def with_results_median_label(original):
+    """P50 nově výslovně označuje původní medián: dvě karty, markdown value i body."""
+    from collections import Counter
+    expected = Counter(original)
+    expected.update({"50": 4})
+    return dict(expected)
 
 
 def test_visible_numbers_unchanged_in_every_tab():
     now, base = current_state(), expected_original()
     for name in AREAS:
         want = _area(base, name)["numbers"]
+        if name == "2":
+            want = with_results_median_label(want)
         if name == "6":
             want = with_jobs_summary_numbers(want)
         missing, extra = _numbers_diff(_area(now, name)["numbers"], want)
         assert not missing and not extra, f"oblast {name}: chybí {missing}, navíc {extra}"
 
 
+def investment_widget_inventory(widgets):
+    """Nové seskupení panelu mění pouze pořadí; každá vlastnost všech widgetů zůstává kontrolovaná."""
+    return sorted(widgets, key=lambda w: (w["type"], w["key"] or "", w["label"]))
+
+
 def test_widgets_unchanged_in_every_tab():
     now, base = current_state(), expected_original()
     for name in AREAS:
-        assert _area(now, name)["widgets"] == _area(base, name)["widgets"], f"oblast {name}: liší se widgety"
+        got, want = _area(now, name)["widgets"], _area(base, name)["widgets"]
+        if name == "sidebar":
+            got, want = investment_widget_inventory(got), investment_widget_inventory(want)
+        assert got == want, f"oblast {name}: liší se widgety"
 
 
 def test_moved_admin_widgets_unchanged_on_settings_page():
@@ -161,9 +179,15 @@ def test_pages_match_pages_baseline():
             expected_numbers = with_jobs_summary_numbers(want["numbers"]) if key == "zakazky" and part == "main" else want["numbers"]
             if key == "strojovy_park" and part == "main":
                 expected_numbers = with_fleet_presentation_numbers(expected_numbers)
+            if key == "investice" and part == "main":
+                expected_numbers = with_results_median_label(expected_numbers)
             missing, extra = _numbers_diff(got["numbers"], expected_numbers)
             assert not missing and not extra, f"stránka {key}/{part}: chybí {missing}, navíc {extra}"
-            assert got["widgets"] == want["widgets"], f"stránka {key}/{part}: liší se widgety"
+            actual_widgets, expected_widgets = got["widgets"], want["widgets"]
+            if key == "investice" and part == "main":
+                actual_widgets = investment_widget_inventory(actual_widgets)
+                expected_widgets = investment_widget_inventory(expected_widgets)
+            assert actual_widgets == expected_widgets, f"stránka {key}/{part}: liší se widgety"
             assert got["elements"] == want["elements"], f"stránka {key}/{part}: liší se prvky"
 
 

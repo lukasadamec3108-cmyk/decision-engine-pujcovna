@@ -185,16 +185,22 @@ if st.session_state.get("authenticated") and not auth.still_allowed(
     _log_out()
 
 def _login_page() -> None:
-    """Jediná stránka nepřihlášeného uživatele – přihlašovací formulář vykresluje kód níže."""
+    """Přihlašovací formulář vykresluje kód níže."""
+
+
+def _login_investment_page() -> None:
+    """Přímý investiční odkaz zachová adresu i pohled; chráněný obsah se zde nevykresluje."""
 
 
 # Po úspěšném přihlášení se přihlašovací pole skryje (stav je uložen v relaci).
 if not st.session_state.get("authenticated", False):
-    # Bez přihlášení má aplikace jen tuto skrytou stránku: prohlížeč tak nedostane (a po odhlášení
+    # Bez přihlášení má aplikace jen skryté přihlašovací routy: prohlížeč tak nedostane (a po odhlášení
     # nezobrazí) seznam chráněných stránek a levý panel zmizí úplně. Přímá adresa chráněné stránky
     # vede sem – obsah stránek se bez přihlášení nevykreslí (st.stop níže).
-    st.navigation([st.Page(_login_page, title="Přihlášení", icon=":material/lock:", default=True)],
-                  position="hidden")
+    st.navigation([
+        st.Page(_login_page, title="Přihlášení", icon=":material/lock:", default=True),
+        st.Page(_login_investment_page, title="Přihlášení", url_path="investice"),
+    ], position="hidden")
     st.markdown(ui.LOGIN_NO_SIDEBAR_CSS, unsafe_allow_html=True)
     users_mode = AUTH["mode"] == "users"
     _, login_col, _ = st.columns([1, 1.2, 1])
@@ -254,11 +260,21 @@ _PAGE_OBJ = {
     for key, _, title, icon, _, url in navreg.PAGES
 }
 nav = st.navigation({group: [_PAGE_OBJ[k] for k in keys] for group, keys in navreg.groups().items()},
-                    position="sidebar")
+                    position="hidden")
 PAGE = next(k for k, page in _PAGE_OBJ.items() if page is nav)
 PAGE_TITLE = next(p[2] for p in navreg.PAGES if p[0] == PAGE)
+IS_INV_RECOMMENDATION = (PAGE == "investice" and
+                         navreg.investment_tab(st.query_params.get("pohled")) == navreg.INVESTICE_TABS[0])
+IS_INV_RESULTS = (PAGE == "investice" and
+                  navreg.investment_tab(st.query_params.get("pohled")) == navreg.INVESTICE_TABS[1])
+IS_INV_RISK = (PAGE == "investice" and
+               navreg.investment_tab(st.query_params.get("pohled")) == navreg.INVESTICE_TABS[2])
+IS_INV_SENSITIVITY = (PAGE == "investice" and
+                      navreg.investment_tab(st.query_params.get("pohled")) == navreg.INVESTICE_TABS[3])
+IS_INV_PURCHASE = (PAGE == "investice" and
+                   navreg.investment_tab(st.query_params.get("pohled")) == navreg.INVESTICE_TABS[4])
 ui.header(HEADER_SLOT, PAGE_TITLE, navreg.HEADER_SUBTITLES[PAGE], DEMO_BADGE,
-          art_src=ui.header_art_src(original=True) if PAGE in ui.PHOTO_HEADER_PAGES else None)   # V4/V5: Dashboard a Ekonomika
+          art_src=ui.header_art_src(original=True) if PAGE in ui.PHOTO_HEADER_PAGES or IS_INV_RECOMMENDATION or IS_INV_RESULTS or IS_INV_RISK or IS_INV_SENSITIVITY or IS_INV_PURCHASE else None)   # V4/V5: Dashboard a Ekonomika
 SHOW_INV_INPUTS = PAGE == "investice"          # investiční vstupy jen v sekci Investice
 
 
@@ -303,33 +319,59 @@ def _inv_input(container, widget: str, key: str, label: str, default_value, defa
 # Při sbaleném panelu (např. na mobilu) se v horní liště zobrazí jen ikona.
 st.logo(str(ui.ASSETS / "malostroje_wordmark.svg"), size="large",
         icon_image=str(ui.ASSETS / "malostroje_icon.svg"))
+
+def _open_investment_view(slug: str) -> None:
+    if PAGE == "investice":
+        st.query_params["pohled"] = slug
+    else:
+        st.switch_page(_PAGE_OBJ["investice"], query_params={"pohled": slug})
+
+
+# Nativní registr dál řídí stránky a přímé adresy. Jediné viditelné menu je zde.
+with st.sidebar.container(key="de_sidebar_navigation"):
+    for group, keys in navreg.groups().items():
+        if group == "Investice":
+            with st.expander("Investice", expanded=PAGE == "investice", icon=":material/savings:"):
+                for slug, label in navreg.INVESTICE_VIEWS.items():
+                    active = PAGE == "investice" and label == navreg.investment_tab(st.query_params.get("pohled"))
+                    st.button(label.split(" ", 1)[1], key=f"nav_inv_{slug}", width="stretch",
+                              type="primary" if active else "tertiary",
+                              icon=":material/check:" if active else None,
+                              help="Aktuální pohled" if active else None,
+                              on_click=_open_investment_view, args=(slug,))
+        else:
+            st.markdown(f'<div class="de-nav-group">{group}</div>', unsafe_allow_html=True)
+            for key in keys:
+                with st.container(key=f"de_nav_{key}_{'active' if PAGE == key else 'idle'}"):
+                    st.page_link(_PAGE_OBJ[key], label=_PAGE_OBJ[key].title, icon=_PAGE_OBJ[key].icon, width="stretch")
+
 st.sidebar.markdown(
     '<div class="de-demo"><b>Ukázková data</b> · všechny hodnoty jsou fiktivní</div>',
     unsafe_allow_html=True,
 )
 INV_PANEL_TITLE = "Nastavení investičního scénáře"
-INV_TAB = navreg.INVESTICE_TABS[0]       # aktivní záložka sekce Investice
+INV_TAB = navreg.investment_tab(st.query_params.get("pohled"))
 if SHOW_INV_INPUTS:
-    # Pořadí na stránce: lišta záložek → panel nastavení → obsah aktivní záložky.
-    # Lišta (st.tabs) slouží jen k přepínání; obsah všech záložek se počítá a vykresluje jako dřív
-    # do kontejnerů pod panelem a viditelný je jen ten aktivní (ostatní skryje CSS – jako u st.tabs).
-    # Při dvou stejných strojích se výsledky ani záložky nezobrazují (viz kontrola níže).
-    _m1, _m2 = (st.session_state.get(k, st.session_state.get(INV_KEEP + k)) for k in ("inv_machine_1", "inv_machine_2"))
-    if _m1 is None or _m1 != _m2:
-        _inv_tab_bar = st.tabs(navreg.INVESTICE_TABS, key="inv_tab", on_change="rerun")
-        INV_TAB = next((label for label, t in zip(navreg.INVESTICE_TABS, _inv_tab_bar) if t.open), INV_TAB)
-    with st.expander(INV_PANEL_TITLE, icon=":material/tune:"):
-        with st.container(key="de_inv_inputs"):
-            _row_1 = st.columns(2, gap="medium")
-            sb_machines, sb_costs = _row_1[0].container(), _row_1[1].container()
-            _row_2 = st.columns(2, gap="medium")
-            sb_market, sb_budget = _row_2[0].container(), _row_2[1].container()
-            sb_advanced = st.container()
-            sb_jobs = st.container()
+    # Obsah všech pohledů i pořadí výpočtů zůstávají stejné; přepíná pouze sidebar/URL.
+    st.markdown(ui.INVESTMENT_SCENARIO_CSS, unsafe_allow_html=True)
+    with st.container(key="de_inv_inputs", border=True):
+        ui.section_title(INV_PANEL_TITLE)
+        sb_machines = st.container()
+        with sb_machines:
+            sb_machines_header = st.empty()
+            sb_machine_1, sb_machine_2 = st.columns(2, gap="medium")
+        sb_market, sb_budget = st.columns(2, gap="medium")
+        with st.expander("Pokročilé nastavení", key="de_inv_advanced", expanded=False, icon=":material/tune:"):
+            sb_costs, sb_advanced = st.columns(2, gap="medium")
+        ui.hint("Porovnání dvojice používá společný fixní náklad a simulovaný scénář trhu. "
+                "Nákup strojů vybírá ze všech typů podle rozpočtu, individuálních nákladů a průměrné "
+                "poptávky z dat bez simulace. Volba dvojice, scénář trhu ani pokročilé parametry "
+                "tento nákupní model nemění.")
+        sb_jobs = st.container()
     inv_summary_slot = st.empty()        # shrnutí zvolených hodnot – vidět i při sbaleném panelu
     inv_tab_area = st.container(key="de_inv_obsah")      # obsah záložek (pod panelem)
 else:
-    sb_machines = sb_costs = sb_market = sb_budget = sb_jobs = sb_advanced = inv_summary_slot = None
+    sb_machines = sb_machines_header = sb_machine_1 = sb_machine_2 = sb_costs = sb_market = sb_budget = sb_jobs = sb_advanced = inv_summary_slot = None
 sb_user = st.sidebar.container()
 
 # --- Přihlášený uživatel, odhlášení a nástroj správce (jen role admin) ---
@@ -463,24 +505,15 @@ scheduled_jobs = build_job_schedule(recommended_jobs)
 machine_options = df["machine_type"].tolist()
 
 if SHOW_INV_INPUTS:
-    sb_machines.markdown("### 1 · Porovnávané stroje")
+    sb_machines_header.markdown("### 1 · Porovnávané stroje")
 machine_1 = _inv_input(
-    sb_machines, "selectbox", "inv_machine_1", "Stroj 1", machine_options[0], dict(index=0),
+    sb_machine_1, "selectbox", "inv_machine_1", "Stroj 1", machine_options[0], dict(index=0),
     options=machine_options, help="První stroj, o jehož nákupu uvažujete.",
 )
 machine_2 = _inv_input(
-    sb_machines, "selectbox", "inv_machine_2", "Stroj 2", machine_options[1], dict(index=1),
+    sb_machine_2, "selectbox", "inv_machine_2", "Stroj 2", machine_options[1], dict(index=1),
     options=machine_options, help="Druhý stroj pro srovnání. Musí se lišit od stroje 1.",
 )
-
-if machine_1 == machine_2 and PAGE in ("investice", "dashboard"):
-    # Ostatní sekce investiční výsledky nezobrazují – nemají se kvůli tomu zablokovat.
-    st.warning(
-        f"Pro porovnání vyberte v panelu „{INV_PANEL_TITLE}“ dva **různé** stroje."
-    )
-    if PAGE != "investice":
-        page_link("investice", "Otevřít sekci Investice a změnit stroje")
-    st.stop()
 
 row_1 = df[df["machine_type"] == machine_1].iloc[0]
 row_2 = df[df["machine_type"] == machine_2].iloc[0]
@@ -489,7 +522,7 @@ avg_daily_mini = float(row_1["daily_price"])
 avg_daily_dumper = float(row_2["daily_price"])
 
 if SHOW_INV_INPUTS:
-    sb_costs.markdown("### 2 · Náklady")
+    sb_costs.markdown("### 4 · Náklady")
 fixed_cost = _inv_input(
     sb_costs, "number_input", "inv_fixed_cost",
     "Měsíční fixní náklady na jeden stroj", 100000, dict(value=100000),
@@ -503,7 +536,7 @@ if SHOW_INV_INPUTS:
     ui.sidebar_amount(sb_costs, fmt_czk(fixed_cost), "měsíčně na jeden stroj")
 
 if SHOW_INV_INPUTS:
-    sb_market.markdown("### 3 · Trh")
+    sb_market.markdown("### 2 · Trh")
 scenario = _inv_input(
     sb_market, "selectbox", "inv_scenario",
     "Scénář trhu", "Realistický", dict(index=1),
@@ -525,8 +558,6 @@ if SHOW_INV_INPUTS:
         f"{scenario_note} Simulace počítá s {min_days}–{max_days} dny pronájmu měsíčně."
     )
 
-if SHOW_INV_INPUTS:
-    sb_advanced.markdown("### Pokročilé nastavení")
 expected_days = _inv_input(
     sb_advanced, "slider", "inv_expected_days",
     "Odhad poptávky pro rychlý výpočet (dny/měsíc)", 18, dict(value=18), min_value=0, max_value=31,
@@ -542,7 +573,7 @@ n = _inv_input(
 )
 
 if SHOW_INV_INPUTS:
-    sb_budget.markdown("### 4 · Investiční rozpočet")
+    sb_budget.markdown("### 3 · Investiční rozpočet")
 budget = _inv_input(
     sb_budget, "number_input", "inv_budget",
     "Investiční rozpočet", 3000000, dict(value=3000000),
@@ -559,6 +590,17 @@ if SHOW_INV_INPUTS:
         unsafe_allow_html=True,
     )
 
+
+# Všech sedm vstupů musí zůstat připojených i při neplatném výběru strojů.
+# Validace zastaví až výsledky, aby se widgety neobnovily na svých minimech.
+if machine_1 == machine_2 and PAGE in ("investice", "dashboard"):
+    # Ostatní sekce investiční výsledky nezobrazují – nemají se kvůli tomu zablokovat.
+    st.warning(
+        f"Pro porovnání vyberte v panelu „{INV_PANEL_TITLE}“ dva **různé** stroje."
+    )
+    if PAGE != "investice":
+        page_link("investice", "Otevřít sekci Investice a změnit stroje")
+    st.stop()
 
 # ==================================================
 # INVESTIČNÍ VÝPOČTY (záložky 1–4) – modul investice.py
@@ -816,6 +858,8 @@ if PAGE == "investice":
     # ==================================================
 
     with tab1:
+        if IS_INV_RECOMMENDATION:
+            st.markdown(ui.INVESTMENT_RECOMMENDATION_CSS, unsafe_allow_html=True)
         # Hodnoty doporučeného a druhého stroje (jen výběr z již vypočtených proměnných).
         rec_is_m2 = better_machine == machine_2
         other_machine = machine_1 if rec_is_m2 else machine_2
@@ -914,8 +958,9 @@ if PAGE == "investice":
                  [fmt_czk(row_1["purchase_price"]), fmt_czk(row_2["purchase_price"])],
                  None),
             ],
-            rec_index=1 if rec_is_m2 else 0,
+            rec_index=None if rec_profit == other_profit else (1 if rec_is_m2 else 0),
             tag="Relativně lepší" if both_loss else "Doporučeno",
+            scrollable=True,
         )
         st.markdown(
             '<div class="de-cmp-note">Zeleně ✓ = výhodnější hodnota.</div>',
@@ -990,8 +1035,9 @@ if PAGE == "investice":
                      ],
                      None),
                 ],
-                rec_index=1 if rec_is_m2 else 0,
+                rec_index=None if rec_profit == other_profit else (1 if rec_is_m2 else 0),
                 tag="Relativně lepší" if both_loss else "Doporučeno",
+                scrollable=True,
             )
             ui.hint(
                 "Minimální cena pokryje fixní a průměrné servisní náklady při zadaném odhadu poptávky. "
@@ -1015,7 +1061,7 @@ if PAGE == "investice":
 
         # --- F. Export reportu ---
         st.write("")
-        with st.container(border=True):
+        with st.container(border=True, key="de_inv_rec_report"):
             col_r1, col_r2 = st.columns([2, 1], vertical_alignment="center")
             col_r1.markdown(
                 '<div class="de-section" style="margin:0">Investiční report</div>'
@@ -1038,6 +1084,8 @@ if PAGE == "investice":
     # ==================================================
 
     with tab2:
+        if IS_INV_RESULTS:
+            st.markdown(ui.INVESTMENT_RESULTS_CSS, unsafe_allow_html=True)
         ui.section_title("Jak mohou vypadat jednotlivé měsíce")
         st.markdown(
             f'<div class="de-intro">Simulace {fmt_num(n)} možných měsíců ukazuje, jak se může měnit '
@@ -1045,6 +1093,12 @@ if PAGE == "investice":
             "ceně a servisních nákladech. Náklady jsou ukázkové.</div>",
             unsafe_allow_html=True,
         )
+        ui.note("Slabší, typický a silnější měsíc jsou percentily výsledků simulace v právě zvoleném "
+                "scénáři trhu. Nejde o pravděpodobnosti tří tržních scénářů ani procenta využití či obsazenosti.")
+        if both_loss:
+            ui.insight("Oba stroje mají v tomto scénáři záporný průměrný měsíční výsledek. "
+                       "Relativně lepší stroj neznamená doporučení k nákupu; ani silnější měsíc není zárukou zisku.",
+                       tone="bad")
 
         ui.results_cards(
             [
@@ -1052,9 +1106,9 @@ if PAGE == "investice":
                     name=name,
                     color=MACHINE_COLOR[name],
                     rows=[
-                        ("Slabý měsíc (P10)", "1 z 10 měsíců dopadne hůř", fmt_czk(p10), "", p10 < 0),
-                        ("Typický měsíc (medián)", "polovina měsíců dopadne lépe", fmt_czk(p50), "", p50 < 0),
-                        ("Dobrý měsíc (P90)", "1 z 10 měsíců dopadne lépe", fmt_czk(p90), "", p90 < 0),
+                        ("Slabší měsíc (P10)", "1 z 10 měsíců dopadne hůř", fmt_czk(p10), "", p10 < 0),
+                        ("Typický měsíc (P50 · medián)", "polovina měsíců dopadne lépe", fmt_czk(p50), "", p50 < 0),
+                        ("Silnější měsíc (P90)", "1 z 10 měsíců dopadne lépe", fmt_czk(p90), "", p90 < 0),
                         ("Průměr všech měsíců", "= očekávaný měsíční zisk", fmt_czk(mean), "", mean < 0),
                         ("Šance ztrátového měsíce", "", fmt_pct(prob * 100), loss_share_text(prob), False),
                     ],
@@ -1087,7 +1141,13 @@ if PAGE == "investice":
         fig_mc.update_layout(barmode="overlay")
         fig_mc.update_xaxes(title_text="Měsíční zisk / ztráta (Kč)")
         fig_mc.update_yaxes(title_text="Počet simulovaných měsíců")
-        chart(ui.readable_axes(ui.style_fig(fig_mc, height=380)))
+        fig_mc = ui.readable_axes(ui.style_fig(fig_mc, height=460))
+        fig_mc.update_layout(legend=dict(orientation="h", x=0, y=-.3, xanchor="left", yanchor="top"),
+                             margin=dict(l=10, r=10, t=30, b=145))
+        fig_mc.update_xaxes(nticks=8, ticklabelstep=2, tickformat="~s", tickangle=0, automargin=True, title_standoff=12)
+        fig_mc.update_yaxes(nticks=5, tickformat=",.0f", automargin=True, title_standoff=8)
+        with st.container(key="de_inv_results_histogram", border=True):
+            chart(fig_mc)
         ui.hint(
             "Čím více výsledků je napravo od 0 Kč, tím častěji stroj dosahuje zisku. "
             "Vlevo od 0 Kč jsou ztrátové měsíce. Tečkované čáry označují typický měsíc."
@@ -1115,7 +1175,12 @@ if PAGE == "investice":
             fig_cdf.add_vline(x=0, line=dict(color=ui.MUTED, dash="dash", width=1.5))
             fig_cdf.update_xaxes(title_text="Měsíční zisk / ztráta (Kč)")
             fig_cdf.update_yaxes(title_text="Pravděpodobnost", tickformat=".0%")
-            chart(ui.readable_axes(ui.style_fig(fig_cdf, height=320)))
+            fig_cdf = ui.readable_axes(ui.style_fig(fig_cdf, height=380))
+            fig_cdf.update_layout(legend=dict(orientation="h", x=0, y=-.3, xanchor="left", yanchor="top"),
+                                  margin=dict(l=10, r=10, t=24, b=125))
+            fig_cdf.update_xaxes(nticks=8, ticklabelstep=2, tickformat="~s", tickangle=0, automargin=True, title_standoff=12)
+            fig_cdf.update_yaxes(automargin=True)
+            chart(fig_cdf)
             ui.hint(
                 "Graf ukazuje pravděpodobnost, že měsíční výsledek bude nižší nebo roven vybrané "
                 "částce. Na hranici 0 Kč vidíte pravděpodobnost ztráty."
@@ -1136,6 +1201,8 @@ if PAGE == "investice":
     # ==================================================
 
     with tab3:
+        if IS_INV_RISK:
+            st.markdown(ui.INVESTMENT_RISK_CSS, unsafe_allow_html=True)
         ui.section_title("Jak velké je riziko")
 
         def risk_chip(prob: float) -> str:
@@ -1175,11 +1242,13 @@ if PAGE == "investice":
                 f"Z pohledu rizika vychází lépe <b>{winner}</b>: má nižší šanci ztrátového měsíce "
                 "a zároveň vyšší očekávaný výsledek."
             )
+        elif prob_loss_mini == prob_loss_dumper and expected_profit_mini == expected_profit_dumper:
+            ui.insight("Oba stroje mají shodnou šanci ztrátového měsíce i očekávaný výsledek. "
+                       "Tyto dva ukazatele je vzájemně nerozlišují.")
         else:
             ui.insight(
-                "Ani jeden stroj není lepší v obou ohledech zároveň – jeden má vyšší očekávaný "
-                "výsledek, druhý nižší riziko. Rozhodnutí záleží na tom, kolik rizika jste "
-                "ochotni nést."
+                "Žádný stroj zde nemá současně nižší šanci ztrátového měsíce a vyšší očekávaný "
+                "výsledek. Posuzujte oba ukazatele společně podle rizika, které jste ochotni nést."
             )
         if prob_loss_mini >= 0.15 and prob_loss_dumper >= 0.15:
             ui.insight(
@@ -1187,17 +1256,24 @@ if PAGE == "investice":
                 tone="bad",
             )
 
+        if both_loss:
+            ui.insight(
+                "Oba stroje mají záporný očekávaný měsíční výsledek. Označení relativně lepší "
+                "neznamená ziskovost ani doporučení k nákupu.", tone="bad",
+            )
+        ui.note("Velmi nepříznivý měsíc je hranice pěti procent nejhorších výsledků simulace. "
+                "Skutečný výsledek může být i horší; kategorie rizika vychází ze šance ztrátového měsíce.")
+
         ui.section_title("Riziko a očekávaný zisk")
         fig_rr = go.Figure()
-        # Bod s vyšším rizikem (vpravo) má název vlevo, aby se na úzkém displeji vešel do grafu.
-        right_name = machine_1 if rr_x1 > rr_x2 else machine_2
-        for name, x, y in ((machine_1, rr_x1, rr_y1), (machine_2, rr_x2, rr_y2)):
+        # Názvy v legendě se neřežou na okrajích grafu; různé symboly odliší i shodné body.
+        for name, x, y, symbol in ((machine_1, rr_x1, rr_y1, "circle"),
+                                   (machine_2, rr_x2, rr_y2, "square-open")):
             fig_rr.add_trace(
                 go.Scatter(
-                    x=[x], y=[y], mode="markers+text", name=name, text=[f"<b>{name}</b>"],
-                    textposition="middle left" if name == right_name else "middle right",
-                    textfont=dict(size=14, color=ui.INK),
-                    marker=dict(size=24, color=MACHINE_COLOR[name], line=dict(color="#fff", width=3)),
+                    x=[x], y=[y], mode="markers", name=name,
+                    marker=dict(size=22, symbol=symbol, color=MACHINE_COLOR[name],
+                                line=dict(width=3)),
                     hovertemplate="Šance ztráty %{x:.1f} %<br>Očekávaný zisk %{y:,.0f} Kč<extra>"
                     + name + "</extra>",
                 )
@@ -1205,7 +1281,7 @@ if PAGE == "investice":
         fig_rr.add_hline(y=0, line=dict(color=ui.MUTED, dash="dash", width=1.5))
         rr_pad = max(abs(rr_y1), abs(rr_y2)) * 0.25 + 1000
         fig_rr.update_xaxes(
-            title_text="Šance ztrátového měsíce (%)", range=[-2, max(rr_x1, rr_x2) * 1.35 + 5],
+            title_text="Šance ztrátového měsíce (%)", range=[-max(2, max(rr_x1, rr_x2) * .1), min(110, max(rr_x1, rr_x2) * 1.12 + 5)],
             ticksuffix=" %",
         )
         fig_rr.update_yaxes(
@@ -1213,7 +1289,13 @@ if PAGE == "investice":
             range=[min(0, rr_y1, rr_y2) - rr_pad, max(0, rr_y1, rr_y2) + rr_pad],
             tickformat=",.0f",
         )
-        chart(ui.readable_axes(ui.style_fig(fig_rr, height=380, legend=False)))
+        fig_rr = ui.readable_axes(ui.style_fig(fig_rr, height=460))
+        fig_rr.update_layout(legend=dict(orientation="h", x=0, y=-.3, xanchor="left", yanchor="top"),
+                             margin=dict(l=10, r=10, t=25, b=145))
+        fig_rr.update_xaxes(nticks=5, automargin=True, title_standoff=12)
+        fig_rr.update_yaxes(nticks=5, tickformat="~s", automargin=True, title_standoff=8)
+        with st.container(key="de_inv_risk_return", border=True):
+            chart(fig_rr)
         ui.hint(
             "Čím více vlevo, tím menší riziko ztráty. Čím výše, tím vyšší očekávaný zisk. "
             "Nejvýhodnější kombinace se proto nachází vlevo nahoře."
@@ -1244,6 +1326,8 @@ if PAGE == "investice":
     # ==================================================
 
     with tab4:
+        if IS_INV_SENSITIVITY:
+            st.markdown(ui.INVESTMENT_SENSITIVITY_CSS, unsafe_allow_html=True)
         # Tato záložka jen zobrazuje již vypočtené hodnoty (citlivost, minimální cena,
         # bod zvratu, mapa ziskovosti) – žádný výpočet se zde nemění.
         days_text = fmt_days(expected_days, 0)
@@ -1282,41 +1366,6 @@ if PAGE == "investice":
             if top_effect > 0 and np.isclose(max(effect[d].values()), top_effect)
         ]
 
-        fig_tornado = go.Figure()
-        for name in (machine_1, machine_2):
-            xs = [effect[d][name] for d in driver_order]
-            fig_tornado.add_trace(
-                go.Bar(
-                    x=xs, y=driver_order, orientation="h", name=name,
-                    marker=dict(color=MACHINE_COLOR[name], line=dict(color="#fff", width=2)),
-                    text=[fmt_czk(v) for v in xs], textposition="outside", cliponaxis=False,
-                    textfont=dict(color=ui.INK, size=13),
-                    customdata=[fmt_czk(v / 2) for v in xs],
-                    hovertemplate="<b>%{y}</b> · " + name
-                    + "<br>Změna o 10 % posune zisk o ±%{customdata}"
-                    + "<br>Rozdíl mezi −10 % a +10 %: %{x:,.0f} Kč<extra></extra>",
-                )
-            )
-        fig_tornado.update_layout(barmode="group", bargap=0.28, bargroupgap=0.06)
-        fig_tornado.update_yaxes(
-            autorange="reversed", tickvals=driver_order,
-            ticktext=[f"<b>{d}</b>" if d in top_drivers else d for d in driver_order],
-        )
-        fig_tornado.update_xaxes(
-            range=[0, (top_effect or 1) * 1.55], tickformat=",.0f", nticks=5,
-            title_text="Rozdíl měsíčního zisku (Kč)",
-        )
-        ui.readable_axes(ui.style_fig(fig_tornado, height=450))
-        fig_tornado.update_yaxes(tickfont=dict(size=14, color=ui.INK))
-        # Vyšší horní okraj: ikony grafu (zoom, stažení…) mají vlastní řádek nad legendou
-        # a nepřekrývají ji ani na mobilu, kde se legenda zalomí do dvou řádků.
-        fig_tornado.update_layout(margin=dict(t=96))
-        chart(fig_tornado)
-        ui.hint(
-            f"Počítáno pro odhad poptávky {days_text} pronájmu měsíčně (Pokročilé nastavení). "
-            "Scénář trhu tuto část neovlivňuje. Tučně je zvýrazněn údaj s největším vlivem."
-        )
-
         if top_drivers:
             top_machines = [
                 name for name in (machine_1, machine_2)
@@ -1343,6 +1392,45 @@ if PAGE == "investice":
             ui.insight(text)
         else:
             ui.insight("Při zadaných hodnotách změna žádného údaje o 10 % zisk nemění.")
+
+        fig_tornado = go.Figure()
+        for name in (machine_1, machine_2):
+            xs = [effect[d][name] for d in driver_order]
+            fig_tornado.add_trace(
+                go.Bar(
+                    x=xs, y=driver_order, orientation="h", name=name,
+                    marker=dict(color=MACHINE_COLOR[name], line=dict(color="#fff", width=2)),
+                    text=[fmt_czk(v) for v in xs], textposition="outside", cliponaxis=False,
+                    textfont=dict(color=ui.INK, size=13),
+                    customdata=[fmt_czk(v / 2) for v in xs],
+                    hovertemplate="<b>%{y}</b> · " + name
+                    + "<br>Změna o 10 % posune zisk o ±%{customdata}"
+                    + "<br>Rozdíl mezi −10 % a +10 %: %{x:,.0f} Kč<extra></extra>",
+                )
+            )
+        fig_tornado.update_layout(barmode="group", bargap=0.28, bargroupgap=0.06)
+        fig_tornado.update_yaxes(
+            autorange="reversed", tickvals=driver_order,
+            ticktext=[f"<b>{d}</b>" if d in top_drivers else d for d in driver_order],
+        )
+        fig_tornado.update_xaxes(
+            range=[0, (top_effect or 1) * 1.55], tickformat=",.0f", nticks=5,
+            title_text="Rozdíl měsíčního zisku (Kč)",
+        )
+        ui.readable_axes(ui.style_fig(fig_tornado, height=450))
+        fig_tornado.update_yaxes(tickfont=dict(size=14, color=ui.INK))
+        # Legenda pod osou se může zalomit; horní okraj nechává místo pro nástroje grafu.
+        fig_tornado.update_layout(
+            legend=dict(orientation="h", x=0, y=-.3, xanchor="left", yanchor="top"),
+            margin=dict(l=10, r=15, t=35, b=140))
+        fig_tornado.update_xaxes(tickformat="~s", nticks=4, automargin=True, title_standoff=12)
+        fig_tornado.update_yaxes(automargin=True, tickfont=dict(size=12))
+        with st.container(key="de_inv_sensitivity_chart", border=True):
+            chart(fig_tornado)
+        ui.hint(
+            f"Počítáno pro odhad poptávky {days_text} pronájmu měsíčně (Pokročilé nastavení). "
+            "Scénář trhu tuto část neovlivňuje. Tučně je zvýrazněn údaj s největším vlivem."
+        )
 
         # --- Minimální denní cena pronájmu ---
         ui.section_title("Minimální denní cena pronájmu")
@@ -1430,8 +1518,13 @@ if PAGE == "investice":
         fig_be.update_xaxes(title_text="Počet dní pronájmu za měsíc", dtick=5)
         fig_be.update_yaxes(title_text="Tržby − fixní náklad (Kč/měsíc)", tickformat=",.0f")
         ui.readable_axes(ui.style_fig(fig_be, height=450))
-        fig_be.update_layout(margin=dict(t=96))  # místo pro ikony grafu nad legendou
-        chart(fig_be)
+        fig_be.update_layout(
+            legend=dict(orientation="h", x=0, y=-.3, xanchor="left", yanchor="top"),
+            margin=dict(l=10, r=10, t=35, b=145))
+        fig_be.update_xaxes(automargin=True, title_standoff=12, tickmode="auto", dtick=None, nticks=5)
+        fig_be.update_yaxes(automargin=True, tickformat="~s", nticks=5, title_standoff=8)
+        with st.container(key="de_inv_break_even", border=True):
+            chart(fig_be)
         ui.hint(
             "Graf neukazuje zisk, ale tržby po odečtení fixního nákladu: denní cena × počet dní − fixní náklad, "
             "<b>bez servisních nákladů a poruch</b>. Body na čárkované nule jsou bod zvratu – od tohoto počtu "
@@ -1532,7 +1625,7 @@ if PAGE == "investice":
                      "čárou stroj vydělává, vlevo a pod ní prodělává."),
                     ("Bílý kroužek",
                      "Vaše současné nastavení: ceník stroje a odhad poptávky z Pokročilého "
-                     "nastavení. Mění se spolu se vstupy v levém panelu."
+                     "nastavení. Mění se spolu se vstupy v panelu investičního scénáře."
                      if point_in_map else
                      f"Vaše nastavení ({days_text}) leží mimo zobrazený rozsah mapy "
                      f"({days_range[0]}–{days_range[-1]} dní), proto není vyznačeno."),
@@ -1564,14 +1657,16 @@ if PAGE == "investice":
     # ==================================================
 
     with tab5:
-        st.markdown(f"### Jaké stroje koupit za {fmt_czk(budget)}")
+        if IS_INV_PURCHASE:
+            st.markdown(ui.INVESTMENT_PURCHASE_CSS, unsafe_allow_html=True)
+        ui.section_title(f"Jaké stroje koupit za {fmt_czk(budget)}")
         st.markdown(
             '<div class="de-intro">Aplikace projde všechny kombinace strojů, které se vejdou do '
             "rozpočtu, a vybere tu s nejvyšším očekávaným měsíčním provozním ziskem. Pokud se "
-            "žádný nákup nevyplatí, doporučí nic nekupovat. <b>Jiný výpočet než záložky 1–4:</b> "
+            "žádný nákup nevyplatí, doporučí nic nekupovat. <b>Samostatný model portfolio.py (jiný výpočet než záložky 1–4):</b> "
             "počítá s fixními náklady jednotlivých strojů z ukázkových dat (ne s fixním nákladem "
             "z nastavení investičního scénáře) a s průměrnou poptávkou bez simulace – částky za stejný stroj "
-            "se proto liší.</div>",
+            "se proto liší. <b>Jde o modelovaný provozní zisk portfolia, nikoli skutečný čistý zisk celé firmy.</b></div>",
             unsafe_allow_html=True,
         )
 
@@ -1597,7 +1692,7 @@ if PAGE == "investice":
                 [
                     dict(label="Celková investice", value=fmt_czk(pb["investment"]),
                          sub=f"zbývá {fmt_czk(budget - pb['investment'])} z rozpočtu"),
-                    dict(label="Očekávaný měsíční provozní zisk", value=fmt_czk(pb["profit"]),
+                    dict(label="Modelovaný měsíční provozní zisk", value=fmt_czk(pb["profit"]),
                          sub=f"tržby {fmt_czk(pb['revenue'])} − fixní náklady a servis {fmt_czk(pb['costs'])}"),
                     dict(label="Prostá návratnost", value=months_text(payback),
                          sub="investice ÷ měsíční provozní zisk, bez úroků a společných nákladů"),
@@ -1682,7 +1777,15 @@ if PAGE == "investice":
                                 range=[0, x_max], nticks=6)
         fig_budget.update_yaxes(title_text="Očekávaný měsíční provozní zisk (Kč)", tickformat=",.0f",
                                 rangemode="tozero")
-        chart(ui.readable_axes(ui.style_fig(fig_budget, height=380, legend=False)))
+        fig_budget = ui.readable_axes(ui.style_fig(fig_budget, height=460))
+        fig_budget.update_layout(
+            legend=dict(orientation="h", x=0, y=-.3, xanchor="left", yanchor="top"),
+            margin=dict(l=10, r=10, t=35, b=145))
+        fig_budget.update_xaxes(tickformat="~s", nticks=4, automargin=True, title_standoff=12)
+        fig_budget.update_yaxes(title_text="Modelovaný měsíční provozní zisk (Kč)",
+                                tickformat="~s", nticks=5, automargin=True, title_standoff=8)
+        with st.container(key="de_inv_purchase_frontier", border=True):
+            chart(fig_budget)
         ui.hint(
             "Každý schod znamená, že vyšší rozpočet umožní lepší sestavu. Oranžový bod je přesně "
             "váš rozpočet. Najetím na křivku zobrazíte, jaká sestava za daným ziskem stojí."
@@ -3676,7 +3779,7 @@ def header_period() -> str:
 
 
 ui.header(HEADER_SLOT, PAGE_TITLE, navreg.HEADER_SUBTITLES[PAGE], DEMO_BADGE, header_period(),
-          ui.header_art_src(original=True) if PAGE in ui.PHOTO_HEADER_PAGES else None)
+          ui.header_art_src(original=True) if PAGE in ui.PHOTO_HEADER_PAGES or IS_INV_RECOMMENDATION or IS_INV_RESULTS or IS_INV_RISK or IS_INV_SENSITIVITY or IS_INV_PURCHASE else None)
 
 # Spuštění aktivní stránky (soubor stránky je jen značka – obsah vykreslil kód výše)
 nav.run()

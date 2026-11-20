@@ -155,7 +155,7 @@ def test_not_reachable_without_login():
         open_page(at, KEY)
         raise AssertionError("stránka je dostupná bez přihlášení")
     except ValueError as exc:
-        assert "Known pages: ['Přihlášení']" in str(exc)
+        assert "Known pages: ['Přihlášení', 'investice']" in str(exc)
     assert not at.exception
     assert [t.label for t in at.text_input] == ["Uživatelské jméno", "Heslo"]
     assert "Ekonomika flotily" not in plain(m.value for m in at.markdown)

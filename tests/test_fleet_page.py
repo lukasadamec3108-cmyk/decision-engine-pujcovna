@@ -113,12 +113,12 @@ def test_methodology_data_info_and_links_kept():
     shown = " ".join(m.value for m in at.main.markdown)
     assert "stejně jako Investice → Nákup strojů" in shown and "Načtená data:" in shown
     assert "potvrzen" in shown and "předběžn" in shown and "servisní odstávky" in shown
-    links = [p.proto.label for p in at.get("page_link")]
+    links = [p.proto.label for p in at.main.get("page_link")]
     assert links == ["Obsazenost strojů po dnech – Plánování kapacity", "Nákup strojů – Investice",
                      "Výsledek za období – Ekonomika flotily"]
     import navigace
     urls = {p[0]: p[5] for p in navigace.PAGES}
-    assert [p.proto.page for p in at.get("page_link")] == [urls["kapacita"], urls["investice"], urls["ekonomika"]]
+    assert [p.proto.page for p in at.main.get("page_link")] == [urls["kapacita"], urls["investice"], urls["ekonomika"]]
     for key in ("kapacita", "investice", "ekonomika"):                                    # cílové stránky se otevřou
         target = app()
         open_page(target, key)

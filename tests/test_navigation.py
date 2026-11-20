@@ -50,6 +50,11 @@ def inv_values(at):
     return out
 
 
+
+def investment_panel(at):
+    return [n for n in at.main.children.values() if getattr(n, "key", None) == "de_inv_inputs"][0]
+
+
 def test_registry_has_all_sections_in_required_order():
     assert [p[2] for p in navigace.PAGES] == [
         "Dashboard", "Ekonomika flotily", "Pronájem strojů", "Vlastní zakázky", "Strojový park",
@@ -91,10 +96,10 @@ def test_every_section_renders_and_has_expected_content():
             assert not sidebar_inputs, key                                     # v panelu jen navigace a uživatel
             has_inputs = bool([w for w in at.main.number_input if w.key == "inv_fixed_cost"])
             assert has_inputs == (key == "investice"), key                    # vstupy jen v Investicích
-            has_panel = any(e.label == "Nastavení investičního scénáře" for e in at.main.expander)
+            has_panel = any(getattr(n, "key", None) == "de_inv_inputs" for n in at.main.children.values())
             assert has_panel == (key == "investice"), key
             if key == "investice":
-                assert [t.label for t in at.tabs] == navigace.INVESTICE_TABS
+                assert len(at.tabs) == 0
             else:
                 assert len(at.tabs) == 0, key
 
@@ -108,7 +113,7 @@ def test_original_functions_are_on_their_pages():
     open_page(at, "zakazky")
     assert any("Konec (den)" in d.value.columns for d in at.dataframe)  # harmonogram / plán
     # Zachovat původní akci a schválený přímý přechod ke konfliktům pronájmů a servisu.
-    assert [p.proto.label for p in at.get("page_link")] == [
+    assert [p.proto.label for p in at.main.get("page_link")] == [
         "Zkontrolovat pronájmy a servis v Plánování kapacity",
         "Ověřit novou zakázku v Rozhodovacím centru",
     ]
@@ -206,13 +211,19 @@ def test_investment_panel_holds_each_input_exactly_once():
         found = sorted(k for k in keys if k in INV_KEYS)        # pořadí v panelu hlídá test_ui_regression
         assert found == (sorted(INV_KEYS) if key == "investice" else []), (key, found)
     open_page(at, "investice")
-    panel = [e for e in at.main.expander if e.label == "Nastavení investičního scénáře"][0]
+    panel = investment_panel(at)
     assert sorted(w.key for kind in (panel.selectbox, panel.number_input, panel.slider) for w in kind) == \
         sorted(INV_KEYS)                                                  # všech 7 vstupů je v panelu
     groups = [m.value for m in panel.markdown if m.value.startswith("### ")]
-    assert groups == ["### 1 · Porovnávané stroje", "### 2 · Náklady", "### 3 · Trh", "### 4 · Investiční rozpočet",
-                      "### Pokročilé nastavení"]
-    assert not [w for w in at.sidebar.button if w.key != "logout"]
+    assert groups == ["### 1 · Porovnávané stroje", "### 2 · Trh", "### 3 · Investiční rozpočet", "### 4 · Náklady"]
+    [advanced] = [e for e in panel.expander if e.label == "Pokročilé nastavení"]
+    assert not advanced.proto.expanded
+    assert sorted(w.key for kind in (advanced.number_input, advanced.slider) for w in kind) == [
+        "inv_expected_days", "inv_fixed_cost", "inv_n"]
+    advanced_keys = {w.key for kind in (advanced.number_input, advanced.slider) for w in kind}
+    assert advanced_keys.isdisjoint({"inv_machine_1", "inv_machine_2", "inv_scenario", "inv_budget"})
+    assert sorted(w.key for w in at.sidebar.button if w.key != "logout") == sorted(
+        "nav_inv_" + slug for slug in navigace.INVESTICE_VIEWS)
 
 
 def test_investment_summary_follows_inputs():
@@ -249,20 +260,19 @@ def _investice_layout(at):
     return out
 
 
-def test_investment_tabs_are_above_settings_panel():
+def test_investment_sidebar_replaces_tabs_and_keeps_panel_before_content():
     at = app()
     open_page(at, "investice")
     layout = _investice_layout(at)
     kinds = [(t, k) for t, k, _ in layout]
-    tabs_i = kinds.index(("tab_container", "inv_tab"))
-    panel_i = [i for i, (t, k, label) in enumerate(layout) if t == "expander"
-               and label == "Nastavení investičního scénáře"][0]
+    panel_i = kinds.index(("flex_container", "de_inv_inputs"))
     content_i = kinds.index(("flex_container", "de_inv_obsah"))
-    assert tabs_i < panel_i < content_i                       # záložky → panel → obsah záložky
-    assert tabs_i == 0                                        # hned pod hlavičkou aplikace
-    assert [t.label for t in at.tabs] == navigace.INVESTICE_TABS
-    for t in at.tabs:                                         # lišta je jen přepínač – obsah je pod panelem
-        assert not list(t.children.values()), t.label
+    assert panel_i < content_i
+    assert not at.tabs
+    assert [b.label for b in at.sidebar.button if str(b.key).startswith("nav_inv_")] == [
+        label.split(" ", 1)[1] for label in navigace.INVESTICE_TABS]
+    assert [e.label for e in at.sidebar.expander] == ["Investice"]
+    assert at.sidebar.expander[0].proto.expanded
 
 
 def _content_keys(at):
@@ -277,15 +287,36 @@ def test_switching_investment_tab_keeps_inputs_and_shows_one_content():
     at.number_input(key="inv_fixed_cost").set_value(130000).run()
     first = text(at)
     for i, label in enumerate(navigace.INVESTICE_TABS, start=1):
-        at.session_state["inv_tab"] = label                   # klik na záložku
+        at.query_params["pohled"] = list(navigace.INVESTICE_VIEWS)[i - 1]
         at.run()
         ok(at)
         keys = _content_keys(at)
         assert [k for k in keys if k.endswith("_on")] == [f"de_inv_obsah_{i}_on"], (label, keys)
         assert len(keys) == 5                                 # obsah všech záložek se dál vykresluje
         assert at.number_input(key="inv_fixed_cost").value == 130000
-        assert [t.label for t in at.tabs] == navigace.INVESTICE_TABS
-    at.session_state["inv_tab"] = navigace.INVESTICE_TABS[0]
+        assert len(at.tabs) == 0
+    at.query_params["pohled"] = "doporuceni"
     at.run()
     assert text(at) == first                                  # stejné výsledky jako před přepínáním
     assert [d.proto.label for d in at.get("download_button")] == ["Stáhnout report (DOCX)"]
+
+
+def test_investment_sidebar_callbacks_preserve_scenario_and_unknown_url_is_safe():
+    at = app()
+    at.sidebar.button(key="nav_inv_riziko").click().run()
+    ok(at)
+    assert at.query_params["pohled"] == "riziko"
+    assert "de_inv_obsah_3_on" in _content_keys(at)
+    at.number_input(key="inv_fixed_cost").set_value(130000).run()
+    for i, slug in enumerate(navigace.INVESTICE_VIEWS, 1):
+        at.sidebar.button(key="nav_inv_" + slug).click().run()
+        ok(at)
+        assert "de_inv_obsah_" + str(i) + "_on" in _content_keys(at)
+        assert at.number_input(key="inv_fixed_cost").value == 130000
+        active = [b for b in at.sidebar.button if b.help == "Aktuální pohled"]
+        assert len(active) == 1 and active[0].key == "nav_inv_" + slug
+    at.query_params["pohled"] = "<script>unknown</script>"
+    at.run()
+    ok(at)
+    assert "de_inv_obsah_1_on" in _content_keys(at)
+    assert "<script>unknown</script>" not in text(at)
