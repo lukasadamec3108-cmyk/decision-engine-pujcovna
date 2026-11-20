@@ -74,3 +74,15 @@ def groups() -> dict:
     for key, _, _, _, group, _ in PAGES:
         out.setdefault(group, []).append(key)
     return out
+
+
+# Jedna stránka /investice, pět bezpečně vyjmenovaných pohledů v URL.
+INVESTICE_VIEWS = dict(zip(
+    ("doporuceni", "vysledky", "riziko", "vliv-na-zisk", "nakup-stroju"),
+    INVESTICE_TABS,
+))
+
+
+def investment_tab(value: str | None) -> str:
+    """Neznámá/prázdná hodnota vždy otevře Doporučení; URL se nevypisuje jako HTML."""
+    return INVESTICE_VIEWS.get(value, INVESTICE_TABS[0])

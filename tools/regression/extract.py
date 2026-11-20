@@ -24,10 +24,16 @@ COUNTED = ("plotly_chart", "dataframe", "download_button")
 
 
 def numbers(text: str) -> list:
+    # Nový posouvací obal tabulky: tabindex je přístupnostní metadata, nikoli zobrazený ukazatel.
+    # Čísla uvnitř tabulky včetně skutečně zobrazené nuly zůstávají pod původní kontrolou.
+    text = re.sub(r'(<div class="de-cmp-scroll"[^>]*?) tabindex="0"', r'\1', text)
     return [n.replace(" ", " ") for n in NUM.findall(text)]
 
 
 def leaves(node):
+    # Navigace se testuje samostatně; stejně jako původní nativní menu není obchodním widgetem.
+    if getattr(node, "key", None) == "de_sidebar_navigation":
+        return
     kids = getattr(node, "children", None)
     if kids:
         for k in (kids.values() if isinstance(kids, dict) else kids):

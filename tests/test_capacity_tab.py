@@ -44,13 +44,14 @@ def chip(at):
     return [m.value for m in tab(at).markdown if "de-status" in m.value]
 
 
-def test_capacity_page_and_original_investment_tabs_unchanged():
+def test_capacity_page_and_investment_sidebar_views_are_present():
     at = logged_in_app()
     assert len(at.tabs) == 0                                       # kalendář je samostatná stránka
     assert any("Kapacita strojů po dnech" in m.value for m in tab(at).markdown)   # původní nadpis obsahu
     inv = open_page(logged_in_app(), "investice")
-    assert [t.label for t in inv.tabs] == ["🏆 Doporučení", "📈 Možné výsledky", "⚠️ Riziko",
-                                           "🎯 Co ovlivňuje zisk", "🛒 Nákup strojů"]
+    assert not inv.tabs
+    assert [b.label for b in inv.sidebar.button if str(b.key).startswith("nav_inv_")] == [
+        "Doporučení", "Možné výsledky", "Riziko", "Co ovlivňuje zisk", "Nákup strojů"]
     html_text = grid_html(at)
     for name in ("Mini bagr", "Pásový dumper", "Silniční válec", "Nákladní auto"):
         assert name in html_text

@@ -85,7 +85,7 @@ def test_dashboard_has_no_inputs_only_links():
              "date_input", "toggle")
     assert not [w for kind in kinds for w in at.main.get(kind)]          # žádné nové ovládací prvky
     assert not at.main.button                                            # ani tlačítka
-    links = [p.proto.label for p in at.get("page_link")]
+    links = [p.proto.label for p in at.main.get("page_link")]
     for name in ("Ekonomika flotily", "Plánování kapacity", "Vlastní zakázky", "Pronájem strojů", "Investice",
                  "Strojový park",
                  "Rozhodovací centrum", "Otevřít Investice", "Otevřít kalendář kapacity", "Nový pronájem"):
@@ -97,7 +97,7 @@ def test_dashboard_links_to_fleet_economics_without_new_amounts():
     """K4a: odkaz v sekci Ekonomika a hospodaření vede na stránku Ekonomika flotily; žádná nová částka."""
     import navigace
     at = app()
-    [link] = [p for p in at.get("page_link") if p.proto.label == "Ekonomika flotily"]
+    [link] = [p for p in at.main.get("page_link") if p.proto.label == "Ekonomika flotily"]
     url = next(page[5] for page in navigace.PAGES if page[0] == "ekonomika")
     assert link.proto.page == url == "ekonomika-flotily"
     section = [m.value for m in at.main.markdown if "Výsledek flotily za období" in m.value]

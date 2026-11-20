@@ -76,12 +76,12 @@ def test_protected_content_hidden_before_login():
 
 
 def not_registered(at, key) -> bool:
-    """Chráněná stránka bez přihlášení vůbec neexistuje – jediná stránka je skryté Přihlášení.
+    """Chráněná stránka bez přihlášení vůbec neexistuje – registrovány jsou jen dvě skryté přihlašovací routy.
     (V prohlížeči vede přímá adresa na přihlašovací obrazovku – ověřeno vizuální kontrolou.)"""
     try:
         open_page(at, key)
     except ValueError as exc:
-        return "Known pages: ['Přihlášení']" in str(exc)
+        return "Known pages: ['Přihlášení', 'investice']" in str(exc)
     return False
 
 

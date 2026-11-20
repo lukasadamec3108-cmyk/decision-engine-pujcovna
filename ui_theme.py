@@ -169,6 +169,26 @@ def inject_css() -> None:
         [data-testid="stSidebarNavLink"]:focus-visible {{ outline: 2px solid #FFFFFF; outline-offset: 2px; }}
         [data-testid="stSidebarNavSeparator"] {{ border-color: {SIDE_LINE} !important; margin: .8rem 1.2rem; }}
         [data-testid="stSidebarUserContent"] {{ padding: .4rem 1.2rem 1.5rem 2.6rem; }}
+        /* Jediné menu: registrované stránky + rozbalovací investiční pohledy. */
+        .st-key-de_sidebar_navigation {{ margin-left: -1.4rem; width: calc(100% + 1.4rem); gap: .15rem; }}
+        .st-key-de_sidebar_navigation .de-nav-group {{ color: {SIDE_TEXT}; font-size: .95rem;
+            font-weight: 700; border-top: 1px solid {SIDE_LINE}; padding: .8rem .55rem .2rem; margin-top: .5rem; }}
+        .st-key-de_sidebar_navigation > div:first-child .de-nav-group {{ border-top: none; margin-top: 0; }}
+        .st-key-de_sidebar_navigation [data-testid="stPageLink-NavLink"] {{ border-radius: 10px; padding: .42rem .8rem; }}
+        .st-key-de_sidebar_navigation [data-testid="stPageLink-NavLink"] p {{ color: {SIDE_MUTED}; font-size: .98rem; white-space: normal; overflow-wrap: anywhere; }}
+        .st-key-de_sidebar_navigation [class*="st-key-de_nav_"][class*="_active"] [data-testid="stPageLink-NavLink"] {{
+            background: {BRAND_RED}; box-shadow: 0 6px 16px rgba(196,47,45,.32); }}
+        .st-key-de_sidebar_navigation [class*="st-key-de_nav_"][class*="_active"] p {{ color: #fff !important; font-weight: 700; }}
+        .st-key-de_sidebar_navigation [data-testid="stExpander"] details {{ border: none; background: transparent; }}
+        .st-key-de_sidebar_navigation [data-testid="stExpander"] summary {{ padding: .6rem .5rem; }}
+        .st-key-de_sidebar_navigation [data-testid="stExpander"] summary p {{ color: {SIDE_TEXT} !important; font-size: .95rem; font-weight: 700; }}
+        .st-key-de_sidebar_navigation [data-testid="stExpanderDetails"] {{ padding: .2rem .1rem; }}
+        .st-key-de_sidebar_navigation [data-testid="stExpanderDetails"] > [data-testid="stVerticalBlock"] {{ gap: .1rem; }}
+        .st-key-de_sidebar_navigation button [data-testid="stMarkdownContainer"] {{ width: 100%; text-align: left; }}
+        .st-key-de_sidebar_navigation button {{ text-align: left; justify-content: flex-start; border-radius: 10px; }}
+        .st-key-de_sidebar_navigation button p {{ font-size: .98rem; }}
+        .st-key-de_sidebar_navigation button:focus-visible {{ outline: 2px solid #fff; outline-offset: 2px; }}
+
         [data-testid="stSidebar"] h3 {{
             font-size: .74rem !important; text-transform: uppercase; letter-spacing: .06em;
             color: {SIDE_MUTED} !important; border-top: 1px solid {SIDE_LINE};
@@ -584,7 +604,7 @@ def kpi_cards(cards: list) -> None:
     st.markdown(f'<div class="de-kpis">{items}</div>', unsafe_allow_html=True)
 
 
-def compare_table(names: list, rows: list, rec_index: int, tag: str) -> None:
+def compare_table(names: list, rows: list, rec_index: int | None, tag: str, *, scrollable: bool = False) -> None:
     """Srovnávací tabulka dvou strojů.
 
     rows = [(popisek, [hodnota_1, hodnota_2], index_lepší_hodnoty nebo None)].
@@ -603,11 +623,12 @@ def compare_table(names: list, rows: list, rec_index: int, tag: str) -> None:
             for i, v in enumerate(values)
         )
         body += f"<tr><td>{html.escape(label)}</td>{cells}</tr>"
-    st.markdown(
-        f'<table class="de-cmp"><thead><tr><th>Ukazatel</th>{head}</tr></thead>'
-        f"<tbody>{body}</tbody></table>",
-        unsafe_allow_html=True,
-    )
+    table = (f'<table class="de-cmp"><thead><tr><th>Ukazatel</th>{head}</tr></thead>'
+             f"<tbody>{body}</tbody></table>")
+    if scrollable:
+        table = ('<div class="de-cmp-scroll" role="region" aria-label="Srovnání strojů, posouvatelné do strany" '
+                 'tabindex="0">' + table + '</div>')
+    st.markdown(table, unsafe_allow_html=True)
 
 
 def results_cards(cards: list, rec_name: str, tag: str) -> None:
@@ -1478,6 +1499,204 @@ DECISION_LAYOUT_CSS = dash_css(TAB_KEY_PREFIX + "rozhodovaci_centrum") + managed
   {_DECISION} .cc-table .cc-type {{ min-width: 104px; max-width: 104px; white-space: normal; overflow-wrap: anywhere; }}
 }}
 </style>""")
+
+
+# Pouze společný panel Investic, bez změny jednotlivých pohledů či navigace.
+_INV_PANEL = ".st-key-de_inv_inputs"
+INVESTMENT_SCENARIO_CSS = f"""
+<style>
+{_INV_PANEL} {{ border: 1px solid {UI_LINE}; border-radius: 16px; background: #fff;
+    padding: 1.25rem 1.45rem; box-shadow: 0 2px 10px rgba(16,24,40,.07); scroll-margin-top: 4rem; }}
+{_INV_PANEL} .de-section-title {{ margin: 0 0 .8rem; font-size: 1.25rem; font-weight: 700; color: {INK}; }}
+{_INV_PANEL} [data-baseweb="select"] > div,
+{_INV_PANEL} [data-testid="stNumberInputContainer"] {{ border-radius: 10px; }}
+{_INV_PANEL} .st-key-de_inv_advanced details {{ border: 1px solid {UI_LINE}; border-radius: 12px;
+    background: {UI_BG}; }}
+{_INV_PANEL} .st-key-de_inv_advanced summary p {{ color: {INK}; font-weight: 600; }}
+{_INV_PANEL} .de-hint {{ line-height: 1.5; }}
+@media (max-width: 640px) {{
+  {_INV_PANEL} {{ border-radius: 12px; padding: .9rem; }}
+  {_INV_PANEL} [data-testid="stHorizontalBlock"] {{ flex-direction: column !important; gap: .8rem !important; }}
+  {_INV_PANEL} [data-testid="stColumn"] {{ width: 100% !important; flex: 1 1 100% !important; min-width: 0 !important; }}
+  {_INV_PANEL} .de-section-title {{ font-size: 1.1rem; overflow-wrap: anywhere; }}
+}}
+</style>
+"""
+
+
+# Pouze aktivní Doporučení: nepřenáší se na ostatní investiční pohledy ani panel scénáře.
+_INV_REC = ".st-key-de_inv_obsah_1_on"
+_REC_PAGE = f".block-container:has({_INV_REC})"
+INVESTMENT_RECOMMENDATION_CSS = f"""
+<style>
+@media (min-width: 1280px) {{
+  {_REC_PAGE} .de-ph {{ background: transparent; overflow: visible; }}
+  {_REC_PAGE} .de-ph-text {{ position: static; }}
+  {_REC_PAGE} .de-ph-title, {_REC_PAGE} .de-ph-sub {{ position: relative; z-index: 1; }}
+  {_REC_PAGE} .de-ph-art {{ width: 66%; top: -1rem; right: -.5rem; bottom: 0;
+      background-size: contain; background-position: right center; opacity: 1; }}
+  {_REC_PAGE} .de-ph-title {{ font-size: 3.45rem; line-height: 1.02; letter-spacing: -.015em; }}
+  {_REC_PAGE} .de-ph-sub {{ font-size: 1.08rem; line-height: 1.45; }}
+  {_REC_PAGE} .de-ph-chips {{ position: absolute; right: 1rem; top: .4rem; flex-direction: column-reverse;
+      align-items: flex-end; gap: .5rem; }}
+}}
+@media (max-width: 1279px) {{
+  {_REC_PAGE} .de-ph-art {{ display: none; }}
+  {_REC_PAGE} .de-ph-text {{ max-width: none; }}
+}}
+{_INV_REC} .de-hero {{ border-radius: 16px; padding: 1.4rem 1.6rem; margin: .2rem 0 1rem;
+    background: #fff; box-shadow: 0 2px 10px rgba(16,24,40,.07); }}
+{_INV_REC} .de-hero.bad {{ background: {BAD_BG}; border-color: #F3D3D3; border-left-color: {BAD_TEXT}; }}
+{_INV_REC} .de-hero .ttl {{ font-size: clamp(1.65rem, 2.5vw, 2.4rem); line-height: 1.15; overflow-wrap: anywhere; }}
+{_INV_REC} .de-hero .txt {{ line-height: 1.5; margin-top: .5rem; }}
+{_INV_REC} .de-kpis {{ gap: 1rem; align-items: stretch; }}
+{_INV_REC} .de-kpi {{ border-radius: 16px; padding: 1.15rem 1.35rem;
+    box-shadow: 0 2px 10px rgba(16,24,40,.07); min-width: 0; }}
+{_INV_REC} .de-kpi .lbl {{ font-size: .82rem; line-height: 1.45; }}
+{_INV_REC} .de-kpi .val {{ font-size: clamp(1.65rem, 2.5vw, 2.3rem); line-height: 1.2; gap: .4rem;
+    align-items: baseline; overflow-wrap: anywhere; }}
+{_INV_REC} .de-kpi .sub {{ font-size: .9rem; line-height: 1.5; }}
+{_INV_REC} .de-section {{ font-size: 1.3rem; margin: 1.4rem 0 .65rem; }}
+{_INV_REC} .de-hint {{ line-height: 1.5; }}
+{_INV_REC} .de-cmp-scroll {{ overflow-x: auto; max-width: 100%; border-radius: 14px;
+    border: 1px solid {UI_LINE}; box-shadow: 0 2px 10px rgba(16,24,40,.05); margin-bottom: .4rem; }}
+{_INV_REC} .de-cmp-scroll:focus-visible {{ outline: 3px solid {BRAND_RED}; outline-offset: 2px; }}
+{_INV_REC} .de-cmp {{ min-width: 560px; margin: 0; border: none; border-radius: 0; overflow: visible; }}
+{_INV_REC} .de-cmp th, {_INV_REC} .de-cmp td {{ padding: .8rem 1rem; line-height: 1.45; }}
+{_INV_REC} .de-cmp tr > :first-child {{ position: sticky; left: 0; z-index: 1; background: #fff; min-width: 130px; }}
+{_INV_REC} .de-cmp thead tr > :first-child {{ background: {UI_BG}; z-index: 2; }}
+{_INV_REC} .de-cmp th.rec {{ background: {BRAND_RED_SOFT}; }}
+{_INV_REC} .de-cmp td.rec {{ background: #FFF7F7; }}
+{_INV_REC} .de-cmp .tag {{ background: {BRAND_RED}; margin: .25rem 0 0 .3rem; }}
+{_INV_REC} .de-steps {{ border: 1px solid {UI_LINE}; border-radius: 16px; background: #fff;
+    padding: 1rem 1.2rem 1rem 2.4rem; box-shadow: 0 2px 10px rgba(16,24,40,.05); }}
+{_INV_REC} .de-steps li {{ padding: .2rem 0; line-height: 1.5; }}
+{_INV_REC} [data-testid="stExpander"] details {{ border-radius: 14px; border-color: {UI_LINE}; background: #fff; }}
+{_INV_REC} [data-testid="stExpander"] summary p {{ font-weight: 600; }}
+{_INV_REC} .st-key-de_inv_rec_report {{ border-radius: 16px; background: #fff; padding: 1rem 1.2rem;
+    box-shadow: 0 2px 10px rgba(16,24,40,.05); }}
+{_INV_REC} .st-key-de_inv_rec_report .de-section {{ margin-top: 0; }}
+@media (max-width: 640px) {{
+  .stApp:has({_INV_REC}) [data-testid="stHeader"] {{ background: {UI_BG}; }}
+  .stApp:has({_INV_REC}) [data-testid="stMain"] {{ top: 3.75rem; height: calc(100% - 3.75rem); }}
+  {_INV_REC} .de-kpis {{ grid-template-columns: 1fr; gap: .7rem; }}
+  {_INV_REC} .de-kpi, {_INV_REC} .de-hero {{ border-radius: 12px; padding: 1rem; }}
+  {_INV_REC} .de-kpi .val {{ font-size: 2rem; }}
+  {_INV_REC} .de-section {{ font-size: 1.15rem; }}
+  {_INV_REC} .de-cmp th, {_INV_REC} .de-cmp td {{ padding: .65rem .7rem; }}
+  {_INV_REC} .de-cmp {{ min-width: 440px; table-layout: fixed; }}
+  {_INV_REC} .de-cmp-note::after {{ content: "Tabulku lze posouvat do stran."; display: block; margin-top: .2rem; }}
+  {_INV_REC} .de-cmp tr > :first-child {{ width: 130px; min-width: 130px; max-width: 130px; box-sizing: border-box; }}
+}}
+</style>
+"""
+
+
+# Jen aktivní Možné výsledky: společné komponenty, bez zásahu do jiných pohledů či scénáře.
+_INV_RESULTS = ".st-key-de_inv_obsah_2_on"
+_RESULTS_PAGE = f".block-container:has({_INV_RESULTS})"
+INVESTMENT_RESULTS_CSS = f"""
+<style>
+@media (min-width: 1280px) {{
+  {_RESULTS_PAGE} .de-ph {{ background: transparent; overflow: visible; }}
+  {_RESULTS_PAGE} .de-ph-text {{ position: static; }}
+  {_RESULTS_PAGE} .de-ph-title, {_RESULTS_PAGE} .de-ph-sub {{ position: relative; z-index: 1; }}
+  {_RESULTS_PAGE} .de-ph-art {{ width: 66%; top: -1rem; right: -.5rem; bottom: 0;
+      background-size: contain; background-position: right center; opacity: 1; }}
+  {_RESULTS_PAGE} .de-ph-title {{ font-size: 3.45rem; line-height: 1.02; letter-spacing: -.015em; }}
+  {_RESULTS_PAGE} .de-ph-sub {{ font-size: 1.08rem; line-height: 1.45; }}
+  {_RESULTS_PAGE} .de-ph-chips {{ position: absolute; right: 1rem; top: .4rem; flex-direction: column-reverse;
+      align-items: flex-end; gap: .5rem; }}
+}}
+@media (max-width: 1279px) {{
+  {_RESULTS_PAGE} .de-ph-art {{ display: none; }}
+  {_RESULTS_PAGE} .de-ph-text {{ max-width: none; }}
+}}
+{_INV_RESULTS} .de-section-title {{ font-size: 1.35rem; margin: 1.3rem 0 .65rem; }}
+{_INV_RESULTS} .de-intro, {_INV_RESULTS} .de-note, {_INV_RESULTS} .de-hint {{ line-height: 1.55; }}
+{_INV_RESULTS} .de-note {{ border-radius: 12px; margin: .75rem 0; }}
+{_INV_RESULTS} .de-res-grid {{ gap: 1rem; align-items: stretch; }}
+{_INV_RESULTS} .de-res-card {{ border-radius: 16px; padding: 1.15rem 1.35rem;
+    box-shadow: 0 2px 10px rgba(16,24,40,.07); min-width: 0; }}
+{_INV_RESULTS} .de-card-title {{ flex-wrap: wrap; font-size: 1.15rem; gap: .45rem; line-height: 1.4; }}
+{_INV_RESULTS} .de-tag {{ margin-left: 0; }}
+{_INV_RESULTS} .de-res-row {{ padding: .75rem 0; gap: .7rem; align-items: baseline; }}
+{_INV_RESULTS} .de-res-row .l {{ line-height: 1.45; min-width: 0; }}
+{_INV_RESULTS} .de-res-row .h {{ font-size: .82rem; line-height: 1.4; }}
+{_INV_RESULTS} .de-res-row:nth-child(-n+4) .v {{ font-size: 1.4rem; line-height: 1.25; }}
+{_INV_RESULTS} .de-res-row .v {{ font-size: 1.05rem; }}
+{_INV_RESULTS} .de-res-row .s {{ white-space: normal; line-height: 1.45; }}
+{_INV_RESULTS} .de-insight {{ border-radius: 10px; padding: .65rem .85rem; background: #fff; line-height: 1.55; }}
+{_INV_RESULTS} .de-insight.bad {{ background: {BAD_BG}; }}
+{_INV_RESULTS} .st-key-de_inv_results_histogram {{ border-radius: 16px; background: #fff;
+    padding: .65rem; box-shadow: 0 2px 10px rgba(16,24,40,.05); min-width: 0; }}
+{_INV_RESULTS} [data-testid="stExpander"] details {{ border-radius: 14px; border-color: {UI_LINE}; background: #fff; }}
+{_INV_RESULTS} [data-testid="stExpander"] summary p {{ font-weight: 600; }}
+{_INV_RESULTS} .de-ci-grid {{ gap: 1rem; }}
+{_INV_RESULTS} .de-ci {{ border-radius: 12px; line-height: 1.5; }}
+@media (max-width: 1100px) {{ {_INV_RESULTS} .de-res-grid {{ grid-template-columns: 1fr; }} }}
+@media (max-width: 640px) {{
+  .stApp:has({_INV_RESULTS}) [data-testid="stHeader"] {{ background: {UI_BG}; }}
+  .stApp:has({_INV_RESULTS}) [data-testid="stMain"] {{ top: 3.75rem; height: calc(100% - 3.75rem); }}
+  {_INV_RESULTS} .de-section-title {{ font-size: 1.15rem; }}
+  {_INV_RESULTS} .de-res-card {{ border-radius: 12px; padding: 1rem; }}
+  {_INV_RESULTS} .de-res-row {{ flex-direction: column; align-items: stretch; gap: .3rem; }}
+  {_INV_RESULTS} .de-res-row .v {{ text-align: left; white-space: normal; overflow-wrap: anywhere; }}
+  {_INV_RESULTS} .de-ci-grid {{ grid-template-columns: 1fr; }}
+}}
+</style>
+"""
+
+
+# Stejné prezentační komponenty jako Možné výsledky, výhradně v aktivním pohledu Riziko.
+# Sémantické barvy status_chip (nízké / střední / vysoké) se nemění.
+INVESTMENT_RISK_CSS = (INVESTMENT_RESULTS_CSS
+    .replace("de_inv_obsah_2_on", "de_inv_obsah_3_on")
+    .replace("de_inv_results_histogram", "de_inv_risk_return"))
+
+
+# Výhradně aktivní citlivost; již používané karty a rozestupy, beze změny společných stylů.
+INVESTMENT_SENSITIVITY_CSS = (INVESTMENT_RESULTS_CSS
+    .replace("de_inv_obsah_2_on", "de_inv_obsah_4_on")
+    .replace("de_inv_results_histogram", "de_inv_sensitivity_chart")) + """
+<style>
+.st-key-de_inv_obsah_4_on .st-key-de_inv_break_even {
+    border-radius: 16px; background: #fff; padding: .65rem;
+    box-shadow: 0 2px 10px rgba(16,24,40,.05); min-width: 0;
+}
+</style>
+"""
+
+
+# Nákup strojů: stejný standard záhlaví, doporučení a KPI; výhradně v aktivním pátém pohledu.
+INVESTMENT_PURCHASE_CSS = (INVESTMENT_RECOMMENDATION_CSS
+    .replace("de_inv_obsah_1_on", "de_inv_obsah_5_on")) + """
+<style>
+.st-key-de_inv_obsah_5_on .de-intro { line-height: 1.55; margin-bottom: 1rem; }
+.st-key-de_inv_obsah_5_on .de-section-title { font-size: 1.35rem; margin: 1.3rem 0 .65rem; }
+.st-key-de_inv_obsah_5_on .de-insight { border-radius: 12px; line-height: 1.55; padding: .85rem 1rem; background: #fff; }
+.st-key-de_inv_obsah_5_on .de-insight.bad { background: __PURCHASE_BAD_BG__; }
+.st-key-de_inv_obsah_5_on .de-res-grid { gap: 1rem; align-items: stretch; }
+.st-key-de_inv_obsah_5_on .de-res-card { border-radius: 16px; padding: 1.15rem 1.35rem;
+    box-shadow: 0 2px 10px rgba(16,24,40,.07); min-width: 0; }
+.st-key-de_inv_obsah_5_on .de-card-title { flex-wrap: wrap; line-height: 1.4; gap: .4rem; }
+.st-key-de_inv_obsah_5_on .de-res-row { padding: .65rem 0; gap: .6rem; align-items: baseline; }
+.st-key-de_inv_obsah_5_on .de-res-row .l { min-width: 0; line-height: 1.45; }
+.st-key-de_inv_obsah_5_on .de-res-row .h { line-height: 1.4; }
+.st-key-de_inv_obsah_5_on .de-res-row:last-child .v { font-size: 1.3rem; }
+.st-key-de_inv_obsah_5_on .st-key-de_inv_purchase_frontier { border-radius: 16px; background: #fff;
+    padding: .65rem; box-shadow: 0 2px 10px rgba(16,24,40,.05); min-width: 0; }
+@media (max-width: 1100px) {
+  .st-key-de_inv_obsah_5_on .de-res-grid, .st-key-de_inv_obsah_5_on .de-kpis { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .st-key-de_inv_obsah_5_on .de-section-title { font-size: 1.15rem; }
+  .st-key-de_inv_obsah_5_on .de-res-card { border-radius: 12px; padding: 1rem; }
+  .st-key-de_inv_obsah_5_on .de-res-row { grid-template-columns: minmax(0, 1fr) auto; gap: .3rem .6rem; }
+  .st-key-de_inv_obsah_5_on .de-res-row .v { white-space: normal; overflow-wrap: anywhere; }
+}
+</style>
+""".replace("__PURCHASE_BAD_BG__", BAD_BG)
 
 
 def fleet_ranked_economics(rows):
