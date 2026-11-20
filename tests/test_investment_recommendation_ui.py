@@ -78,7 +78,7 @@ def test_photo_styles_apply_only_to_recommendation_and_panel_is_shared(tmp_path)
         assert ('zahlavi_dashboard.webp' in header) == True
         styles = [m.value for m in at.main.markdown if m.value.strip() == ui.INVESTMENT_RECOMMENDATION_CSS.strip()]
         assert bool(styles) == (i == 0)
-        assert len([n for n in at.main.children.values() if getattr(n, 'key', None) == 'de_inv_inputs']) == 1
+        assert len([n for n in at.main if getattr(n, 'key', None) == 'de_inv_inputs']) == 1
 
 
 def test_regression_extractor_ignores_only_scroll_focus_metadata():

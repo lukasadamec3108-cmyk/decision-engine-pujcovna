@@ -116,6 +116,15 @@ def with_results_median_label(original):
     return dict(expected)
 
 
+def with_scenario_summary_numbers(original):
+    """Nový souhrn opakuje pouze původní vstupy 18 dní a 1 000 simulací (value i body)."""
+    from collections import Counter
+    expected = Counter(original)
+    expected.update(extract.numbers("18 dní; 1 000 simulovaných měsíců"))
+    expected.update(extract.numbers("18 dní; 1 000 simulovaných měsíců"))
+    return dict(expected)
+
+
 def test_visible_numbers_unchanged_in_every_tab():
     now, base = current_state(), expected_original()
     for name in AREAS:
@@ -180,7 +189,7 @@ def test_pages_match_pages_baseline():
             if key == "strojovy_park" and part == "main":
                 expected_numbers = with_fleet_presentation_numbers(expected_numbers)
             if key == "investice" and part == "main":
-                expected_numbers = with_results_median_label(expected_numbers)
+                expected_numbers = with_scenario_summary_numbers(with_results_median_label(expected_numbers))
             missing, extra = _numbers_diff(got["numbers"], expected_numbers)
             assert not missing and not extra, f"stránka {key}/{part}: chybí {missing}, navíc {extra}"
             actual_widgets, expected_widgets = got["widgets"], want["widgets"]

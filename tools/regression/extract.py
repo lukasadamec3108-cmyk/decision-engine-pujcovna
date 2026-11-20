@@ -32,7 +32,7 @@ def numbers(text: str) -> list:
 
 def leaves(node):
     # Navigace se testuje samostatně; stejně jako původní nativní menu není obchodním widgetem.
-    if getattr(node, "key", None) == "de_sidebar_navigation":
+    if getattr(node, "key", None) in ("de_sidebar_navigation", "de_inv_view_tiles"):
         return
     kids = getattr(node, "children", None)
     if kids:

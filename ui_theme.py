@@ -180,7 +180,7 @@ def inject_css() -> None:
             background: {BRAND_RED}; box-shadow: 0 6px 16px rgba(196,47,45,.32); }}
         .st-key-de_sidebar_navigation [class*="st-key-de_nav_"][class*="_active"] p {{ color: #fff !important; font-weight: 700; }}
         .st-key-de_sidebar_navigation [data-testid="stExpander"] details {{ border: none; background: transparent; }}
-        .st-key-de_sidebar_navigation [data-testid="stExpander"] summary {{ padding: .6rem .5rem; }}
+        .st-key-de_sidebar_navigation [data-testid="stExpander"] summary {{ padding: .6rem .5rem; border-radius: 8px; }}
         .st-key-de_sidebar_navigation [data-testid="stExpander"] summary p {{ color: {SIDE_TEXT} !important; font-size: .95rem; font-weight: 700; }}
         .st-key-de_sidebar_navigation [data-testid="stExpanderDetails"] {{ padding: .2rem .1rem; }}
         .st-key-de_sidebar_navigation [data-testid="stExpanderDetails"] > [data-testid="stVerticalBlock"] {{ gap: .1rem; }}
@@ -1697,6 +1697,96 @@ INVESTMENT_PURCHASE_CSS = (INVESTMENT_RECOMMENDATION_CSS
 }
 </style>
 """.replace("__PURCHASE_BAD_BG__", BAD_BG)
+
+
+INVESTMENT_VIEW_ICONS = (":material/lightbulb:", ":material/bar_chart:", ":material/shield:",
+                         ":material/tune:", ":material/shopping_cart:")
+
+
+def investment_summary_html(machine_1, machine_2, scenario, budget, fixed_cost, expected_days, n):
+    """Pouze prezentace sedmi existujících vstupů, bez odvozených ekonomických ukazatelů."""
+    return (
+        '<div class="de-inv-summary"><div class="inv-summary-title">Aktuální investiční scénář</div>'
+        '<div class="inv-summary-grid"><div><span>Porovnávané stroje</span><strong>'
+        + html.escape(machine_1) + ' × ' + html.escape(machine_2) + '</strong></div>'
+        + '<div><span>Scénář trhu</span><strong>' + html.escape(scenario) + '</strong></div>'
+        + '<div><span>Investiční rozpočet</span><strong>' + fmt_czk(budget) + '</strong></div></div>'
+        + '<div class="inv-summary-details">Fixní náklad ' + fmt_czk(fixed_cost)
+        + ' měsíčně · Rychlý odhad ' + fmt_days(expected_days, 0)
+        + ' pronájmu · ' + fmt_num(n) + ' simulovaných měsíců</div>'
+        + '<div class="inv-summary-model">Nákupní portfolio používá individuální náklady '
+          'a průměrnou poptávku bez simulace.</div></div>'
+    )
+
+
+def investment_active_tile_css(slug):
+    """Slug přichází z pevné mapy navigace. Neměnný typ tlačítka zachovává fokus po rerunu."""
+    return (f'<style id="de-inv-active-tile-style">.st-key-de_inv_view_tiles .st-key-inv_view_{slug} button '
+            + '{background:' + BRAND_RED + ';border-color:' + BRAND_RED + ';color:#fff;}</style>')
+
+
+# Rozložení jen Investic; sidebar se mění výhradně v existujícím navigačním kontejneru.
+INVESTMENT_NAVIGATION_CSS = f"""
+<style>
+@media (min-width: 1280px) {{
+  .block-container:has(.st-key-de_inv_view_tiles) .de-ph {{ background: transparent; overflow: visible; }}
+  .block-container:has(.st-key-de_inv_view_tiles) .de-ph-text {{ position: static; }}
+  .block-container:has(.st-key-de_inv_view_tiles) .de-ph-title, .block-container:has(.st-key-de_inv_view_tiles) .de-ph-sub {{ position: relative; z-index: 1; }}
+  .block-container:has(.st-key-de_inv_view_tiles) .de-ph-art {{ width: 66%; top: -1rem; right: -.5rem; bottom: 0;
+      background-size: contain; background-position: right center; opacity: 1; }}
+  .block-container:has(.st-key-de_inv_view_tiles) .de-ph-title {{ font-size: 3.45rem; line-height: 1.02; letter-spacing: -.015em; }}
+  .block-container:has(.st-key-de_inv_view_tiles) .de-ph-sub {{ font-size: 1.08rem; line-height: 1.45; }}
+  .block-container:has(.st-key-de_inv_view_tiles) .de-ph-chips {{ position: absolute; right: 1rem; top: .4rem; flex-direction: column-reverse;
+      align-items: flex-end; gap: .5rem; }}
+}}
+@media (max-width: 1279px) {{
+  .block-container:has(.st-key-de_inv_view_tiles) .de-ph-art {{ display: none; }}
+  .block-container:has(.st-key-de_inv_view_tiles) .de-ph-text {{ max-width: none; }}
+}}
+.block-container:has(.st-key-de_inv_view_tiles) .de-inv-summary {{ border: 1px solid {UI_LINE};
+    border-radius: 16px; padding: 1rem 1.3rem; background: #fff;
+    box-shadow: 0 2px 10px rgba(16,24,40,.06); margin-bottom: .15rem; }}
+.block-container:has(.st-key-de_inv_view_tiles) .inv-summary-title {{ font-weight: 700; font-size: 1.1rem; margin-bottom: .65rem; }}
+.block-container:has(.st-key-de_inv_view_tiles) .inv-summary-grid {{ display: grid; grid-template-columns: 2fr 1fr 1.2fr; gap: .7rem 1.2rem; }}
+.block-container:has(.st-key-de_inv_view_tiles) .inv-summary-grid span {{ display: block; color: {UI_MUTED}; font-size: .82rem; }}
+.block-container:has(.st-key-de_inv_view_tiles) .inv-summary-grid strong {{ display: block; font-size: 1.12rem; font-weight: 750; color: {INK}; line-height: 1.4; margin-top: .2rem; overflow-wrap: anywhere; }}
+.block-container:has(.st-key-de_inv_view_tiles) .inv-summary-details {{ margin-top: .7rem; line-height: 1.5; font-size: .88rem; color: {UI_MUTED}; }}
+.block-container:has(.st-key-de_inv_view_tiles) .inv-summary-model {{ margin-top: .35rem; line-height: 1.5; font-size: .82rem; color: {UI_MUTED}; }}
+.st-key-de_inv_editor details {{ background: #fff; border: 1px solid {UI_LINE}; border-radius: 14px; }}
+.st-key-de_inv_editor summary p {{ font-weight: 600; }}
+.st-key-de_inv_editor .st-key-de_inv_inputs {{ border: 0; box-shadow: none; padding: .5rem .8rem; background: transparent; }}
+.st-key-de_inv_view_tiles {{ gap: 0; }}
+.st-key-de_inv_view_tiles [data-testid="stHorizontalBlock"] {{ display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .65rem; }}
+.st-key-de_inv_view_tiles [data-testid="stColumn"] {{ width: 100% !important; min-width: 0 !important; }}
+.st-key-de_inv_view_tiles button {{ height: 96px; min-height: 96px; border: 1px solid {UI_LINE}; border-radius: 14px; display: flex; flex-direction: column;
+    gap: .45rem; justify-content: center; box-shadow: 0 2px 6px rgba(16,24,40,.04); }}
+.st-key-de_inv_view_tiles button [data-has-shortcut] {{ display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .35rem; }}
+.st-key-de_inv_view_tiles button [data-testid="stIconMaterial"] {{ font-size: 1.85rem; font-weight: 500; }}
+.st-key-de_inv_view_tiles button p {{ font-size: 1rem; font-weight: 650; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }}
+.st-key-de_inv_view_tiles button:focus-visible {{ outline: 3px solid {BRAND_RED}; outline-offset: 3px; }}
+.st-key-de_inv_view_tiles .inv-current-view {{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }}
+@media (max-width: 1279px) {{
+  .st-key-de_inv_view_tiles [data-testid="stHorizontalBlock"] {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
+}}
+@media (max-width: 640px) {{
+  .block-container:has(.st-key-de_inv_view_tiles) > [data-testid="stVerticalBlock"] {{ gap: .5rem; }}
+  .block-container:has(.st-key-de_inv_view_tiles) .de-inv-summary {{ padding: .8rem; border-radius: 12px; margin: 0; }}
+  .block-container:has(.st-key-de_inv_view_tiles) [data-testid="stMarkdownContainer"]:has(> .de-inv-summary) {{ margin-bottom: 0; }}
+  .block-container:has(.st-key-de_inv_view_tiles) .inv-summary-grid strong {{ font-size: 1.04rem; }}
+  .block-container:has(.st-key-de_inv_view_tiles) .inv-summary-grid {{ grid-template-columns: 1fr 1fr; gap: .6rem; }}
+  .block-container:has(.st-key-de_inv_view_tiles) .inv-summary-grid > div:first-child {{ grid-column: 1 / -1; }}
+  .block-container:has(.st-key-de_inv_view_tiles) .inv-summary-title {{ font-size: 1rem; }}
+  .st-key-de_inv_view_tiles [data-testid="stHorizontalBlock"] {{ grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }}
+  .st-key-de_inv_view_tiles [data-testid="stColumn"]:last-child {{ grid-column: 1 / -1; }}
+  .st-key-de_inv_view_tiles button {{ height: 80px; min-height: 80px; padding: .3rem .45rem; border-radius: 12px; }}
+  .st-key-de_inv_view_tiles button [data-testid="stIconMaterial"] {{ font-size: 1.75rem; }}
+  .st-key-de_inv_view_tiles button [data-has-shortcut] {{ gap: .25rem; }}
+  .st-key-de_inv_view_tiles button p {{ font-size: .88rem; }}
+  .stApp:has(.st-key-de_inv_view_tiles) [data-testid="stHeader"] {{ background: {UI_BG}; }}
+  .stApp:has(.st-key-de_inv_view_tiles) [data-testid="stMain"] {{ top: 3.75rem; height: calc(100% - 3.75rem); }}
+}}
+</style>
+"""
 
 
 def fleet_ranked_economics(rows):

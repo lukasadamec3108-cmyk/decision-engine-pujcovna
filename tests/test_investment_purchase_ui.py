@@ -107,4 +107,4 @@ def test_purchase_styles_are_isolated_and_shared_panel_stays_single(tmp_path):
         header=next(m.value for m in at.main.markdown if 'class="de-header' in m.value)
         assert 'zahlavi_dashboard.webp' in header
         assert any(m.value.strip()==ui.INVESTMENT_PURCHASE_CSS.strip() for m in at.main.markdown)==(i==4)
-        assert len([n for n in at.main.children.values() if getattr(n,'key',None)=='de_inv_inputs'])==1
+        assert len([n for n in at.main if getattr(n,'key',None)=='de_inv_inputs'])==1
